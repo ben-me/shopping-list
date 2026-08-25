@@ -53,7 +53,7 @@ pnpm test:e2e tests/example.spec.ts
 pnpm test:e2e --debug
 ```
 
-### Lint with [ESLint](https://eslint.org/)
+### Lint with [Oxlint](https://oxc.rs/docs/guide/usage/linter/)
 
 ```sh
 pnpm lint

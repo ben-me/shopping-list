@@ -8,8 +8,6 @@ coverage
 .devcontainer
 .worktrees/
 
-.eslintcache
-
 # Cypress
 /cypress/videos/
 /cypress/screenshots/
