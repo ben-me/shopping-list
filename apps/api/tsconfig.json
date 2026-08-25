@@ -1,0 +1,14 @@
+// TSConfig for the api package. The hono app runs on the Node runtime during
+// development (tsx); the Cloudflare Workers build target is wired separately
+// (see issue #5). This config is used for type-checking only.
+{
+  "extends": "@tsconfig/node24/tsconfig.json",
+  "include": ["src/**/*"],
+  "compilerOptions": {
+    "module": "preserve",
+    "moduleResolution": "bundler",
+    "types": ["node"],
+    "noEmit": true,
+    "tsBuildInfoFile": "./node_modules/.tmp/tsconfig.tsbuildinfo"
+  }
+}
