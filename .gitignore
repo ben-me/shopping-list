@@ -6,6 +6,7 @@ dist-ssr
 coverage
 *.local
 .devcontainer
+.worktrees/
 
 .eslintcache
 
