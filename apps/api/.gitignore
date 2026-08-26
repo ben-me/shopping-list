@@ -1,0 +1,6 @@
+# Cloudflare
+.wrangler
+
+# local secrets / env
+.env
+.dev.vars

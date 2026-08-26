@@ -1,0 +1,25 @@
+{
+  "name": "@shopping-list/api",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy --minify",
+    "cf-typegen": "wrangler types --env-interface CloudflareBindings",
+    "type-check": "tsc --noEmit",
+    "fmt": "oxfmt",
+    "fmt:check": "oxfmt --check",
+    "lint": "oxlint",
+    "lint:fix": "oxlint --fix"
+  },
+  "dependencies": {
+    "hono": "^4.13.5"
+  },
+  "devDependencies": {
+    "oxfmt": "^0.64.0",
+    "oxlint": "~1.74.0",
+    "typescript": "~6.0.0",
+    "wrangler": "^4.110.0"
+  }
+}
