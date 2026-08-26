@@ -6,7 +6,13 @@ import { Hono } from "hono";
  * local dev and deployment. For now this is the minimal hono scaffold: a health
  * route that confirms the package compiles, builds, and runs. Domain endpoint
  * behaviour lands in later slices.
+ *
+ * The shared domain **data** contract (List, Item, Payment, Owed) is re-exported
+ * here so the web app imports it straight from the `@shopping-list/api` package.
+ * Only the data shapes are part of that contract — auth types stay out.
  */
+export * from "./domain";
+
 const app = new Hono();
 
 /**
