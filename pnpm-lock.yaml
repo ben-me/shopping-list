@@ -29,6 +29,9 @@ importers:
 
   apps/web:
     dependencies:
+      '@shopping-list/api':
+        specifier: workspace:*
+        version: link:../api
       vue:
         specifier: ^3.5.40
         version: 3.5.41(typescript@6.0.3)
