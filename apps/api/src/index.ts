@@ -1,10 +1,13 @@
-import { serve } from "@hono/node-server";
-import app from "./app.js";
+import { Hono } from "hono";
 
-// Local development server (pnpm --filter @shopping-list/api run dev / start).
-// The Cloudflare Worker deploy target is wired separately (issue #5).
-const port = Number.parseInt(process.env.PORT ?? "8787", 10);
+/**
+ * The Shopping List API. Runs as a Cloudflare Worker and is the source of truth
+ * for the domain (Lists, Items, Payments). For now this is the minimal hono
+ * scaffold: a health route that confirms the package compiles and runs. Domain
+ * endpoint behaviour lands in later slices.
+ */
+const app = new Hono();
 
-serve({ fetch: app.fetch, port }, (info) => {
-  console.log(`shopping-list-api listening on http://localhost:${info.port}`);
-});
+app.get("/", (c) => c.json({ ok: true, service: "shopping-list-api" }));
+
+export default app;

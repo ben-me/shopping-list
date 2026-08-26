@@ -2,5 +2,13 @@ packages:
   - 'apps/*'
   - 'packages/*'
 
+allowBuilds:
+  esbuild: set this to true or false
+  workerd: set this to true or false
+
+minimumReleaseAgeExclude:
+  - hono@4.13.5
+
 onlyBuiltDependencies:
   - esbuild
+  - workerd
