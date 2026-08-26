@@ -1,7 +1,4 @@
 import { describe, expect, it } from "vitest";
-
-// Imported straight from the api package — the web app shares these shapes from
-// the single source of truth rather than redefining them.
 import type { Item, List, Owed, Payment } from "@shopping-list/api";
 
 describe("shared domain data contract", () => {
