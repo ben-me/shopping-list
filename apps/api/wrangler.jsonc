@@ -3,6 +3,10 @@
   "name": "shopping-list-api",
   "main": "src/index.ts",
   "compatibility_date": "2026-08-26",
+  "send_metrics": false,
+  "dev": {
+    "ip": "0.0.0.0",
+ }
   // "compatibility_flags": [
   //   "nodejs_compat"
   // ],

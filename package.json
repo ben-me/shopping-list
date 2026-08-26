@@ -3,7 +3,7 @@
   "version": "0.0.0",
   "private": true,
   "scripts": {
-    "dev": "pnpm --filter @shopping-list/web run dev",
+    "dev": "pnpm --parallel --if-present -r run dev",
     "preview": "pnpm --filter @shopping-list/web run preview",
     "build": "pnpm -r --if-present run build",
     "test": "pnpm run test:unit && pnpm run test:e2e",
