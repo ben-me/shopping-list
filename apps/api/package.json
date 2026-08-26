@@ -15,6 +15,7 @@
     "dev": "wrangler dev",
     "deploy": "wrangler deploy --minify",
     "cf-typegen": "wrangler types --env-interface CloudflareBindings",
+    "test:unit": "vitest run",
     "type-check": "tsc --noEmit",
     "fmt": "oxfmt",
     "fmt:check": "oxfmt --check",
@@ -22,12 +23,16 @@
     "lint:fix": "oxlint --fix"
   },
   "dependencies": {
+    "drizzle-orm": "^0.45.2",
     "hono": "^4.13.5"
   },
   "devDependencies": {
+    "@types/node": "^24.13.3",
+    "miniflare": "5.20260820.0-alpha",
     "oxfmt": "^0.64.0",
     "oxlint": "~1.74.0",
     "typescript": "~6.0.0",
+    "vitest": "^4.1.11",
     "wrangler": "^4.110.0"
   }
 }

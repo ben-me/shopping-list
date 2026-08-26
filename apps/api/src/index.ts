@@ -1,4 +1,5 @@
 import { Hono } from "hono";
+import { createD1Connection, ping } from "./db";
 
 /**
  * The Shopping List API. Runs as a Cloudflare Worker and is the source of truth
@@ -13,14 +14,20 @@ import { Hono } from "hono";
  */
 export * from "./domain";
 
-const app = new Hono();
+const app = new Hono<{ Bindings: CloudflareBindings }>();
 
 /**
- * Health route: confirms the Worker is alive and serving. Used by deployments
- * and dry-run checks to verify the entry resolves. Liveness only — no domain
- * logic yet.
+ * Health route: confirms the Worker is alive and serving, and that the D1
+ * connection resolves. The drizzle D1 client is built from the `DB` binding
+ * (wired in `wrangler.jsonc`) and pinged with a trivial query — this works in
+ * local dev and dry-runs without any live network, since the binding is
+ * provided by the runtime / environment.
  */
-app.get("/health", (c) => c.json({ ok: true, service: "shopping-list-api" }));
+app.get("/health", async (c) => {
+  const db = createD1Connection(c.env.DB);
+  const row = await ping(db);
+  return c.json({ ok: true, service: "shopping-list-api", db: row?.ok === 1 });
+});
 
 export default {
   fetch: app.fetch,
