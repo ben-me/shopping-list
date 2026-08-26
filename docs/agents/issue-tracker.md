@@ -15,9 +15,9 @@ Infer the repo from `git remote -v`; `gh` does this automatically when run insid
 
 ## Working on a change: worktree + review-gated PR
 
-All work must be done in a **separate git worktree** placed adjacent to the current working directory (e.g. `../<feature-worktree>`), never in the main checkout itself.
+All work must be done in a **separate git worktree** placed in .worktrees/ dir (e.g. `./.worktrees/<feature-worktree>`), never in the main checkout itself.
 
-- **Create a worktree for the work**: `git worktree add ../<feature-worktree> -b <feature-branch>` from the main clone. Do the work there.
+- **Create a worktree for the work**: `git worktree add ./.worktrees/<feature-worktree> -b <feature-branch>` from the main clone. Do the work there.
 - **Open a PR from that branch**: `gh pr create --fill` (or `--title`/`--body`). The PR is the request surface.
 - **A PR MUST be reviewed and approved by the user (`ben-me`) before it merges.** Never merge your own PR without an approval; leave merge to the user.
 - **No direct pushes to `main` in the main worktree.** Commits happen on a feature branch in a separate worktree and land only through a reviewed PR.
