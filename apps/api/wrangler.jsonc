@@ -25,13 +25,13 @@
   //     "bucket_name": "my-bucket"
   //   }
   // ],
-  // "d1_databases": [
-  //   {
-  //     "binding": "MY_DB",
-  //     "database_name": "my-database",
-  //     "database_id": ""
-  //   }
-  // ],
+  "d1_databases": [
+    {
+      "binding": "devDb",
+      "database_name": "dev-db-shopping-list",
+      "database_id": "74281f5c-c84d-4b53-8091-9d8947336520",
+    },
+  ],
   // "ai": {
   //   "binding": "AI"
   // },

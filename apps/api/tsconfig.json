@@ -6,6 +6,7 @@
     "strict": true,
     "skipLibCheck": true,
     "lib": ["ESNext"],
+    "types": ["node", "@cloudflare/workers-types"],
     "noEmit": true
   },
   "include": ["src/**/*"]
