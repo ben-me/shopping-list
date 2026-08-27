@@ -1,20 +1,5 @@
 import { index, integer, primaryKey, sqliteTable, text } from "drizzle-orm/sqlite-core";
 
-/**
- * Source-of-truth domain schema for the Shopping List server (D1/sqlite).
- *
- * These tables back the shared domain model described in `spec.md` and
- * `CONTEXT.md`: Users, Lists, Memberships, Invitations, Items, Payments.
- * Timestamps are stored as ISO-8601 strings (the same shape the shared data
- * contract in `domain.ts` exposes); amounts are integers in EUR minor units
- * (cents) to avoid float drift.
- *
- * Ownership lives on `lists.owner_id` only — the Owner is also a Member, and
- * that is expressed by requiring the Owner to have a `memberships` row, so
- * there is a single source of truth for who owns a list.
- */
-
-/** A person who can own lists and join them as a Member. */
 export const users = sqliteTable("users", {
   id: text("id").primaryKey(),
   email: text("email").notNull().unique(),
@@ -23,11 +8,6 @@ export const users = sqliteTable("users", {
   updatedAt: text("updated_at").notNull(),
 });
 
-/**
- * A shared checklist owned by exactly one user. `split_rule` is carried as a
- * field (ADR-0002) so other split rules can slot in later without a data
- * migration; the MVP only ships `equal`.
- */
 export const lists = sqliteTable(
   "lists",
   {
@@ -43,11 +23,6 @@ export const lists = sqliteTable(
   (t) => [index("lists_owner_id_idx").on(t.ownerId)],
 );
 
-/**
- * The Member roster of a List. The Owner is also a Member and must have a row
- * here; whether someone is the Owner is read from `lists.owner_id`, never from
- * this table, so ownership has a single source of truth.
- */
 export const memberships = sqliteTable(
   "memberships",
   {
@@ -65,11 +40,6 @@ export const memberships = sqliteTable(
   ],
 );
 
-/**
- * A pending offer for a user to join a List as a Member. Distinguished from a
- * Membership — an Invitation is not yet a Member. Delivered by email (the only
- * outbound notification in the MVP); the token backs the accept flow.
- */
 export const invitations = sqliteTable(
   "invitations",
   {
@@ -92,7 +62,6 @@ export const invitations = sqliteTable(
   ],
 );
 
-/** A single thing someone intends to buy; can be ticked off independently of any Payment. */
 export const items = sqliteTable(
   "items",
   {
@@ -109,11 +78,6 @@ export const items = sqliteTable(
   (t) => [index("items_list_id_idx").on(t.listId)],
 );
 
-/**
- * A dated amount (in EUR minor units) a Member recorded against a List. A free
- * amount standing alone — not attached to any Item. One row per Payment, keyed
- * to the List, so sync never merges or dedupes side-by-side Payments.
- */
 export const payments = sqliteTable(
   "payments",
   {

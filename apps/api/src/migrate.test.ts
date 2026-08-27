@@ -1,8 +1,17 @@
 import { convertV4MiniflareOptions, Miniflare } from "miniflare";
+import { fileURLToPath } from "node:url";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { drizzle } from "drizzle-orm/d1";
-import { runMigrations } from "./migrate";
+import { migrate } from "drizzle-orm/d1/migrator";
 import * as schema from "./schema";
+
+const migrationsFolder = fileURLToPath(new URL("../drizzle", import.meta.url).href);
+
+async function runMigrations(dbBinding: D1Database) {
+  const db = drizzle(dbBinding);
+  await migrate(db, { migrationsFolder });
+  return db;
+}
 
 describe("domain schema migrations on D1", () => {
   let mf: Miniflare;
