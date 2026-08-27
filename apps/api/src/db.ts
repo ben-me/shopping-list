@@ -1,7 +1,7 @@
 import { drizzle, type DrizzleD1Database } from "drizzle-orm/d1";
 
 /**
- * @param dbBinding the D1 binding from `env.DB`
+ * @param dbBinding the D1 binding from `env.devDb`
  * @returns a drizzle client over the D1 driver
  */
 export function createD1Connection(dbBinding: D1Database) {

@@ -15,7 +15,7 @@ describe("D1 connection via drizzle", () => {
             script: `
               export default { fetch() { return new Response("ok"); } };
             `,
-            d1Databases: { DB: "local-d1-test-db" },
+            d1Databases: { devDb: "local-d1-test-db" },
           },
         ],
       }),
@@ -28,13 +28,13 @@ describe("D1 connection via drizzle", () => {
   });
 
   it("establishes a drizzle D1 connection from an env-provided binding", async () => {
-    const binding = (await mf.getD1Database("DB")) as D1Database;
+    const binding = await mf.getD1Database("devDb");
     const db = createD1Connection(binding);
     expect(db).toBeDefined();
   });
 
   it("resolves a query without a live network (dry-run binding)", async () => {
-    const binding = (await mf.getD1Database("DB")) as D1Database;
+    const binding = await mf.getD1Database("devDb");
     const db = createD1Connection(binding);
     const row = await ping(db);
     expect(row).toEqual({ ok: 1 });
