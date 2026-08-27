@@ -14,12 +14,6 @@ import { createD1Connection, ping } from "./db";
  */
 export * from "./domain";
 
-/**
- * The worker's environment bindings. `devDb` is the D1 database configured in
- * `wrangler.jsonc` (`d1_databases`, database `dev-db-shopping-list`). Typing
- * it in-line with the global `D1Database` type avoids depending on the
- * generated `worker-configuration.d.ts`.
- */
 type Bindings = {
   devDb: D1Database;
 };
