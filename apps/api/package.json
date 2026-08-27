@@ -15,6 +15,9 @@
     "dev": "wrangler dev",
     "deploy": "wrangler deploy --minify",
     "cf-typegen": "wrangler types --env-interface CloudflareBindings",
+    "db:generate": "drizzle-kit generate",
+    "db:migrate": "wrangler d1 migrations apply dev-db-shopping-list --local",
+    "db:migrate:remote": "wrangler d1 migrations apply dev-db-shopping-list",
     "test:unit": "vitest run",
     "type-check": "tsc --noEmit",
     "fmt": "oxfmt",
@@ -29,6 +32,7 @@
   "devDependencies": {
     "@cloudflare/workers-types": "^5.20260826.1",
     "@types/node": "^24.13.3",
+    "drizzle-kit": "^0.31.10",
     "miniflare": "5.20260825.0-alpha",
     "oxfmt": "^0.64.0",
     "oxlint": "~1.74.0",
