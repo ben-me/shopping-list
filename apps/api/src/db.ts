@@ -1,13 +1,6 @@
 import { drizzle, type DrizzleD1Database } from "drizzle-orm/d1";
 
 /**
- * Establish the drizzle D1 connection from the worker's `DB` binding.
- *
- * Setting up a drizzle D1 client is purely local construction: it wraps the
- * binding in drizzle's D1 driver and does not touch the network until a query
- * runs. That makes the connection resolvable offline — the binding is injected
- * by the runtime (or, in tests and dry-runs, by the caller / environment).
- *
  * @param dbBinding the D1 binding from `env.DB`
  * @returns a drizzle client over the D1 driver
  */
