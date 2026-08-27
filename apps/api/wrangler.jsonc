@@ -3,7 +3,15 @@
   "name": "shopping-list-api",
   "main": "src/index.ts",
   "compatibility_date": "2026-08-26",
+  "compatibility_flags": ["nodejs_compat"],
   "send_metrics": false,
+  // Non-secret config only. Secrets (BETTER_AUTH_SECRET) live in .dev.vars
+  // for local dev and `wrangler secret put` for the deployed worker — never in
+  // vars, which are baked into the bundle as plaintext.
+  "vars": {
+    "BETTER_AUTH_URL": "http://localhost:8787",
+    "BETTER_AUTH_TRUSTED_ORIGINS": "http://localhost:5173",
+  },
   "dev": {
     "ip": "0.0.0.0",
   },

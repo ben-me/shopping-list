@@ -18,13 +18,39 @@ pnpm db:generate    # generate a versioned D1 migration from src/schema.ts
 pnpm db:migrate     # apply pending migrations to the local (dev) D1
 ```
 
+## Authentication (better-auth)
+
+[better-auth](https://better-auth.com) is mounted at `/api/auth/*` and sign-in,
+sign-up, and session endpoints are exposed. Auth is backed by the same D1
+store, so sessions persist across requests.
+
+- The auth instance is built per request in [`src/auth.ts`](src/auth.ts) from
+  the request's `env` — the D1 `devDb` binding and the better-auth settings
+  (`BETTER_AUTH_SECRET`, `BETTER_AUTH_URL`, `BETTER_AUTH_TRUSTED_ORIGINS`).
+  Non-secret config lives in `wrangler.jsonc` `vars`; the **secret** is
+  documented in [`.env.example`](.env.example) locally and is set with
+  `wrangler secret put BETTER_AUTH_SECRET` for the deployed worker.
+- The auth tables (user, session, account, verification) and the domain tables
+  all live in a single file, [`src/schema.ts`](src/schema.ts), plus their
+  drizzle relations. Keeping them in one file lets `db:generate` create
+  migrations for both from a single source.
+- Auth types stay inside the `api` package — they are **not** part of the shared
+  data contract re-exported to the web app.
+
+To regenerate the auth tables against an updated better-auth, use the current
+`auth` CLI (not the older `@better-auth/cli`) and merge its output into
+`src/schema.ts`:
+
+```sh
+pnpm dlx auth@latest generate --adapter drizzle --dialect sqlite -y
+```
+
 ## Database schema and migrations
 
-The domain schema lives in [`src/schema.ts`](src/schema.ts) — the
-source-of-truth tables for the domain model (Lists, Memberships, Invitations,
-Items, Payments), written with drizzle. Users are owned by better-auth and are
-wired to D1 in the next slice, so this schema references user IDs as plain text
-rather than its own `users` table.
+The schema lives in [`src/schema.ts`](src/schema.ts) — the better-auth tables
+(user, session, account, verification) and the Shopping List domain tables
+(Lists, Memberships, Invitations, Items, Payments), plus their drizzle
+relations. All are written with drizzle.
 
 Migrations are **versioned SQL** generated with `drizzle-kit` into the
 [`drizzle/`](drizzle) folder (`drizzle.config.ts`),
@@ -43,8 +69,9 @@ pnpm db:migrate:remote    # the remote D1 database
 
 `wrangler` tracks applied migrations in the D1 `d1_migrations` table, so
 applying is re-runnable and only pending migrations run. The `db.test.ts` /
-`migrate.test.ts` suite additionally proves the generated SQL executes against
-D1 (a local D1 from `miniflare`) and round-trips all domain tables.
+`migrate.test.ts` / `auth.test.ts` suite additionally proves the generated SQL
+executes against D1 (a local D1 from `miniflare`), round-trips all domain tables,
+and lets better-auth sign up / sign in / read sessions against the same store.
 
 [For generating/synchronizing types based on your Worker configuration run](https://developers.cloudflare.com/workers/wrangler/commands/#types):
 
