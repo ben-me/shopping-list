@@ -27,9 +27,9 @@
   // ],
   "d1_databases": [
     {
-      "binding": "DB",
-      "database_name": "shopping-list",
-      "database_id": "<PROVISION_ME>",
+      "binding": "devDb",
+      "database_name": "dev-db-shopping-list",
+      "database_id": "74281f5c-c84d-4b53-8091-9d8947336520",
     },
   ],
   // "ai": {

@@ -28,7 +28,7 @@
   },
   "devDependencies": {
     "@types/node": "^24.13.3",
-    "miniflare": "5.20260820.0-alpha",
+    "miniflare": "5.20260825.0-alpha",
     "oxfmt": "^0.64.0",
     "oxlint": "~1.74.0",
     "typescript": "~6.0.0",
