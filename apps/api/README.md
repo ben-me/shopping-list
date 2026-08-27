@@ -21,8 +21,10 @@ pnpm db:migrate     # apply pending migrations to the local (dev) D1
 ## Database schema and migrations
 
 The domain schema lives in [`src/schema.ts`](src/schema.ts) — the
-source-of-truth tables for the domain model (Users, Lists, Memberships,
-Invitations, Items, Payments), written with drizzle.
+source-of-truth tables for the domain model (Lists, Memberships, Invitations,
+Items, Payments), written with drizzle. Users are owned by better-auth and are
+wired to D1 in the next slice, so this schema references user IDs as plain text
+rather than its own `users` table.
 
 Migrations are **versioned SQL** generated with `drizzle-kit` into the
 [`drizzle/`](drizzle) folder (`drizzle.config.ts`),

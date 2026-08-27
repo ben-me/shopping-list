@@ -7,8 +7,7 @@ CREATE TABLE `invitations` (
 	`token` text NOT NULL,
 	`created_at` text NOT NULL,
 	`updated_at` text NOT NULL,
-	FOREIGN KEY (`list_id`) REFERENCES `lists`(`id`) ON UPDATE no action ON DELETE cascade,
-	FOREIGN KEY (`invited_by_id`) REFERENCES `users`(`id`) ON UPDATE no action ON DELETE no action
+	FOREIGN KEY (`list_id`) REFERENCES `lists`(`id`) ON UPDATE no action ON DELETE cascade
 );
 --> statement-breakpoint
 CREATE UNIQUE INDEX `invitations_token_unique` ON `invitations` (`token`);--> statement-breakpoint
@@ -32,8 +31,7 @@ CREATE TABLE `lists` (
 	`name` text NOT NULL,
 	`split_rule` text DEFAULT 'equal' NOT NULL,
 	`created_at` text NOT NULL,
-	`updated_at` text NOT NULL,
-	FOREIGN KEY (`owner_id`) REFERENCES `users`(`id`) ON UPDATE no action ON DELETE no action
+	`updated_at` text NOT NULL
 );
 --> statement-breakpoint
 CREATE INDEX `lists_owner_id_idx` ON `lists` (`owner_id`);--> statement-breakpoint
@@ -42,8 +40,7 @@ CREATE TABLE `memberships` (
 	`member_id` text NOT NULL,
 	`joined_at` text NOT NULL,
 	PRIMARY KEY(`list_id`, `member_id`),
-	FOREIGN KEY (`list_id`) REFERENCES `lists`(`id`) ON UPDATE no action ON DELETE cascade,
-	FOREIGN KEY (`member_id`) REFERENCES `users`(`id`) ON UPDATE no action ON DELETE no action
+	FOREIGN KEY (`list_id`) REFERENCES `lists`(`id`) ON UPDATE no action ON DELETE cascade
 );
 --> statement-breakpoint
 CREATE INDEX `memberships_member_id_idx` ON `memberships` (`member_id`);--> statement-breakpoint
@@ -55,18 +52,8 @@ CREATE TABLE `payments` (
 	`paid_at` text NOT NULL,
 	`created_at` text NOT NULL,
 	`updated_at` text NOT NULL,
-	FOREIGN KEY (`list_id`) REFERENCES `lists`(`id`) ON UPDATE no action ON DELETE cascade,
-	FOREIGN KEY (`member_id`) REFERENCES `users`(`id`) ON UPDATE no action ON DELETE no action
+	FOREIGN KEY (`list_id`) REFERENCES `lists`(`id`) ON UPDATE no action ON DELETE cascade
 );
 --> statement-breakpoint
 CREATE INDEX `payments_list_id_idx` ON `payments` (`list_id`);--> statement-breakpoint
-CREATE INDEX `payments_member_id_idx` ON `payments` (`member_id`);--> statement-breakpoint
-CREATE TABLE `users` (
-	`id` text PRIMARY KEY NOT NULL,
-	`email` text NOT NULL,
-	`name` text,
-	`created_at` text NOT NULL,
-	`updated_at` text NOT NULL
-);
---> statement-breakpoint
-CREATE UNIQUE INDEX `users_email_unique` ON `users` (`email`);
+CREATE INDEX `payments_member_id_idx` ON `payments` (`member_id`);

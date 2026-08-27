@@ -1,20 +1,10 @@
 import { index, integer, primaryKey, sqliteTable, text } from "drizzle-orm/sqlite-core";
 
-export const users = sqliteTable("users", {
-  id: text("id").primaryKey(),
-  email: text("email").notNull().unique(),
-  name: text("name"),
-  createdAt: text("created_at").notNull(),
-  updatedAt: text("updated_at").notNull(),
-});
-
 export const lists = sqliteTable(
   "lists",
   {
     id: text("id").primaryKey(),
-    ownerId: text("owner_id")
-      .notNull()
-      .references(() => users.id),
+    ownerId: text("owner_id").notNull(),
     name: text("name").notNull(),
     splitRule: text("split_rule").notNull().default("equal"),
     createdAt: text("created_at").notNull(),
@@ -29,9 +19,7 @@ export const memberships = sqliteTable(
     listId: text("list_id")
       .notNull()
       .references(() => lists.id, { onDelete: "cascade" }),
-    memberId: text("member_id")
-      .notNull()
-      .references(() => users.id),
+    memberId: text("member_id").notNull(),
     joinedAt: text("joined_at").notNull(),
   },
   (t) => [
@@ -48,9 +36,7 @@ export const invitations = sqliteTable(
       .notNull()
       .references(() => lists.id, { onDelete: "cascade" }),
     email: text("email").notNull(),
-    invitedById: text("invited_by_id")
-      .notNull()
-      .references(() => users.id),
+    invitedById: text("invited_by_id").notNull(),
     status: text("status").notNull().default("pending"),
     token: text("token").notNull().unique(),
     createdAt: text("created_at").notNull(),
@@ -85,9 +71,7 @@ export const payments = sqliteTable(
     listId: text("list_id")
       .notNull()
       .references(() => lists.id, { onDelete: "cascade" }),
-    memberId: text("member_id")
-      .notNull()
-      .references(() => users.id),
+    memberId: text("member_id").notNull(),
     amountInCents: integer("amount_in_cents").notNull(),
     paidAt: text("paid_at").notNull(),
     createdAt: text("created_at").notNull(),

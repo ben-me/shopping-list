@@ -49,7 +49,6 @@ describe("domain schema migrations on D1", () => {
 
     expect(tables).toEqual(
       expect.arrayContaining([
-        "users",
         "lists",
         "memberships",
         "invitations",
@@ -66,20 +65,6 @@ describe("domain schema migrations on D1", () => {
     const db = drizzle(binding, { schema });
 
     const now = "2026-08-27T09:00:00.000Z";
-    await db.insert(schema.users).values({
-      id: "u-owner",
-      email: "owner-user",
-      name: "Owner",
-      createdAt: now,
-      updatedAt: now,
-    });
-    await db.insert(schema.users).values({
-      id: "u-buyer",
-      email: "buyer-user",
-      name: "Buyer",
-      createdAt: now,
-      updatedAt: now,
-    });
 
     const [list] = await db
       .insert(schema.lists)
