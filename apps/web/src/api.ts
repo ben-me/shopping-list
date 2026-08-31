@@ -1,7 +1,5 @@
 import { ofetch, type FetchOptions } from "ofetch";
 
-const API_BASE_URL: string = import.meta.env.VITE_API_BASE_URL ?? "";
-
 type ApiErrorBody = { error?: { message?: string }; message?: string };
 
 export class ApiError extends Error {
@@ -14,13 +12,12 @@ export class ApiError extends Error {
   }
 }
 
-/** One call against the hono API: session cookie included, non-2xx → ApiError. */
+/** One call against the same-origin hono API; non-2xx → ApiError. */
 export async function apiFetch<T = unknown>(
   path: string,
   options: FetchOptions<"json"> = {},
 ): Promise<T> {
   return ofetch<T>(path, {
-    baseURL: API_BASE_URL,
     credentials: "include",
     ...options,
     onResponseError(context) {
