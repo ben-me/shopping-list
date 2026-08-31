@@ -6,4 +6,4 @@
  * local-first client stay in sync from a single definition. Only data shapes
  * live here — auth types are not part of the shared contract.
  */
-export type { Item, List, Owed, Payment, SplitRule } from "@shopping-list/api";
+export type { Item, List, Owed, Payment, SplitRule } from "@shopping-list/api/domain";

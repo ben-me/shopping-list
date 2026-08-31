@@ -9,11 +9,16 @@
     ".": {
       "types": "./src/index.ts",
       "import": "./src/index.ts"
+    },
+    "./domain": {
+      "types": "./src/domain.ts",
+      "import": "./src/domain.ts"
     }
   },
   "scripts": {
     "dev": "wrangler dev",
     "deploy": "wrangler deploy --minify",
+    "build": "wrangler deploy --dry-run",
     "cf-typegen": "wrangler types --env-interface CloudflareBindings",
     "db:generate": "drizzle-kit generate",
     "db:migrate": "wrangler d1 migrations apply dev-db-shopping-list --local",

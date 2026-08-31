@@ -10,6 +10,7 @@ used for local development and deployment.
 ```sh
 pnpm dev            # run the Worker locally with wrangler dev
 pnpm deploy         # deploy to Cloudflare Workers
+pnpm build          # wrangler deploy --dry-run (proves the Worker bundles and the D1 binding resolves without a live deploy)
 pnpm type-check     # type-check (tsc --noEmit)
 pnpm lint           # lint (oxlint)
 pnpm fmt            # format (oxfmt)
@@ -35,7 +36,12 @@ store, so sessions persist across requests.
   drizzle relations. Keeping them in one file lets `db:generate` create
   migrations for both from a single source.
 - Auth types stay inside the `api` package — they are **not** part of the shared
-  data contract re-exported to the web app.
+  data contract re-exported to the web app. The shared data contract (the
+  `List` / `Item` / `Payment` / `Owed` shapes) is exposed through the
+  `@shopping-list/api/domain` subpath export (see [`src/domain.ts`](src/domain.ts)),
+  which the web app consumes so it never has to pull in Worker-only code —
+  `src/index.ts` imports `auth.ts` / `db.ts`, which use Cloudflare `D1Database`
+  types the browser does not have.
 
 To regenerate the auth tables against an updated better-auth, use the current
 `auth` CLI (not the older `@better-auth/cli`) and merge its output into
