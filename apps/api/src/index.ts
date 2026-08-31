@@ -11,9 +11,12 @@ import { createD1Connection, ping } from "./db";
  * better-auth routes mounted at `/api/auth/*`. Domain endpoint behaviour lands
  * in later slices.
  *
- * The shared domain **data** contract (List, Item, Payment, Owed) is re-exported
- * here so the web app imports it straight from the `@shopping-list/api` package.
- * Only the data shapes are part of that contract — auth types stay in the `api`.
+ * The shared domain **data** contract (List, Item, Payment, Owed) lives in
+ * `./domain` and is exposed to the web app through the
+ * `@shopping-list/api/domain` subpath export, so the web app imports only the
+ * data shapes and never pulls in this Worker entry (which drags in
+ * `D1Database` types the browser does not have). Only the data shapes are part
+ * of that contract — auth types stay in the `api`.
  */
 export * from "./domain";
 
