@@ -29,6 +29,12 @@ export interface Payment {
   updatedAt: string;
 }
 
+export interface Membership {
+  listId: string;
+  memberId: string;
+  joinedAt: string;
+}
+
 export interface Owed {
   memberId: string;
   amountInCents: number;

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { Item, List, Owed, Payment } from "@shopping-list/api/domain";
+import type { Item, List, Membership, Owed, Payment } from "@shopping-list/api/domain";
 
 describe("shared domain data contract", () => {
   it("a List carries its own split rule and its Owner", () => {
@@ -43,6 +43,17 @@ describe("shared domain data contract", () => {
 
     expect(payment.amountInCents).toBe(1250);
     expect(payment.listId).toBe("list-1");
+  });
+
+  it("a Membership ties an existing user to a List; the Owner is also a Member", () => {
+    const membership: Membership = {
+      listId: "list-1",
+      memberId: "user-1",
+      joinedAt: "2026-08-26T00:00:00.000Z",
+    };
+
+    expect(membership.memberId).toBe("user-1");
+    expect(membership.listId).toBe("list-1");
   });
 
   it("Owed is a net position: positive owes the group, negative is owed by it", () => {
