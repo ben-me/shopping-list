@@ -1,69 +1,51 @@
+import { ofetch, type FetchOptions } from "ofetch";
+
 /**
- * The API client for the hono backend. Every request carries the session
- * cookie (`credentials: "include"`), speaks JSON, and surfaces any non-2xx
- * response as an `ApiError` — the one error shape the UI handles.
+ * The API client for the hono backend, as one small function you can use
+ * anywhere in the web app.
+ *
+ * Every request goes through ofetch with:
+ * - `credentials: "include"` so the session cookie set by better-auth is always
+ *   sent (dev runs web and api on different ports, i.e. different origins — this
+ *   is what makes authed calls work there; on a same-origin deployment it is a
+ *   no-op).
+ * - a base URL from `VITE_API_BASE_URL` (set it to the Worker origin in dev, or
+ *   when web and api live on different domains); unset means same-origin.
+ * - non-2xx responses mapped to an `ApiError`, reading the server's error
+ *   envelope (issue #22) so the UI has one error shape to show. Network
+ *   failures keep ofetch's own `FetchError`.
+ *
+ * Objects passed as `body` are JSON-serialised and sent with
+ * `content-type: application/json`; 204 responses resolve to `undefined`.
  */
 export class ApiError extends Error {
   readonly status: number;
-  readonly body: unknown;
 
-  constructor(status: number, message: string, body: unknown) {
+  constructor(status: number, message: string) {
     super(message);
     this.name = "ApiError";
     this.status = status;
-    this.body = body;
   }
 }
 
-export interface ApiClient {
-  get<T>(path: string): Promise<T>;
-  post<T>(path: string, body?: unknown): Promise<T>;
-  patch<T>(path: string, body?: unknown): Promise<T>;
-  delete(path: string): Promise<void>;
-}
+const API_BASE_URL: string = import.meta.env.VITE_API_BASE_URL ?? "";
 
-export function createApiClient(baseUrl: string, fetchImpl: typeof fetch = fetch): ApiClient {
-  async function request<T>(method: string, path: string, body?: unknown): Promise<T> {
-    const options: RequestInit = {
-      method,
-      credentials: "include",
-      headers: { Accept: "application/json" },
-    };
-    if (body !== undefined) {
-      options.headers = { ...options.headers, "Content-Type": "application/json" };
-      options.body = JSON.stringify(body);
-    }
-
-    const response = await fetchImpl(`${baseUrl}${path}`, options);
-
-    if (!response.ok) {
-      throw await toApiError(response);
-    }
-    if (response.status === 204) {
-      return undefined as T;
-    }
-    return (await response.json()) as T;
-  }
-
-  return {
-    get: <T>(path: string) => request<T>("GET", path),
-    post: <T>(path: string, body?: unknown) => request<T>("POST", path, body),
-    patch: <T>(path: string, body?: unknown) => request<T>("PATCH", path, body),
-    delete: (path: string) => request<void>("DELETE", path),
-  };
-}
-
-/** Read the error envelope (issue #22) and fall back to the status text. */
-async function toApiError(response: Response): Promise<ApiError> {
-  let body: unknown;
-  try {
-    body = await response.json();
-  } catch {
-    body = undefined;
-  }
-  const message =
-    (body as { error?: { message?: string }; message?: string })?.error?.message ??
-    (body as { message?: string })?.message ??
-    response.statusText;
-  return new ApiError(response.status, message || response.statusText, body);
+export async function apiFetch<T = unknown>(
+  path: string,
+  options: FetchOptions<"json"> = {},
+): Promise<T> {
+  return ofetch<T>(path, {
+    baseURL: API_BASE_URL,
+    credentials: "include",
+    ...options,
+    onResponseError(context) {
+      const response = context.response;
+      const body = (response?._data ?? undefined) as
+        | { error?: { message?: string }; message?: string }
+        | undefined;
+      const message =
+        body?.error?.message ?? body?.message ?? response?.statusText ?? "Request failed";
+      throw new ApiError(response?.status ?? 0, message);
+    },
+  });
 }
