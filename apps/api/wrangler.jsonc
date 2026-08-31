@@ -15,6 +15,9 @@
   "dev": {
     "ip": "0.0.0.0",
   },
+  "secrets": {
+    "required": ["BETTER_AUTH_SECRET"]
+  },
   // "compatibility_flags": [
   //   "nodejs_compat"
   // ],
