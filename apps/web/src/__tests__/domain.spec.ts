@@ -35,7 +35,7 @@ describe("shared domain data contract", () => {
       id: "pay-1",
       listId: "list-1",
       memberId: "user-1",
-      amountInCents: 1250, // €12.50
+      amountInCents: 1250,
       paidAt: "2026-08-26T00:00:00.000Z",
       createdAt: "2026-08-26T00:00:00.000Z",
       updatedAt: "2026-08-26T00:00:00.000Z",
