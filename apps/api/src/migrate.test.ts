@@ -54,6 +54,10 @@ describe("domain schema migrations on D1", () => {
         "invitations",
         "items",
         "payments",
+        "user",
+        "session",
+        "account",
+        "verification",
         "__drizzle_migrations",
       ]),
     );
