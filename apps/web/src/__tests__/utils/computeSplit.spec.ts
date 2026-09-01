@@ -2,14 +2,6 @@ import { describe, expect, it } from "vitest";
 import { computeSplit } from "../../utils/computeSplit";
 import type { SplitRule, Payment } from "@shopping-list/api/domain";
 
-/**
- * A Payment as it arrives from the working copy: `createdAt`/`updatedAt` are
- * system-managed timestamps (the database defaults createdAt to now and bumps
- * updatedAt on every write), so fixtures never hardcode them — they are
- * generated with the Date API. `paidAt` is the business date the Member
- * records; defaulting it to now mirrors the normal flow of recording a payment
- * the day it happens.
- */
 function payment(id: string, memberId: string, amountInCents: number): Payment {
   return {
     id,

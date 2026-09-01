@@ -12,7 +12,6 @@ export class ApiError extends Error {
   }
 }
 
-/** One call against the same-origin hono API; non-2xx → ApiError. */
 export async function apiFetch<T = unknown>(
   path: string,
   options: FetchOptions<"json"> = {},

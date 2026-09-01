@@ -5,7 +5,6 @@ import type { Item, List, Payment } from "@shopping-list/api/domain";
 
 let dbNumber = 0;
 
-/** System-managed timestamps come from the clock, never hardcoded. */
 const now = () => new Date().toISOString();
 
 const list: List = {
@@ -40,8 +39,6 @@ function payment(id: string, memberId: string, amountInCents: number): Payment {
   };
 }
 
-// Fixed identities so the round-trip below can assert the very objects that
-// were put, while their timestamps stay generated rather than hardcoded.
 const milk = item("item-1", "Milk");
 const bread = item("item-2", "Bread");
 const pay1 = payment("pay-1", "user-1", 1250);
@@ -60,15 +57,15 @@ describe("ShoppingDb", () => {
     await db.putItem(bread);
     await db.putPayment(pay1);
 
-    expect(await db.allLists()).toEqual([list]);
-    expect(await db.listItems(list.id)).toEqual([milk, bread]);
-    expect(await db.listPayments(list.id)).toEqual([pay1]);
+    expect(await db.getLists()).toEqual([list]);
+    expect(await db.getItems(list.id)).toEqual([milk, bread]);
+    expect(await db.getPayments(list.id)).toEqual([pay1]);
   });
 
   it("captures a write made with no connection into the outbox, tagged for the next Sync", async () => {
     await db.putItem(item("item-1", "Milk"));
 
-    const pending = await db.pendingOutbox();
+    const pending = await db.pendingOutboxEntries();
 
     expect(pending).toHaveLength(1);
     expect(pending[0]).toMatchObject({
@@ -87,7 +84,7 @@ describe("ShoppingDb", () => {
 
     expect(transport).toHaveBeenCalledTimes(1);
     expect(drained).toHaveLength(1);
-    expect(await db.pendingOutbox()).toEqual([]);
+    expect(await db.pendingOutboxEntries()).toEqual([]);
   });
 
   it("leaves an entry pending when the transport fails so the next Sync retries it", async () => {
@@ -98,7 +95,7 @@ describe("ShoppingDb", () => {
 
     await expect(db.drainOutbox(transport)).rejects.toThrow("no connection");
 
-    expect(await db.pendingOutbox()).toHaveLength(1);
-    expect((await db.pendingOutbox())[0]?.syncedAt).toBeNull();
+    expect(await db.pendingOutboxEntries()).toHaveLength(1);
+    expect((await db.pendingOutboxEntries())[0]?.syncedAt).toBeNull();
   });
 });

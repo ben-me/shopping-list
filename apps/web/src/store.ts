@@ -34,83 +34,88 @@ export class ShoppingDb extends Dexie {
     });
   }
 
-  allLists(): Promise<List[]> {
+  getLists(): Promise<List[]> {
     return this.lists.toArray();
   }
 
-  getList(id: string): Promise<List | undefined> {
-    return this.lists.get(id);
+  getList(listId: string): Promise<List | undefined> {
+    return this.lists.get(listId);
   }
 
-  listItems(listId: string): Promise<Item[]> {
+  getItems(listId: string): Promise<Item[]> {
     return this.items.where("listId").equals(listId).sortBy("createdAt");
   }
 
-  listPayments(listId: string): Promise<Payment[]> {
+  getPayments(listId: string): Promise<Payment[]> {
     return this.payments.where("listId").equals(listId).sortBy("paidAt");
   }
 
-  listMemberships(listId: string): Promise<Membership[]> {
+  getMemberships(listId: string): Promise<Membership[]> {
     return this.memberships.where("listId").equals(listId).sortBy("joinedAt");
   }
 
   putList(list: List): Promise<void> {
     return this.transaction("rw", this.lists, this.outbox, async () => {
       await this.lists.put(list);
-      await this.queue({ targetType: "list", targetId: list.id, operation: "update" });
+      await this.queueOutboxWrite({ targetType: "list", targetId: list.id, operation: "update" });
     });
   }
 
   putItem(item: Item): Promise<void> {
     return this.transaction("rw", this.items, this.outbox, async () => {
       await this.items.put(item);
-      await this.queue({ targetType: "item", targetId: item.id, operation: "update" });
+      await this.queueOutboxWrite({ targetType: "item", targetId: item.id, operation: "update" });
     });
   }
 
   putPayment(payment: Payment): Promise<void> {
     return this.transaction("rw", this.payments, this.outbox, async () => {
       await this.payments.put(payment);
-      await this.queue({ targetType: "payment", targetId: payment.id, operation: "update" });
+      await this.queueOutboxWrite({
+        targetType: "payment",
+        targetId: payment.id,
+        operation: "update",
+      });
     });
   }
 
-  removeItem(id: string): Promise<void> {
+  deleteItem(id: string): Promise<void> {
     return this.transaction("rw", this.items, this.outbox, async () => {
       await this.items.delete(id);
-      await this.queue({ targetType: "item", targetId: id, operation: "delete" });
+      await this.queueOutboxWrite({ targetType: "item", targetId: id, operation: "delete" });
     });
   }
 
-  removePayment(id: string): Promise<void> {
+  deletePayment(id: string): Promise<void> {
     return this.transaction("rw", this.payments, this.outbox, async () => {
       await this.payments.delete(id);
-      await this.queue({ targetType: "payment", targetId: id, operation: "delete" });
+      await this.queueOutboxWrite({ targetType: "payment", targetId: id, operation: "delete" });
     });
   }
 
-  /** Server-owned; written by a Sync, never queued in the outbox. */
   async syncMembership(membership: Membership): Promise<void> {
     await this.memberships.put(membership);
   }
 
-  async pendingOutbox(): Promise<OutboxEntry[]> {
+  async pendingOutboxEntries(): Promise<OutboxEntry[]> {
     const rows = await this.outbox.orderBy("id").toArray();
     return rows.filter((entry) => entry.syncedAt === null);
   }
 
-  async drainOutbox(send: OutboxTransport): Promise<OutboxEntry[]> {
-    const pending = await this.pendingOutbox();
-    const drained: OutboxEntry[] = [];
-    for (const entry of pending) {
-      await send(entry);
+  async drainOutbox(transport: OutboxTransport): Promise<OutboxEntry[]> {
+    const pendingEntries = await this.pendingOutboxEntries();
+    const drainedEntries: OutboxEntry[] = [];
+    for (const entry of pendingEntries) {
+      await transport(entry);
       await this.outbox.update(entry.id!, { syncedAt: new Date().toISOString() });
-      drained.push(entry);
+      drainedEntries.push(entry);
     }
-    return drained;
+    return drainedEntries;
   }
 
-  private async queue(entry: Omit<OutboxEntry, "id" | "queuedAt" | "syncedAt">): Promise<void> {
+  private async queueOutboxWrite(
+    entry: Omit<OutboxEntry, "id" | "queuedAt" | "syncedAt">,
+  ): Promise<void> {
     await this.outbox.add({ ...entry, queuedAt: new Date().toISOString(), syncedAt: null });
   }
 }
