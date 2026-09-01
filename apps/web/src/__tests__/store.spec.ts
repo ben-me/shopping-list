@@ -5,13 +5,16 @@ import type { Item, List, Payment } from "@shopping-list/api/domain";
 
 let dbNumber = 0;
 
+/** System-managed timestamps come from the clock, never hardcoded. */
+const now = () => new Date().toISOString();
+
 const list: List = {
   id: "list-1",
   ownerId: "user-1",
   name: "Household",
   splitRule: "equal",
-  createdAt: "2026-08-26T00:00:00.000Z",
-  updatedAt: "2026-08-26T00:00:00.000Z",
+  createdAt: now(),
+  updatedAt: now(),
 };
 
 function item(id: string, name: string): Item {
@@ -20,8 +23,8 @@ function item(id: string, name: string): Item {
     listId: list.id,
     name,
     checked: false,
-    createdAt: "2026-08-26T00:00:00.000Z",
-    updatedAt: "2026-08-26T00:00:00.000Z",
+    createdAt: now(),
+    updatedAt: now(),
   };
 }
 
@@ -31,11 +34,17 @@ function payment(id: string, memberId: string, amountInCents: number): Payment {
     listId: list.id,
     memberId,
     amountInCents,
-    paidAt: "2026-08-26T00:00:00.000Z",
-    createdAt: "2026-08-26T00:00:00.000Z",
-    updatedAt: "2026-08-26T00:00:00.000Z",
+    paidAt: now(),
+    createdAt: now(),
+    updatedAt: now(),
   };
 }
+
+// Fixed identities so the round-trip below can assert the very objects that
+// were put, while their timestamps stay generated rather than hardcoded.
+const milk = item("item-1", "Milk");
+const bread = item("item-2", "Bread");
+const pay1 = payment("pay-1", "user-1", 1250);
 
 let db: ShoppingDb;
 
@@ -47,13 +56,13 @@ beforeEach(() => {
 describe("ShoppingDb", () => {
   it("round-trips Lists, Items, and Payments through the local database with no network", async () => {
     await db.putList(list);
-    await db.putItem(item("item-1", "Milk"));
-    await db.putItem(item("item-2", "Bread"));
-    await db.putPayment(payment("pay-1", "user-1", 1250));
+    await db.putItem(milk);
+    await db.putItem(bread);
+    await db.putPayment(pay1);
 
     expect(await db.allLists()).toEqual([list]);
-    expect(await db.listItems(list.id)).toEqual([item("item-1", "Milk"), item("item-2", "Bread")]);
-    expect(await db.listPayments(list.id)).toEqual([payment("pay-1", "user-1", 1250)]);
+    expect(await db.listItems(list.id)).toEqual([milk, bread]);
+    expect(await db.listPayments(list.id)).toEqual([pay1]);
   });
 
   it("captures a write made with no connection into the outbox, tagged for the next Sync", async () => {
