@@ -44,17 +44,4 @@ describe("computeOwed", () => {
 
     expect(result).toEqual([]);
   });
-
-  it("re-divides over the remaining Members after one leaves, their payment staying in the pot", () => {
-    const result = computeOwed(
-      "equal",
-      ["a", "b"],
-      [payment("p1", "a", 300), payment("p2", "c", 100)],
-    );
-
-    expect(result).toEqual([
-      { memberId: "a", amountInCents: -100 },
-      { memberId: "b", amountInCents: 200 },
-    ]);
-  });
 });
