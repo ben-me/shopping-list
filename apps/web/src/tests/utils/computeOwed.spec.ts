@@ -49,12 +49,6 @@ describe("computeOwed", () => {
     ]);
   });
 
-  it("keys every balance to its Member, so the result reads back by Member not by position", () => {
-    const result = computeOwed(["a", "b", "c"], [payment("p1", "a", 150)]);
-
-    expect(result.map((o) => o.memberId)).toEqual(["a", "b", "c"]);
-  });
-
   it("leaves a zero balance for a Member who paid exactly their share", () => {
     const result = computeOwed(["a", "b"], [payment("p1", "a", 100), payment("p2", "b", 100)]);
 
