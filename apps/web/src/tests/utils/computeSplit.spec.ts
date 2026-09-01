@@ -1,6 +1,6 @@
 
 import { computeSplit } from "../../utils/computeSplit";
-import type { SplitRule, Payment } from "@shopping-list/api/domain";
+import type { Payment } from "@shopping-list/api/domain";
 
 function payment(id: string, memberId: string, amountInCents: number): Payment {
   return {
@@ -16,7 +16,7 @@ function payment(id: string, memberId: string, amountInCents: number): Payment {
 
 describe("computeSplit", () => {
   it("spreads the remainder one cent at a time so shares sum exactly to the total", () => {
-    const result = computeSplit("equal", ["a", "b", "c"], [payment("p1", "a", 100)]);
+    const result = computeSplit(["a", "b", "c"], [payment("p1", "a", 100)]);
 
     expect(result.totalInCents).toBe(100);
     expect(result.shares).toEqual([
@@ -28,14 +28,14 @@ describe("computeSplit", () => {
   });
 
   it("keys every share to its Member, so the split reads back by Member not by position", () => {
-    const result = computeSplit("equal", ["a", "b", "c"], [payment("p1", "a", 100)]);
+    const result = computeSplit(["a", "b", "c"], [payment("p1", "a", 100)]);
 
     expect(result.shares.map((s) => s.memberId)).toEqual(["a", "b", "c"]);
     expect(result.shares[0]).toMatchObject({ memberId: "a", shareInCents: 34 });
   });
 
   it("yields no shares for fewer than two Members — a lone Member sees only the total", () => {
-    const result = computeSplit("equal", ["a"], [payment("p1", "a", 1400)]);
+    const result = computeSplit(["a"], [payment("p1", "a", 1400)]);
 
     expect(result.totalInCents).toBe(1400);
     expect(result.shares).toEqual([]);
@@ -43,7 +43,6 @@ describe("computeSplit", () => {
 
   it("keeps a departed Member's payment in the pot and re-divides over the remaining Members", () => {
     const result = computeSplit(
-      "equal",
       ["a", "b"],
       [payment("p1", "a", 300), payment("p2", "c", 100)],
     );
@@ -53,13 +52,5 @@ describe("computeSplit", () => {
       { memberId: "a", shareInCents: 200 },
       { memberId: "b", shareInCents: 200 },
     ]);
-  });
-
-  it("rejects a split rule the calculation cannot honour instead of dividing wrongly", () => {
-    const rule = "weighted" as SplitRule;
-
-    expect(() => computeSplit(rule, ["a", "b"], [])).toThrow(
-      "split rule not implemented: weighted",
-    );
   });
 });

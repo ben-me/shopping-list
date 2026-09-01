@@ -17,7 +17,6 @@ function payment(id: string, memberId: string, amountInCents: number): Payment {
 describe("computeOwed", () => {
   it("signs the net position: positive owes the group (red), negative is owed by it (green)", () => {
     const result = computeOwed(
-      "equal",
       ["a", "b"],
       [payment("p1", "a", 300), payment("p2", "b", 100)],
     );
@@ -29,7 +28,7 @@ describe("computeOwed", () => {
   });
 
   it("is exact under a remainder: shares and Owed figures always agree with computeSplit", () => {
-    const result = computeOwed("equal", ["a", "b", "c"], [payment("p1", "a", 100)]);
+    const result = computeOwed(["a", "b", "c"], [payment("p1", "a", 100)]);
 
     expect(result).toEqual([
       { memberId: "a", amountInCents: -66 },
@@ -40,7 +39,7 @@ describe("computeOwed", () => {
   });
 
   it("shows nothing for a lone Member — only the total is visible, never an Owed figure", () => {
-    const result = computeOwed("equal", ["a"], [payment("p1", "a", 1400)]);
+    const result = computeOwed(["a"], [payment("p1", "a", 1400)]);
 
     expect(result).toEqual([]);
   });

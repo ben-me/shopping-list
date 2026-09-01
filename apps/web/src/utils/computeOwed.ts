@@ -1,12 +1,8 @@
-import type { Owed, Payment, SplitRule } from "@shopping-list/api/domain";
+import type { Owed, Payment } from "@shopping-list/api/domain";
 import { computeSplit } from "./computeSplit";
 
-export function computeOwed(
-  splitRule: SplitRule,
-  memberIds: string[],
-  payments: Payment[],
-): Owed[] {
-  const { shares } = computeSplit(splitRule, memberIds, payments);
+export function computeOwed(memberIds: string[], payments: Payment[]): Owed[] {
+  const { shares } = computeSplit(memberIds, payments);
 
   const totalsPaidByMember: Map<string, number> = new Map();
   for (const payment of payments) {
