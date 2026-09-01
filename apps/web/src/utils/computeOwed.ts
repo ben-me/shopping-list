@@ -1,19 +1,25 @@
 import type { Owed, Payment } from "@shopping-list/api/domain";
-import { computeSplit } from "./computeSplit";
 
 export function computeOwed(memberIds: string[], payments: Payment[]): Owed[] {
-  const { shares } = computeSplit(memberIds, payments);
+  if (memberIds.length < 2) {
+    return [];
+  }
 
-  const totalsPaidByMember: Map<string, number> = new Map();
+  const totalPaidByMember = new Map<string, number>();
+  let totalPaid = 0;
   for (const payment of payments) {
-    totalsPaidByMember.set(
+    totalPaid += payment.amountInCents;
+    totalPaidByMember.set(
       payment.memberId,
-      (totalsPaidByMember.get(payment.memberId) ?? 0) + payment.amountInCents,
+      (totalPaidByMember.get(payment.memberId) ?? 0) + payment.amountInCents,
     );
   }
 
-  return shares.map(({ memberId, shareInCents }) => ({
+  const baseShare = Math.floor(totalPaid / memberIds.length);
+  const remainder = totalPaid % memberIds.length;
+
+  return memberIds.map((memberId, index) => ({
     memberId,
-    amountInCents: shareInCents - (totalsPaidByMember.get(memberId) ?? 0),
+    amountInCents: baseShare + (index < remainder ? 1 : 0) - (totalPaidByMember.get(memberId) ?? 0),
   }));
 }
