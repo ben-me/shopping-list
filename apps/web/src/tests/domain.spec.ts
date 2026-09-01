@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+
 import type { Item, List, Membership, Owed, Payment } from "@shopping-list/api/domain";
 
 describe("shared domain data contract", () => {
