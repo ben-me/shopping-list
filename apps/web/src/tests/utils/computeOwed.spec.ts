@@ -40,13 +40,15 @@ describe("computeOwed", () => {
     expect(result).toEqual([]);
   });
 
-  it("keeps a departed Member's payment in the pot and re-divides over the remaining Members", () => {
+  it("keeps a departed Member's payment in the pot and splits it over everyone involved", () => {
     const result = computeOwed(["a", "b"], [payment("p1", "a", 300), payment("p2", "c", 100)]);
 
     expect(result).toEqual([
-      { memberId: "a", amountInCents: -100 },
-      { memberId: "b", amountInCents: 200 },
+      { memberId: "a", amountInCents: -166 },
+      { memberId: "b", amountInCents: 133 },
+      { memberId: "c", amountInCents: 33 },
     ]);
+    expect(result.reduce((sum, o) => sum + o.amountInCents, 0)).toBe(0);
   });
 
   it("leaves a zero balance for a Member who paid exactly their share", () => {

@@ -1,25 +1,33 @@
 import type { Owed, Payment } from "@shopping-list/api/domain";
 
 export function computeOwed(memberIds: string[], payments: Payment[]): Owed[] {
-  if (memberIds.length < 2) {
-    return [];
-  }
-
-  const totalPaidByMember = new Map<string, number>();
+  const participantIds = [...memberIds];
+  const seen = new Set(memberIds);
+  const paidByMember = new Map<string, number>();
   let totalPaid = 0;
+
   for (const payment of payments) {
     totalPaid += payment.amountInCents;
-    totalPaidByMember.set(
+    if (!seen.has(payment.memberId)) {
+      seen.add(payment.memberId);
+      participantIds.push(payment.memberId);
+    }
+    paidByMember.set(
       payment.memberId,
-      (totalPaidByMember.get(payment.memberId) ?? 0) + payment.amountInCents,
+      (paidByMember.get(payment.memberId) ?? 0) + payment.amountInCents,
     );
   }
 
-  const baseShare = Math.floor(totalPaid / memberIds.length);
-  const remainder = totalPaid % memberIds.length;
+  if (participantIds.length < 2) {
+    return [];
+  }
 
-  return memberIds.map((memberId, index) => ({
+  const baseShare = Math.floor(totalPaid / participantIds.length);
+  const remainder = totalPaid % participantIds.length;
+
+  return participantIds.map((memberId, index) => ({
     memberId,
-    amountInCents: baseShare + (index < remainder ? 1 : 0) - (totalPaidByMember.get(memberId) ?? 0),
+    amountInCents:
+      baseShare + (index < remainder ? 1 : 0) - (paidByMember.get(memberId) ?? 0),
   }));
 }
