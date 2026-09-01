@@ -20,10 +20,11 @@ function payment(id: string, memberId: string, amountInCents: number): Payment {
 
 describe("computeOwed", () => {
   it("signs the net position: positive owes the group (red), negative is owed by it (green)", () => {
-    const result = computeOwed("equal", ["a", "b"], [
-      payment("p1", "a", 300),
-      payment("p2", "b", 100),
-    ]);
+    const result = computeOwed(
+      "equal",
+      ["a", "b"],
+      [payment("p1", "a", 300), payment("p2", "b", 100)],
+    );
 
     // share is 200 each; a overpaid by 100 (group owes a, green), b underpaid by 100 (b owes, red)
     expect(result).toEqual([
@@ -51,10 +52,11 @@ describe("computeOwed", () => {
   });
 
   it("re-divides over the remaining Members after one leaves, their payment staying in the pot", () => {
-    const result = computeOwed("equal", ["a", "b"], [
-      payment("p1", "a", 300),
-      payment("p2", "c", 100),
-    ]);
+    const result = computeOwed(
+      "equal",
+      ["a", "b"],
+      [payment("p1", "a", 300), payment("p2", "c", 100)],
+    );
 
     // total 400 over a and b is 200 each; a already paid 300, b paid nothing
     expect(result).toEqual([

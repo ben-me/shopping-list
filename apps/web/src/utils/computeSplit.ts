@@ -29,11 +29,7 @@ export interface Split {
  * `payments` must be scoped to the one List and `members` must be the current
  * Member ids in a stable order (e.g. by `joinedAt`).
  */
-export function computeSplit(
-  splitRule: SplitRule,
-  members: string[],
-  payments: Payment[],
-): Split {
+export function computeSplit(splitRule: SplitRule, members: string[], payments: Payment[]): Split {
   const totalInCents = payments.reduce((sum, p) => sum + p.amountInCents, 0);
 
   // The type union only ships "equal" today; a future rule must be handled

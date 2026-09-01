@@ -7,8 +7,8 @@ const list: List = {
   ownerId: "user-1",
   name: "Household",
   splitRule: "equal",
-  createdAt: "2026-08-26T00:00:00.000Z",
-  updatedAt: "2026-08-26T00:00:00.000Z",
+  createdAt: new Date().toISOString(),
+  updatedAt: new Date().toISOString(),
 };
 
 function jsonResponse(body: unknown, status = 200): Response {

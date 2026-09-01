@@ -50,10 +50,11 @@ describe("computeSplit", () => {
   });
 
   it("keeps a departed Member's payment in the pot and re-divides over the remaining Members", () => {
-    const result = computeSplit("equal", ["a", "b"], [
-      payment("p1", "a", 300),
-      payment("p2", "c", 100),
-    ]);
+    const result = computeSplit(
+      "equal",
+      ["a", "b"],
+      [payment("p1", "a", 300), payment("p2", "c", 100)],
+    );
 
     expect(result.totalInCents).toBe(400);
     expect(result.shares).toEqual([
@@ -65,6 +66,8 @@ describe("computeSplit", () => {
   it("rejects a split rule the calculation cannot honour instead of dividing wrongly", () => {
     const rule = "weighted" as SplitRule;
 
-    expect(() => computeSplit(rule, ["a", "b"], [])).toThrow("split rule not implemented: weighted");
+    expect(() => computeSplit(rule, ["a", "b"], [])).toThrow(
+      "split rule not implemented: weighted",
+    );
   });
 });

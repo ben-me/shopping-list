@@ -9,11 +9,7 @@ import { computeSplit } from "./computeSplit";
  * `computeSplit`, so it always agrees with `Split` and re-divides automatically
  * when a Member leaves.
  */
-export function computeOwed(
-  splitRule: SplitRule,
-  members: string[],
-  payments: Payment[],
-): Owed[] {
+export function computeOwed(splitRule: SplitRule, members: string[], payments: Payment[]): Owed[] {
   const { shares } = computeSplit(splitRule, members, payments);
 
   const paidBy: Map<string, number> = new Map();
