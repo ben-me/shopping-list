@@ -1,8 +1,8 @@
 import type { Miniflare } from "miniflare";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { createApp } from "./index";
-import { Repository } from "./repo";
-import { runMigrations, startMiniflare, testEnvFor, typedDb } from "./test-support";
+import { createList, createMembership } from "./repository";
+import { runMigrations, startMiniflare, testEnvFor } from "./test-support";
 import type { AuthEnv } from "./auth";
 import type { ApiErrorEnvelope } from "./errors";
 
@@ -46,7 +46,7 @@ describe("guards over HTTP", () => {
   let mf: Miniflare;
   let env: AuthEnv;
   let app: ReturnType<typeof createApp>;
-  let repo: Repository;
+  let devDb: D1Database;
 
   beforeAll(async () => {
     mf = await startMiniflare("local-d1-guards-db");
@@ -54,7 +54,7 @@ describe("guards over HTTP", () => {
     await runMigrations(binding);
     env = testEnvFor(binding);
     app = createApp();
-    repo = new Repository(typedDb(binding));
+    devDb = binding;
   });
 
   afterAll(async () => {
@@ -83,7 +83,7 @@ describe("guards over HTTP", () => {
   it("admits the Owner of a List through the list guard", async () => {
     const { cookie } = await signUp(app, env);
     const user = await getAuthedUser(app, env, cookie);
-    const list = await repo.createList({ ownerId: user.id, name: "Weekend shop" });
+    const list = await createList(devDb, { ownerId: user.id, name: "Weekend shop" });
 
     const res = await app.fetch(
       new Request(new URL(`/api/lists/${list.id}`, origin), { headers: { cookie } }),
@@ -101,8 +101,8 @@ describe("guards over HTTP", () => {
     const { cookie: outsiderCookie } = await signUp(app, env);
     const owner = await getAuthedUser(app, env, ownerCookie);
     const member = await getAuthedUser(app, env, memberCookie);
-    const list = await repo.createList({ ownerId: owner.id, name: "Weekend shop" });
-    await repo.createMembership({ listId: list.id, memberId: member.id });
+    const list = await createList(devDb, { ownerId: owner.id, name: "Weekend shop" });
+    await createMembership(devDb, { listId: list.id, memberId: member.id });
 
     const memberRes = await app.fetch(
       new Request(new URL(`/api/lists/${list.id}`, origin), { headers: { cookie: memberCookie } }),

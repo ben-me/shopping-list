@@ -1,8 +1,7 @@
 import type { Context, Next } from "hono";
 import type { User } from "better-auth";
 import { createAuth, type AuthEnv } from "./auth";
-import { createD1Connection } from "./db";
-import { Repository } from "./repo";
+import { getList, isMember } from "./repository";
 import type { List } from "./domain";
 import { ForbiddenError, NotFoundError, UnauthorizedError } from "./errors";
 
@@ -38,10 +37,9 @@ export async function requestGuard(c: GuardContext, next: Next) {
  * Owner is always a Member even before any Membership row exists.
  */
 export async function listGuard(c: GuardContext, next: Next) {
-  const repo = new Repository(createD1Connection(c.env.devDb));
-  const list = await repo.getList(c.req.param("listId") ?? "");
+  const list = await getList(c.env.devDb, c.req.param("listId") ?? "");
   if (!list) throw new NotFoundError("List not found");
-  if (!(await repo.isMember(list, { listId: list.id, memberId: c.get("user").id }))) {
+  if (!(await isMember(c.env.devDb, list, c.get("user").id))) {
     throw new ForbiddenError("You are not a member of this list");
   }
   c.set("list", list);
