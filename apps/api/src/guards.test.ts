@@ -7,8 +7,6 @@ import { runMigrations, startMiniflare, testEnvFor } from "./test-support";
 import type { AuthEnv } from "./auth";
 import type { ApiErrorEnvelope } from "./errors";
 
-const origin = "http://localhost:8787";
-
 let signupCounter = 0;
 function uniqueEmail() {
   signupCounter += 1;
@@ -17,28 +15,22 @@ function uniqueEmail() {
 
 async function signUp(app: ReturnType<typeof createApp>, env: AuthEnv) {
   const email = uniqueEmail();
-  const res = await app.fetch(
-    new Request(new URL("/api/auth/sign-up/email", origin), {
+  const res = await app.request(
+    "/api/auth/sign-up/email",
+    {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ name: "Test User", email, password: "password123" }),
-    }),
+    },
     env,
   );
   expect(res.status).toBe(200);
   return { cookie: res.headers.getSetCookie().join("; "), email };
 }
 
-async function getBody<T = Record<string, unknown>>(res: Response) {
-  return (await res.json()) as T;
-}
-
 async function getAuthedUser(app: ReturnType<typeof createApp>, env: AuthEnv, cookie: string) {
-  const res = await app.fetch(
-    new Request(new URL("/api/me", origin), { headers: { cookie } }),
-    env,
-  );
-  const body = await getBody<{ user: { id: string; email: string } }>(res);
+  const res = await app.request("/api/me", { headers: { cookie } }, env);
+  const body = (await res.json()) as { user: { id: string; email: string } };
   expect(res.status).toBe(200);
   return body.user;
 }
@@ -63,8 +55,8 @@ describe("requireUser/requireMember over HTTP", () => {
   });
 
   it("rejects a request without a valid session", async () => {
-    const res = await app.fetch(new Request(new URL("/api/me", origin)), env);
-    const body = await getBody<ApiErrorEnvelope>(res);
+    const res = await app.request("/api/me", {}, env);
+    const body = (await res.json()) as ApiErrorEnvelope;
 
     expect(res.status).toBe(401);
     expect(body).toEqual({
@@ -86,11 +78,8 @@ describe("requireUser/requireMember over HTTP", () => {
     const user = await getAuthedUser(app, env, cookie);
     const list = await createList(db, { ownerId: user.id, name: "Weekend shop" });
 
-    const res = await app.fetch(
-      new Request(new URL(`/api/lists/${list.id}`, origin), { headers: { cookie } }),
-      env,
-    );
-    const body = await getBody<{ list: { id: string; ownerId: string; name: string } }>(res);
+    const res = await app.request(`/api/lists/${list.id}`, { headers: { cookie } }, env);
+    const body = (await res.json()) as { list: { id: string; ownerId: string; name: string } };
 
     expect(res.status).toBe(200);
     expect(body.list).toMatchObject({ id: list.id, ownerId: user.id, name: "Weekend shop" });
@@ -105,19 +94,23 @@ describe("requireUser/requireMember over HTTP", () => {
     const list = await createList(db, { ownerId: owner.id, name: "Weekend shop" });
     await createMembership(db, { listId: list.id, memberId: member.id });
 
-    const memberRes = await app.fetch(
-      new Request(new URL(`/api/lists/${list.id}`, origin), { headers: { cookie: memberCookie } }),
+    const memberRes = await app.request(
+      `/api/lists/${list.id}`,
+      {
+        headers: { cookie: memberCookie },
+      },
       env,
     );
     expect(memberRes.status).toBe(200);
 
-    const outsiderRes = await app.fetch(
-      new Request(new URL(`/api/lists/${list.id}`, origin), {
+    const outsiderRes = await app.request(
+      `/api/lists/${list.id}`,
+      {
         headers: { cookie: outsiderCookie },
-      }),
+      },
       env,
     );
-    const outsiderBody = await getBody<ApiErrorEnvelope>(outsiderRes);
+    const outsiderBody = (await outsiderRes.json()) as ApiErrorEnvelope;
 
     expect(outsiderRes.status).toBe(403);
     expect(outsiderBody).toEqual({
@@ -132,11 +125,8 @@ describe("requireUser/requireMember over HTTP", () => {
   it("rejects an unknown List id", async () => {
     const { cookie } = await signUp(app, env);
 
-    const res = await app.fetch(
-      new Request(new URL("/api/lists/missing-list", origin), { headers: { cookie } }),
-      env,
-    );
-    const body = await getBody<ApiErrorEnvelope>(res);
+    const res = await app.request("/api/lists/missing-list", { headers: { cookie } }, env);
+    const body = (await res.json()) as ApiErrorEnvelope;
 
     expect(res.status).toBe(404);
     expect(body).toEqual({
