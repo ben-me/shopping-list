@@ -4,13 +4,13 @@ import type { ContentfulStatusCode } from "hono/utils/http-status";
 import { createAuth, getTrustedOrigins, type AuthEnv } from "./auth";
 import { createD1Connection, ping } from "./db";
 import { toErrorEnvelope } from "./errors";
-import { listGuard, requestGuard, type AppVariables } from "./guards";
+import { requireMember, requireUser, type AppVariables } from "./guards";
 
 /**
  * The Shopping List API. Runs as a Cloudflare Worker and is the source of truth
  * for the domain (Lists, Items, Payments). The same wrangler target serves both
  * local dev and deployment. `createApp` builds a fresh Hono app so tests can
- * mount it with their own environment and request guard/list guard behaviour is
+ * mount it with their own environment and requireUser/requireMember behaviour is
  * exercised over real HTTP as well as through middleware unit tests.
  *
  * The shared domain **data** contract (List, Item, Payment, Owed) lives in
@@ -36,7 +36,9 @@ export function createApp() {
     "*",
     cors({
       origin: (origin, c) => {
-        if (!origin) return "";
+        if (!origin) {
+          return "";
+        }
         return getTrustedOrigins(c.env).includes(origin) ? origin : "";
       },
       credentials: true,
@@ -61,8 +63,8 @@ export function createApp() {
 
   /**
    * Health route: confirms the Worker is alive and serving, and that the D1
-   * connection resolves. Runs before any guard so it stays reachable
-   * unauthenticated.
+   * connection resolves. Runs before any require* middleware so it stays
+   * reachable unauthenticated.
    */
   app.get("/health", async (c) => {
     const db = createD1Connection(c.env.devDb);
@@ -72,14 +74,13 @@ export function createApp() {
 
   /**
    * Demonstration routes that exercise the shared plumbing. `/api/me` proves
-   * the request guard resolves the signed-in user; `/api/lists/:listId` proves
-   * the list guard admits Members and rejects everyone else. Slice endpoints
-   * (creating a List, Items, Payments, …) build on these same guards and
-   * helpers.
+   * requireUser resolves the signed-in user; `/api/lists/:listId` proves
+   * requireMember admits Members and rejects everyone else. Slice endpoints
+   * (creating a List, Items, Payments, …) build on these same helpers.
    */
-  app.get("/api/me", requestGuard, (c) => c.json({ user: c.get("user") }));
+  app.get("/api/me", requireUser, (c) => c.json({ user: c.get("user") }));
 
-  app.get("/api/lists/:listId", requestGuard, listGuard, (c) => c.json({ list: c.get("list") }));
+  app.get("/api/lists/:listId", requireUser, requireMember, (c) => c.json({ list: c.get("list") }));
 
   return app;
 }

@@ -1,5 +1,5 @@
 import { and, asc, desc, eq, inArray, or } from "drizzle-orm";
-import { createD1Connection } from "./db";
+import type { Db } from "./db";
 import * as schema from "./schema";
 import type {
   Invitation,
@@ -13,22 +13,19 @@ import type {
 
 /**
  * Typed query helpers over the domain tables. Endpoint handlers never touch raw
- * SQL or the drizzle schema directly — they call one of these functions with the
- * request's D1 binding (`env.devDb`) and get back the domain shapes from
- * `./domain`. The drizzle client is built from the binding here, so callers
- * never see drizzle.
+ * SQL or the drizzle schema directly — they build one `Db` connection per
+ * request with `createD1Connection(c.env.devDb)` and call these functions with
+ * it. Results come back as the domain shapes from `./domain`.
  */
 
 // ─── Lists ────────────────────────────────────────────────────────────────
 
-export async function getList(devDb: D1Database, id: string): Promise<List | undefined> {
-  const db = createD1Connection(devDb);
+export async function getList(db: Db, id: string): Promise<List | undefined> {
   const row = await db.select().from(schema.lists).where(eq(schema.lists.id, id)).get();
   return row ? toList(row) : undefined;
 }
 
-export async function getListsForMember(devDb: D1Database, memberId: string): Promise<List[]> {
-  const db = createD1Connection(devDb);
+export async function getListsForMember(db: Db, memberId: string): Promise<List[]> {
   const rows = await db
     .select()
     .from(schema.lists)
@@ -45,12 +42,13 @@ export async function getListsForMember(devDb: D1Database, memberId: string): Pr
       ),
     );
   const unique = new Map<string, List>();
-  for (const row of rows) unique.set(row.id, toList(row));
+  for (const row of rows) {
+    unique.set(row.id, toList(row));
+  }
   return [...unique.values()];
 }
 
-export async function createList(devDb: D1Database, input: CreateListInput): Promise<List> {
-  const db = createD1Connection(devDb);
+export async function createList(db: Db, input: CreateListInput): Promise<List> {
   const timestamp = now();
   const [row] = await db
     .insert(schema.lists)
@@ -66,11 +64,10 @@ export async function createList(devDb: D1Database, input: CreateListInput): Pro
 }
 
 export async function updateList(
-  devDb: D1Database,
+  db: Db,
   id: string,
   input: UpdateListInput,
 ): Promise<List | undefined> {
-  const db = createD1Connection(devDb);
   const rows = await db
     .update(schema.lists)
     .set(touch(input))
@@ -79,8 +76,7 @@ export async function updateList(
   return rows[0] ? toList(rows[0]) : undefined;
 }
 
-export async function deleteList(devDb: D1Database, id: string): Promise<boolean> {
-  const db = createD1Connection(devDb);
+export async function deleteList(db: Db, id: string): Promise<boolean> {
   const rows = await db
     .delete(schema.lists)
     .where(eq(schema.lists.id, id))
@@ -90,14 +86,12 @@ export async function deleteList(devDb: D1Database, id: string): Promise<boolean
 
 // ─── Items ────────────────────────────────────────────────────────────────
 
-export async function getItem(devDb: D1Database, id: string): Promise<Item | undefined> {
-  const db = createD1Connection(devDb);
+export async function getItem(db: Db, id: string): Promise<Item | undefined> {
   const row = await db.select().from(schema.items).where(eq(schema.items.id, id)).get();
   return row ? toItem(row) : undefined;
 }
 
-export async function getItemsByList(devDb: D1Database, listId: string): Promise<Item[]> {
-  const db = createD1Connection(devDb);
+export async function getItemsByList(db: Db, listId: string): Promise<Item[]> {
   const rows = await db
     .select()
     .from(schema.items)
@@ -106,8 +100,7 @@ export async function getItemsByList(devDb: D1Database, listId: string): Promise
   return rows.map(toItem);
 }
 
-export async function createItem(devDb: D1Database, input: CreateItemInput): Promise<Item> {
-  const db = createD1Connection(devDb);
+export async function createItem(db: Db, input: CreateItemInput): Promise<Item> {
   const timestamp = now();
   const [row] = await db
     .insert(schema.items)
@@ -123,15 +116,18 @@ export async function createItem(devDb: D1Database, input: CreateItemInput): Pro
 }
 
 export async function updateItem(
-  devDb: D1Database,
+  db: Db,
   id: string,
   input: UpdateItemInput,
 ): Promise<Item | undefined> {
   type ItemPatch = Omit<UpdateItemInput, "checkedAt"> & { checkedAt?: string | null };
-  const db = createD1Connection(devDb);
   const set: ItemPatch = { ...input };
-  if (input.checked === false) set.checkedAt = null;
-  if (input.checked === true && input.checkedAt === undefined) set.checkedAt = now();
+  if (input.checked === false) {
+    set.checkedAt = null;
+  }
+  if (input.checked === true && input.checkedAt === undefined) {
+    set.checkedAt = now();
+  }
   const rows = await db
     .update(schema.items)
     .set(touch(set))
@@ -140,8 +136,7 @@ export async function updateItem(
   return rows[0] ? toItem(rows[0]) : undefined;
 }
 
-export async function deleteItem(devDb: D1Database, id: string): Promise<boolean> {
-  const db = createD1Connection(devDb);
+export async function deleteItem(db: Db, id: string): Promise<boolean> {
   const rows = await db
     .delete(schema.items)
     .where(eq(schema.items.id, id))
@@ -151,14 +146,12 @@ export async function deleteItem(devDb: D1Database, id: string): Promise<boolean
 
 // ─── Payments ─────────────────────────────────────────────────────────────
 
-export async function getPayment(devDb: D1Database, id: string): Promise<Payment | undefined> {
-  const db = createD1Connection(devDb);
+export async function getPayment(db: Db, id: string): Promise<Payment | undefined> {
   const row = await db.select().from(schema.payments).where(eq(schema.payments.id, id)).get();
   return row ? toPayment(row) : undefined;
 }
 
-export async function getPaymentsByList(devDb: D1Database, listId: string): Promise<Payment[]> {
-  const db = createD1Connection(devDb);
+export async function getPaymentsByList(db: Db, listId: string): Promise<Payment[]> {
   const rows = await db
     .select()
     .from(schema.payments)
@@ -167,11 +160,7 @@ export async function getPaymentsByList(devDb: D1Database, listId: string): Prom
   return rows.map(toPayment);
 }
 
-export async function createPayment(
-  devDb: D1Database,
-  input: CreatePaymentInput,
-): Promise<Payment> {
-  const db = createD1Connection(devDb);
+export async function createPayment(db: Db, input: CreatePaymentInput): Promise<Payment> {
   const timestamp = now();
   const [row] = await db
     .insert(schema.payments)
@@ -189,11 +178,10 @@ export async function createPayment(
 }
 
 export async function updatePayment(
-  devDb: D1Database,
+  db: Db,
   id: string,
   input: UpdatePaymentInput,
 ): Promise<Payment | undefined> {
-  const db = createD1Connection(devDb);
   const rows = await db
     .update(schema.payments)
     .set(touch(input))
@@ -202,8 +190,7 @@ export async function updatePayment(
   return rows[0] ? toPayment(rows[0]) : undefined;
 }
 
-export async function deletePayment(devDb: D1Database, id: string): Promise<boolean> {
-  const db = createD1Connection(devDb);
+export async function deletePayment(db: Db, id: string): Promise<boolean> {
   const rows = await db
     .delete(schema.payments)
     .where(eq(schema.payments.id, id))
@@ -213,20 +200,12 @@ export async function deletePayment(devDb: D1Database, id: string): Promise<bool
 
 // ─── Invitations ──────────────────────────────────────────────────────────
 
-export async function getInvitation(
-  devDb: D1Database,
-  id: string,
-): Promise<Invitation | undefined> {
-  const db = createD1Connection(devDb);
+export async function getInvitation(db: Db, id: string): Promise<Invitation | undefined> {
   const row = await db.select().from(schema.invitations).where(eq(schema.invitations.id, id)).get();
   return row ? toInvitation(row) : undefined;
 }
 
-export async function getInvitationsByList(
-  devDb: D1Database,
-  listId: string,
-): Promise<Invitation[]> {
-  const db = createD1Connection(devDb);
+export async function getInvitationsByList(db: Db, listId: string): Promise<Invitation[]> {
   const rows = await db
     .select()
     .from(schema.invitations)
@@ -235,11 +214,7 @@ export async function getInvitationsByList(
   return rows.map(toInvitation);
 }
 
-export async function createInvitation(
-  devDb: D1Database,
-  input: CreateInvitationInput,
-): Promise<Invitation> {
-  const db = createD1Connection(devDb);
+export async function createInvitation(db: Db, input: CreateInvitationInput): Promise<Invitation> {
   const timestamp = now();
   const [row] = await db
     .insert(schema.invitations)
@@ -258,11 +233,10 @@ export async function createInvitation(
 }
 
 export async function updateInvitation(
-  devDb: D1Database,
+  db: Db,
   id: string,
   input: UpdateInvitationInput,
 ): Promise<Invitation | undefined> {
-  const db = createD1Connection(devDb);
   const rows = await db
     .update(schema.invitations)
     .set(touch(input))
@@ -271,8 +245,7 @@ export async function updateInvitation(
   return rows[0] ? toInvitation(rows[0]) : undefined;
 }
 
-export async function deleteInvitation(devDb: D1Database, id: string): Promise<boolean> {
-  const db = createD1Connection(devDb);
+export async function deleteInvitation(db: Db, id: string): Promise<boolean> {
   const rows = await db
     .delete(schema.invitations)
     .where(eq(schema.invitations.id, id))
@@ -282,11 +255,7 @@ export async function deleteInvitation(devDb: D1Database, id: string): Promise<b
 
 // ─── Memberships ──────────────────────────────────────────────────────────
 
-export async function getMembership(
-  devDb: D1Database,
-  key: MembershipKey,
-): Promise<Membership | undefined> {
-  const db = createD1Connection(devDb);
+export async function getMembership(db: Db, key: MembershipKey): Promise<Membership | undefined> {
   const row = await db
     .select()
     .from(schema.memberships)
@@ -297,11 +266,7 @@ export async function getMembership(
   return row ? toMembership(row) : undefined;
 }
 
-export async function getMembershipsByList(
-  devDb: D1Database,
-  listId: string,
-): Promise<Membership[]> {
-  const db = createD1Connection(devDb);
+export async function getMembershipsByList(db: Db, listId: string): Promise<Membership[]> {
   const rows = await db
     .select()
     .from(schema.memberships)
@@ -310,8 +275,7 @@ export async function getMembershipsByList(
   return rows.map(toMembership);
 }
 
-export async function createMembership(devDb: D1Database, key: MembershipKey): Promise<Membership> {
-  const db = createD1Connection(devDb);
+export async function createMembership(db: Db, key: MembershipKey): Promise<Membership> {
   const [row] = await db
     .insert(schema.memberships)
     .values({ listId: key.listId, memberId: key.memberId, joinedAt: now() })
@@ -319,8 +283,7 @@ export async function createMembership(devDb: D1Database, key: MembershipKey): P
   return toMembership(row);
 }
 
-export async function deleteMembership(devDb: D1Database, key: MembershipKey): Promise<boolean> {
-  const db = createD1Connection(devDb);
+export async function deleteMembership(db: Db, key: MembershipKey): Promise<boolean> {
   const rows = await db
     .delete(schema.memberships)
     .where(
@@ -334,9 +297,10 @@ export async function deleteMembership(devDb: D1Database, key: MembershipKey): P
  * A user can act on a List when they are its Owner or hold a Membership row.
  * The Owner is always treated as a Member even before any Membership exists.
  */
-export async function isMember(devDb: D1Database, list: List, memberId: string): Promise<boolean> {
-  if (list.ownerId === memberId) return true;
-  const db = createD1Connection(devDb);
+export async function isMember(db: Db, list: List, memberId: string): Promise<boolean> {
+  if (list.ownerId === memberId) {
+    return true;
+  }
   const row = await db
     .select({ listId: schema.memberships.listId })
     .from(schema.memberships)

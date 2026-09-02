@@ -9,5 +9,5 @@
     "types": ["node", "@cloudflare/workers-types"],
     "noEmit": true
   },
-  "include": ["src/**/*"]
+  "include": ["src/**/*", "oxlint.config.ts", "drizzle.config.ts"]
 }
