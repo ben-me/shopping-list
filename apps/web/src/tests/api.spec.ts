@@ -1,4 +1,3 @@
-
 import { apiFetch } from "../api";
 import type { List } from "@shopping-list/api/domain";
 
@@ -6,7 +5,6 @@ const list: List = {
   id: "list-1",
   ownerId: "user-1",
   name: "Household",
-  splitRule: "equal",
   createdAt: new Date().toISOString(),
   updatedAt: new Date().toISOString(),
 };

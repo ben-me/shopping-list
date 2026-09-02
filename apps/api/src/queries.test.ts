@@ -25,7 +25,6 @@ describe("typed query helpers across the domain tables", () => {
     expect(list.id).toBeTruthy();
     expect(list.name).toBe("Weekly shop");
     expect(list.ownerId).toBe("u-owner");
-    expect(list.splitRule).toBe("equal");
     expect(list.createdAt).toBeTruthy();
     expect(list.updatedAt).toBeTruthy();
 
@@ -53,7 +52,6 @@ describe("typed query helpers across the domain tables", () => {
 
     const updated = await queries.updateList(db, list.id, { name: "After" });
     expect(updated?.name).toBe("After");
-    expect(updated?.splitRule).toBe("equal");
 
     await expect(queries.deleteList(db, list.id)).resolves.toBe(true);
     await expect(queries.getList(db, list.id)).resolves.toBeUndefined();

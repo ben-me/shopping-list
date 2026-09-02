@@ -116,7 +116,6 @@ export const lists = sqliteTable(
     id: text("id").primaryKey(),
     ownerId: text("owner_id").notNull(),
     name: text("name").notNull(),
-    splitRule: text("split_rule").notNull().default("equal"),
     createdAt: text("created_at").notNull(),
     updatedAt: text("updated_at").notNull(),
   },

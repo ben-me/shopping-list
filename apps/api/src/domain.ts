@@ -1,10 +1,7 @@
-export type SplitRule = "equal";
-
 export interface List {
   id: string;
   ownerId: string;
   name: string;
-  splitRule: SplitRule;
   createdAt: string;
   updatedAt: string;
 }

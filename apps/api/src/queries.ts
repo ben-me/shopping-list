@@ -1,15 +1,7 @@
 import { and, asc, desc, eq, inArray, or } from "drizzle-orm";
 import type { Db } from "./db";
 import * as schema from "./schema";
-import type {
-  Invitation,
-  InvitationStatus,
-  Item,
-  List,
-  Membership,
-  Payment,
-  SplitRule,
-} from "./domain";
+import type { Invitation, InvitationStatus, Item, List, Membership, Payment } from "./domain";
 
 /**
  * Typed query helpers over the domain tables. Endpoint handlers never touch raw
@@ -316,7 +308,6 @@ export interface CreateListInput {
 
 export interface UpdateListInput {
   name?: string;
-  splitRule?: SplitRule;
 }
 
 export interface CreateItemInput {
@@ -369,7 +360,7 @@ function touch<T extends object>(patch: T): T & { updatedAt: string } {
 }
 
 function toList(row: typeof schema.lists.$inferSelect): List {
-  return { ...row, splitRule: row.splitRule as SplitRule };
+  return { ...row };
 }
 
 function toItem(row: typeof schema.items.$inferSelect): Item {
