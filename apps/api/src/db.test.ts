@@ -1,26 +1,13 @@
-import { convertV4MiniflareOptions, Miniflare } from "miniflare";
+import type { Miniflare } from "miniflare";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { createD1Connection, ping } from "./db";
+import { startMiniflare } from "./test-support";
 
 describe("D1 connection via drizzle", () => {
   let mf: Miniflare;
 
   beforeEach(async () => {
-    mf = new Miniflare(
-      convertV4MiniflareOptions({
-        workers: [
-          {
-            name: "test",
-            modules: true,
-            script: `
-              export default { fetch() { return new Response("ok"); } };
-            `,
-            d1Databases: { devDb: "local-d1-test-db" },
-          },
-        ],
-      }),
-    );
-    await mf.ready;
+    mf = await startMiniflare("local-d1-test-db");
   });
 
   afterEach(async () => {
