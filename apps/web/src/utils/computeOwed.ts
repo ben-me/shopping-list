@@ -1,39 +1,40 @@
 import type { Owed, Payment } from "@shopping-list/api/domain";
 
-export function computeOwed(memberIds: string[], payments: Payment[]): Owed[] {
+export function computeOwed(memberIds: string[], payments: Payment[]) {
   if (memberIds.length < 2) {
     return [];
   }
 
-  const paidByMember = new Map<string, number>();
-  let totalPaid = 0;
+  return computeBalances(memberIds, sumPayedPerMember(payments), sumOfPayments(payments));
+}
 
+export function sumOfPayments(payments: Payment[]) {
+  let total = 0;
   for (const payment of payments) {
-    totalPaid += payment.amountInCents;
-    paidByMember.set(
-      payment.memberId,
-      (paidByMember.get(payment.memberId) ?? 0) + payment.amountInCents,
-    );
+    total += payment.amountInCents;
   }
+  return total;
+}
 
-  const participantIds = new Set(memberIds);
-  for (const payer of paidByMember.keys()) {
-    participantIds.add(payer);
+export function sumPayedPerMember(payments: Payment[]) {
+  const totals = new Map<string, number>();
+  for (const payment of payments) {
+    totals.set(payment.memberId, (totals.get(payment.memberId) ?? 0) + payment.amountInCents);
   }
+  return totals;
+}
 
-  const baseShare = Math.floor(totalPaid / participantIds.size);
-  const remainder = totalPaid % participantIds.size;
+export function computeBalances(
+  memberIds: string[],
+  sumPayedPerMember: Map<string, number>,
+  sumOfPayments: number,
+): Owed[] {
+  const participants = new Set([...memberIds, ...sumPayedPerMember.keys()]);
+  const baseShare = Math.floor(sumOfPayments / participants.size);
+  const remainder = sumOfPayments % participants.size;
 
-  const result: Owed[] = [];
-  let shareIndex = 0;
-  for (const memberId of participantIds) {
-    const shareInCents = baseShare + (shareIndex < remainder ? 1 : 0);
-    shareIndex += 1;
-    result.push({
-      memberId,
-      amountInCents: shareInCents - (paidByMember.get(memberId) ?? 0),
-    });
-  }
-
-  return result;
+  return Array.from(participants, (memberId, index) => ({
+    memberId,
+    amountInCents: baseShare + (index < remainder ? 1 : 0) - (sumPayedPerMember.get(memberId) ?? 0),
+  }));
 }
