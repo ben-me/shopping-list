@@ -1,10 +1,12 @@
 import { Hono } from "hono";
+import type { Context } from "hono";
 import { cors } from "hono/cors";
 import type { ContentfulStatusCode } from "hono/utils/http-status";
 import { createAuth, getTrustedOrigins, type AuthEnv } from "./auth";
 import { createD1Connection, ping } from "./db";
-import { toErrorEnvelope } from "./errors";
+import { BadRequestError, ForbiddenError, toErrorEnvelope } from "./errors";
 import { requireMember, requireUser, type AppVariables } from "./guards";
+import { createList, getList, getListsForMember, isMember, updateList } from "./queries";
 
 /**
  * The Shopping List API. Runs as a Cloudflare Worker and is the source of truth
@@ -23,6 +25,8 @@ import { requireMember, requireUser, type AppVariables } from "./guards";
 export * from "./domain";
 
 export type Bindings = AuthEnv;
+
+type AppContext = Context<{ Bindings: Bindings; Variables: AppVariables }>;
 
 export function createApp() {
   const app = new Hono<{ Bindings: Bindings; Variables: AppVariables }>();
@@ -82,7 +86,66 @@ export function createApp() {
 
   app.get("/api/lists/:listId", requireUser, requireMember, (c) => c.json({ list: c.get("list") }));
 
+  /**
+   * The lists index: everything the signed-in user owns or has joined. Reads
+   * go through the typed query helper so handlers never hand-roll SQL.
+   */
+  app.get("/api/lists", requireUser, async (c) => {
+    const db = createD1Connection(c.env.devDb);
+    const lists = await getListsForMember(db, c.get("user").id);
+    return c.json({ lists });
+  });
+
+  /**
+   * Sync upsert for a List (offline-first create/rename). The device generates
+   * the id and sends the whole List; the server is the source of truth. An unknown
+   * id creates a List owned by the caller; an existing List updates only when
+   * the caller is a Member.
+   */
+  app.put("/api/lists/:listId", requireUser, async (c) => {
+    const db = createD1Connection(c.env.devDb);
+    const listId = c.req.param("listId") ?? "";
+    const name = parseListName(await readJsonBody(c));
+    if (!listId) {
+      throw new BadRequestError("List id is required");
+    }
+    const existing = await getList(db, listId);
+    if (existing) {
+      if (!(await isMember(db, existing, c.get("user").id))) {
+        throw new ForbiddenError("You are not a member of this list");
+      }
+      const list = await updateList(db, listId, { name });
+      return c.json({ list }, 200);
+    }
+    const list = await createList(db, {
+      id: listId,
+      ownerId: c.get("user").id,
+      name,
+    });
+    return c.json({ list }, 201);
+  });
+
   return app;
+}
+
+/**
+ * The body of a List upsert is a single required field. A missing, malformed,
+ * or blank body collapses to the same 400 so every client failure is legible.
+ */
+function parseListName(body: unknown): string {
+  const name = (body as { name?: unknown }).name;
+  if (typeof name !== "string" || name.trim() === "") {
+    throw new BadRequestError("List name is required");
+  }
+  return name.trim();
+}
+
+async function readJsonBody(c: AppContext): Promise<unknown> {
+  try {
+    return await c.req.json();
+  } catch {
+    throw new BadRequestError("List name is required");
+  }
 }
 
 const app = createApp();

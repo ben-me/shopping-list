@@ -45,7 +45,7 @@ export async function createList(db: Db, input: CreateListInput): Promise<List> 
   const [row] = await db
     .insert(schema.lists)
     .values({
-      id: newId(),
+      id: input.id ?? newId(),
       ownerId: input.ownerId,
       name: input.name,
       createdAt: timestamp,
@@ -302,6 +302,8 @@ export async function isMember(db: Db, list: List, memberId: string): Promise<bo
 }
 
 export interface CreateListInput {
+  /** The client picks the id when creating offline-first so Sync can upsert. */
+  id?: string;
   ownerId: string;
   name: string;
 }
