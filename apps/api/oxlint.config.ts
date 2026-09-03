@@ -1,5 +1,7 @@
 import { defineConfig } from "oxlint";
 
 export default defineConfig({
-  plugins: ["typescript"],
+  rules: {
+    curly: ["error", "all"],
+  },
 });

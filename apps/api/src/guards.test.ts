@@ -1,0 +1,136 @@
+import type { Miniflare } from "miniflare";
+import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { createApp } from "./index";
+import { createD1Connection, type Db } from "./db";
+import { createList, createMembership } from "./queries";
+import { runMigrations, startMiniflare, testEnvFor } from "./test-support";
+import type { AuthEnv } from "./auth";
+import type { ApiErrorEnvelope } from "./errors";
+
+let signupCounter = 0;
+function uniqueEmail() {
+  signupCounter += 1;
+  return `user${signupCounter}@example.com`;
+}
+
+async function signUp(app: ReturnType<typeof createApp>, env: AuthEnv) {
+  const email = uniqueEmail();
+  const res = await app.request(
+    "/api/auth/sign-up/email",
+    {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ name: "Test User", email, password: "password123" }),
+    },
+    env,
+  );
+  expect(res.status).toBe(200);
+  return { cookie: res.headers.getSetCookie().join("; "), email };
+}
+
+async function getAuthedUser(app: ReturnType<typeof createApp>, env: AuthEnv, cookie: string) {
+  const res = await app.request("/api/me", { headers: { cookie } }, env);
+  const body = (await res.json()) as { user: { id: string; email: string } };
+  expect(res.status).toBe(200);
+  return body.user;
+}
+
+describe("requireUser/requireMember over HTTP", () => {
+  let mf: Miniflare;
+  let env: AuthEnv;
+  let app: ReturnType<typeof createApp>;
+  let db: Db;
+
+  beforeAll(async () => {
+    mf = await startMiniflare("local-d1-guards-db");
+    const binding = await mf.getD1Database("devDb");
+    await runMigrations(binding);
+    env = testEnvFor(binding);
+    app = createApp();
+    db = createD1Connection(binding);
+  });
+
+  afterAll(async () => {
+    await mf.dispose();
+  });
+
+  it("rejects a request without a valid session", async () => {
+    const res = await app.request("/api/me", {}, env);
+    const body = (await res.json()) as ApiErrorEnvelope;
+
+    expect(res.status).toBe(401);
+    expect(body).toEqual({
+      error: { status: 401, code: "unauthorized", message: "Sign in to continue" },
+    });
+  });
+
+  it("resolves the signed-in user from the session cookie", async () => {
+    const { cookie, email } = await signUp(app, env);
+
+    const user = await getAuthedUser(app, env, cookie);
+
+    expect(user.email).toBe(email);
+    expect(user.id).toBeTruthy();
+  });
+
+  it("admits the Owner of a List through requireMember", async () => {
+    const { cookie } = await signUp(app, env);
+    const user = await getAuthedUser(app, env, cookie);
+    const list = await createList(db, { ownerId: user.id, name: "Weekend shop" });
+
+    const res = await app.request(`/api/lists/${list.id}`, { headers: { cookie } }, env);
+    const body = (await res.json()) as { list: { id: string; ownerId: string; name: string } };
+
+    expect(res.status).toBe(200);
+    expect(body.list).toMatchObject({ id: list.id, ownerId: user.id, name: "Weekend shop" });
+  });
+
+  it("admits a Member (the Owner invited them), not an outsider", async () => {
+    const { cookie: ownerCookie } = await signUp(app, env);
+    const { cookie: memberCookie } = await signUp(app, env);
+    const { cookie: outsiderCookie } = await signUp(app, env);
+    const owner = await getAuthedUser(app, env, ownerCookie);
+    const member = await getAuthedUser(app, env, memberCookie);
+    const list = await createList(db, { ownerId: owner.id, name: "Weekend shop" });
+    await createMembership(db, { listId: list.id, memberId: member.id });
+
+    const memberRes = await app.request(
+      `/api/lists/${list.id}`,
+      {
+        headers: { cookie: memberCookie },
+      },
+      env,
+    );
+    expect(memberRes.status).toBe(200);
+
+    const outsiderRes = await app.request(
+      `/api/lists/${list.id}`,
+      {
+        headers: { cookie: outsiderCookie },
+      },
+      env,
+    );
+    const outsiderBody = (await outsiderRes.json()) as ApiErrorEnvelope;
+
+    expect(outsiderRes.status).toBe(403);
+    expect(outsiderBody).toEqual({
+      error: {
+        status: 403,
+        code: "forbidden",
+        message: "You are not a member of this list",
+      },
+    });
+  });
+
+  it("rejects an unknown List id", async () => {
+    const { cookie } = await signUp(app, env);
+
+    const res = await app.request("/api/lists/missing-list", { headers: { cookie } }, env);
+    const body = (await res.json()) as ApiErrorEnvelope;
+
+    expect(res.status).toBe(404);
+    expect(body).toEqual({
+      error: { status: 404, code: "not_found", message: "List not found" },
+    });
+  });
+});

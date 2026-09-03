@@ -1,10 +1,7 @@
-export type SplitRule = "equal";
-
 export interface List {
   id: string;
   ownerId: string;
   name: string;
-  splitRule: SplitRule;
   createdAt: string;
   updatedAt: string;
 }
@@ -33,6 +30,19 @@ export interface Membership {
   listId: string;
   memberId: string;
   joinedAt: string;
+}
+
+export type InvitationStatus = "pending" | "accepted" | "revoked";
+
+export interface Invitation {
+  id: string;
+  listId: string;
+  email: string;
+  invitedById: string;
+  status: InvitationStatus;
+  token: string;
+  createdAt: string;
+  updatedAt: string;
 }
 
 export interface Owed {

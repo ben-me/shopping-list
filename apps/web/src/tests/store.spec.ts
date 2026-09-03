@@ -11,7 +11,6 @@ const list: List = {
   id: "list-1",
   ownerId: "user-1",
   name: "Household",
-  splitRule: "equal",
   createdAt: now(),
   updatedAt: now(),
 };

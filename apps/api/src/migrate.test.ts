@@ -1,37 +1,14 @@
-import { convertV4MiniflareOptions, Miniflare } from "miniflare";
-import { fileURLToPath } from "node:url";
+import type { Miniflare } from "miniflare";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { drizzle } from "drizzle-orm/d1";
-import { migrate } from "drizzle-orm/d1/migrator";
+import { runMigrations, startMiniflare } from "./test-support";
 import * as schema from "./schema";
-
-const migrationsFolder = fileURLToPath(new URL("../drizzle", import.meta.url).href);
-
-async function runMigrations(dbBinding: D1Database) {
-  const db = drizzle(dbBinding);
-  await migrate(db, { migrationsFolder });
-  return db;
-}
 
 describe("domain schema migrations on D1", () => {
   let mf: Miniflare;
 
   beforeEach(async () => {
-    mf = new Miniflare(
-      convertV4MiniflareOptions({
-        workers: [
-          {
-            name: "test",
-            modules: true,
-            script: `
-              export default { fetch() { return new Response("ok"); } };
-            `,
-            d1Databases: { devDb: "local-d1-migrations-db" },
-          },
-        ],
-      }),
-    );
-    await mf.ready;
+    mf = await startMiniflare("local-d1-migrations-db");
   });
 
   afterEach(async () => {
@@ -40,7 +17,8 @@ describe("domain schema migrations on D1", () => {
 
   it("runs the versioned migrations against a fresh D1 database", async () => {
     const binding = await mf.getD1Database("devDb");
-    const db = await runMigrations(binding);
+    await runMigrations(binding);
+    const db = drizzle(binding);
 
     const names = await db.all<{ name: string }>(
       `SELECT name FROM sqlite_master WHERE type = 'table'`,
