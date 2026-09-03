@@ -1,14 +1,26 @@
 import type { Owed, Payment } from "@shopping-list/api/domain";
 
-export function computeOwed(memberIds: string[], payments: Payment[]) {
-  if (memberIds.length < 2) {
-    return [];
-  }
-
-  return computeBalances(memberIds, sumPayedPerMember(payments), sumOfPayments(payments));
+export interface OwedResult {
+  totalInCents: number;
+  shareInCents: number | null;
+  owed: Owed[];
 }
 
-export function sumOfPayments(payments: Payment[]) {
+export function computeOwed(memberIds: string[], payments: Payment[]): OwedResult {
+  const totalInCents = sumPaid(payments);
+
+  if (memberIds.length < 2) {
+    return { totalInCents, shareInCents: null, owed: [] };
+  }
+
+  return {
+    totalInCents,
+    shareInCents: Math.floor(totalInCents / memberIds.length),
+    owed: owedFigures(memberIds, sumPaidPerMember(payments), totalInCents),
+  };
+}
+
+function sumPaid(payments: Payment[]): number {
   let total = 0;
   for (const payment of payments) {
     total += payment.amountInCents;
@@ -16,7 +28,7 @@ export function sumOfPayments(payments: Payment[]) {
   return total;
 }
 
-export function sumPayedPerMember(payments: Payment[]) {
+function sumPaidPerMember(payments: Payment[]): Map<string, number> {
   const totals = new Map<string, number>();
   for (const payment of payments) {
     totals.set(payment.memberId, (totals.get(payment.memberId) ?? 0) + payment.amountInCents);
@@ -24,17 +36,16 @@ export function sumPayedPerMember(payments: Payment[]) {
   return totals;
 }
 
-export function computeBalances(
+function owedFigures(
   memberIds: string[],
-  sumPayedPerMember: Map<string, number>,
-  sumOfPayments: number,
+  paidPerMember: Map<string, number>,
+  totalInCents: number,
 ): Owed[] {
-  const participants = new Set([...memberIds, ...sumPayedPerMember.keys()]);
-  const baseShare = Math.floor(sumOfPayments / participants.size);
-  const remainder = sumOfPayments % participants.size;
+  const baseShare = Math.floor(totalInCents / memberIds.length);
+  const remainder = totalInCents % memberIds.length;
 
-  return Array.from(participants, (memberId, index) => ({
+  return memberIds.map((memberId, index) => ({
     memberId,
-    amountInCents: baseShare + (index < remainder ? 1 : 0) - (sumPayedPerMember.get(memberId) ?? 0),
+    amountInCents: baseShare + (index < remainder ? 1 : 0) - (paidPerMember.get(memberId) ?? 0),
   }));
 }

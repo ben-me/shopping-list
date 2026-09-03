@@ -73,4 +73,15 @@ describe("apiFetch", () => {
 
     await expect(apiFetch("/lists/list-1", { method: "DELETE" })).resolves.toBeUndefined();
   });
+
+  it("never re-sends a failed request, so a POST can not be duplicated", async () => {
+    const fetchImpl = stubFetch(jsonResponse({ error: { message: "Server error" } }, 500));
+
+    const error = await apiFetch("/payments", { method: "POST", body: {} }).catch(
+      (e: unknown) => e,
+    );
+
+    expect(error).toMatchObject({ name: "ApiError", status: 500 });
+    expect(fetchImpl).toHaveBeenCalledTimes(1);
+  });
 });
