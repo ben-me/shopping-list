@@ -14,6 +14,8 @@ export interface OutboxEntry {
   syncedAt: string | null;
 }
 
+export type OutboxWrite = Pick<OutboxEntry, "targetType" | "targetId" | "operation">;
+
 export type OutboxTransport = (entry: OutboxEntry) => Promise<void>;
 
 export class ShoppingDb extends Dexie {
@@ -55,41 +57,42 @@ export class ShoppingDb extends Dexie {
   }
 
   putList(list: List): Promise<void> {
-    return this.transaction("rw", this.lists, this.outbox, async () => {
-      await this.lists.put(list);
-      await this.queueOutboxWrite({ targetType: "list", targetId: list.id, operation: "update" });
+    return this.writeWithOutbox(this.lists, () => this.lists.put(list), {
+      targetType: "list",
+      targetId: list.id,
+      operation: "update",
     });
   }
 
   putItem(item: Item): Promise<void> {
-    return this.transaction("rw", this.items, this.outbox, async () => {
-      await this.items.put(item);
-      await this.queueOutboxWrite({ targetType: "item", targetId: item.id, operation: "update" });
+    return this.writeWithOutbox(this.items, () => this.items.put(item), {
+      targetType: "item",
+      targetId: item.id,
+      operation: "update",
     });
   }
 
   putPayment(payment: Payment): Promise<void> {
-    return this.transaction("rw", this.payments, this.outbox, async () => {
-      await this.payments.put(payment);
-      await this.queueOutboxWrite({
-        targetType: "payment",
-        targetId: payment.id,
-        operation: "update",
-      });
+    return this.writeWithOutbox(this.payments, () => this.payments.put(payment), {
+      targetType: "payment",
+      targetId: payment.id,
+      operation: "update",
     });
   }
 
   deleteItem(id: string): Promise<void> {
-    return this.transaction("rw", this.items, this.outbox, async () => {
-      await this.items.delete(id);
-      await this.queueOutboxWrite({ targetType: "item", targetId: id, operation: "delete" });
+    return this.writeWithOutbox(this.items, () => this.items.delete(id), {
+      targetType: "item",
+      targetId: id,
+      operation: "delete",
     });
   }
 
   deletePayment(id: string): Promise<void> {
-    return this.transaction("rw", this.payments, this.outbox, async () => {
-      await this.payments.delete(id);
-      await this.queueOutboxWrite({ targetType: "payment", targetId: id, operation: "delete" });
+    return this.writeWithOutbox(this.payments, () => this.payments.delete(id), {
+      targetType: "payment",
+      targetId: id,
+      operation: "delete",
     });
   }
 
@@ -113,9 +116,18 @@ export class ShoppingDb extends Dexie {
     return drainedEntries;
   }
 
-  private async queueOutboxWrite(
-    entry: Omit<OutboxEntry, "id" | "queuedAt" | "syncedAt">,
+  private writeWithOutbox<T>(
+    table: Table<T, string>,
+    write: () => Promise<unknown>,
+    outboxWrite: OutboxWrite,
   ): Promise<void> {
+    return this.transaction("rw", table, this.outbox, async () => {
+      await write();
+      await this.queueOutboxWrite(outboxWrite);
+    });
+  }
+
+  private async queueOutboxWrite(entry: OutboxWrite): Promise<void> {
     await this.outbox.add({ ...entry, queuedAt: new Date().toISOString(), syncedAt: null });
   }
 }

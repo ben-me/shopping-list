@@ -1,7 +1,7 @@
 import "fake-indexeddb/auto";
 
 import { ShoppingDb } from "../store";
-import type { Item, List, Payment } from "@shopping-list/api/domain";
+import type { Item, List, Membership, Payment } from "@shopping-list/api/domain";
 
 let dbNumber = 0;
 
@@ -59,6 +59,13 @@ describe("ShoppingDb", () => {
     expect(await db.getLists()).toEqual([list]);
     expect(await db.getItems(list.id)).toEqual([milk, bread]);
     expect(await db.getPayments(list.id)).toEqual([pay1]);
+  });
+
+  it("round-trips Memberships through the local database with no network", async () => {
+    const membership: Membership = { listId: list.id, memberId: "user-2", joinedAt: now() };
+    await db.syncMembership(membership);
+
+    expect(await db.getMemberships(list.id)).toEqual([membership]);
   });
 
   it("captures a write made with no connection into the outbox, tagged for the next Sync", async () => {
