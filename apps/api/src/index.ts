@@ -4,7 +4,6 @@ import { cors } from "hono/cors";
 import type { ContentfulStatusCode } from "hono/utils/http-status";
 import { createAuth, getTrustedOrigins, type AuthEnv } from "./auth";
 import { createD1Connection, ping, type Db } from "./db";
-import type { Item } from "./domain";
 import { BadRequestError, ForbiddenError, NotFoundError, toErrorEnvelope } from "./errors";
 import { requireMember, requireUser, type AppVariables } from "./guards";
 import {
@@ -197,7 +196,7 @@ export function createApp() {
    * `:itemId` path params as strings (empty when the route has none). Handlers
    * destructure only the pieces they need.
    */
-  function routeContext(c: AppContext): { db: Db; listId: string; itemId: string } {
+  function routeContext(c: AppContext) {
     return {
       db: createD1Connection(c.env.devDb),
       listId: c.req.param("listId") ?? "",
@@ -211,7 +210,7 @@ export function createApp() {
    * exists; an Item that exists on a *different* List is a 404, so any endpoint
    * built on this helper can never read or write across Lists.
    */
-  async function getItemOnList(db: Db, listId: string, itemId: string): Promise<Item | undefined> {
+  async function getItemOnList(db: Db, listId: string, itemId: string) {
     const existing = await getItem(db, itemId);
     if (existing && existing.listId !== listId) {
       throw new NotFoundError("Item not found");
@@ -224,7 +223,7 @@ export function createApp() {
    * creating, optional-but-validated when updating), plus optional `checked` and
    * `checkedAt`. Anything malformed collapses to the same 400.
    */
-  function parseItemPatch(body: unknown): ItemPatch {
+  function parseItemPatch(body: unknown) {
     const body_ = body as { name?: unknown; checked?: unknown; checkedAt?: unknown };
     const patch: ItemPatch = {};
     if (body_.name !== undefined) {
@@ -258,7 +257,7 @@ export function createApp() {
    * The body of a List upsert is a single required field. A missing, malformed,
    * or blank body collapses to the same 400 so every client failure is legible.
    */
-  function parseListName(body: unknown): string {
+  function parseListName(body: unknown) {
     const name = (body as { name?: unknown }).name;
     if (typeof name !== "string" || name.trim() === "") {
       throw new BadRequestError("List name is required");
@@ -266,7 +265,7 @@ export function createApp() {
     return name.trim();
   }
 
-  async function readJsonBody(c: AppContext): Promise<unknown> {
+  async function readJsonBody(c: AppContext) {
     try {
       return await c.req.json();
     } catch {
