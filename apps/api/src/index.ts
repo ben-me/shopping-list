@@ -3,7 +3,8 @@ import type { Context } from "hono";
 import { cors } from "hono/cors";
 import type { ContentfulStatusCode } from "hono/utils/http-status";
 import { createAuth, getTrustedOrigins, type AuthEnv } from "./auth";
-import { createD1Connection, ping } from "./db";
+import { createD1Connection, ping, type Db } from "./db";
+import type { Item } from "./domain";
 import { BadRequestError, ForbiddenError, NotFoundError, toErrorEnvelope } from "./errors";
 import { requireMember, requireUser, type AppVariables } from "./guards";
 import {
@@ -130,11 +131,8 @@ export function createApp() {
     const listId = c.req.param("listId") ?? "";
     const itemId = c.req.param("itemId") ?? "";
     const patch = parseItemPatch(await readJsonBody(c));
-    const existing = await getItem(db, itemId);
+    const existing = await getItemOnList(db, listId, itemId);
     if (existing) {
-      if (existing.listId !== listId) {
-        throw new NotFoundError("Item not found");
-      }
       const item = await updateItem(db, itemId, patch);
       return c.json({ item }, 200);
     }
@@ -161,10 +159,7 @@ export function createApp() {
     const db = createD1Connection(c.env.devDb);
     const listId = c.req.param("listId") ?? "";
     const itemId = c.req.param("itemId") ?? "";
-    const existing = await getItem(db, itemId);
-    if (existing && existing.listId !== listId) {
-      throw new NotFoundError("Item not found");
-    }
+    await getItemOnList(db, listId, itemId);
     await deleteItem(db, itemId);
     return c.json({ ok: true });
   });
@@ -200,6 +195,20 @@ export function createApp() {
 
   return app;
 }
+
+  /**
+   * Fetch an Item by id, enforcing that it belongs to the given List. Returns
+   * the Item when it exists on that List, and `undefined` when no such Item
+   * exists; an Item that exists on a *different* List is a 404, so any endpoint
+   * built on this helper can never read or write across Lists.
+   */
+  async function getItemOnList(db: Db, listId: string, itemId: string): Promise<Item | undefined> {
+    const existing = await getItem(db, itemId);
+    if (existing && existing.listId !== listId) {
+      throw new NotFoundError("Item not found");
+    }
+    return existing;
+  }
 
   /**
    * The body of an Item upsert is a patch: `name` (required and non-blank when
