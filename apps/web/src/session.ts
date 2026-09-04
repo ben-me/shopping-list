@@ -11,39 +11,44 @@ export interface SessionUser {
 
 /**
  * Client-side session state. The server session lives in the better-auth
- * cookie; this reactive mirror is populated from `get-session` on boot and
- * by the sign-in/sign-up/sign-out actions below.
+ * cookie; this reactive mirror is the single read surface for the UI and the
+ * route guard. It is populated from `get-session` on boot and updated by the
+ * sign-in/sign-up/sign-out actions below.
  */
-export const session = reactive<{ user: SessionUser | null; restoring: boolean }>({
+export const session = reactive<{ user: SessionUser | null }>({
   user: null,
-  restoring: true,
 });
 
-let restorePromise: Promise<void> | null = null;
+let activeRestore: Promise<void> | null = null;
 
 /**
- * Fetch the current session from the API exactly once; concurrent callers
- * share the in-flight request. A reachable server always wins: if it says
- * there is no session, the user is signed out (no stale cached user).
+ * Fetch the current session from the API. If a restore is already in
+ * flight, concurrent callers share it rather than starting a new one. A
+ * reachable server always wins: if it says there is no session, the user
+ * is signed out (no stale cached user).
  */
-export function restoreSession(): Promise<void> {
-  restorePromise ??= (async () => {
-    try {
-      const { data } = await authClient.getSession();
-      session.user = (data?.user as SessionUser | null | undefined) ?? null;
-    } catch {
-      // Server unreachable: start signed out rather than guessing.
-      session.user = null;
-    } finally {
-      session.restoring = false;
-    }
-  })().finally(() => {
-    restorePromise = null;
+export function restoreSession() {
+  if (activeRestore) {
+    return activeRestore;
+  }
+  activeRestore = fetchSession().finally(() => {
+    // Clear the slot so the next call performs a fresh fetch.
+    activeRestore = null;
   });
-  return restorePromise;
+  return activeRestore;
 }
 
-export async function signIn(email: string, password: string): Promise<void> {
+async function fetchSession() {
+  try {
+    const { data } = await authClient.getSession();
+    session.user = data?.user ?? null;
+  } catch {
+    // Server unreachable: start signed out rather than guessing.
+    session.user = null;
+  }
+}
+
+export async function signIn(email: string, password: string) {
   const { data, error } = await authClient.signIn.email({ email, password });
   if (error) {
     throw new Error(error.message ?? "Sign-in failed");
@@ -51,19 +56,23 @@ export async function signIn(email: string, password: string): Promise<void> {
   session.user = data?.user as SessionUser;
 }
 
-export async function signUp(name: string, email: string, password: string): Promise<void> {
+export async function signUp(name: string, email: string, password: string) {
   const { data, error } = await authClient.signUp.email({ name, email, password });
   if (error) {
     throw new Error(error.message ?? "Sign-up failed");
   }
-  session.user = data?.user as SessionUser;
+  session.user = data?.user;
 }
 
-export async function signOut(): Promise<void> {
+export async function signOut() {
   try {
     await authClient.signOut();
   } finally {
     // The session is dead client-side even if the request failed.
     session.user = null;
   }
+}
+
+export function _resetSession() {
+  session.user = null;
 }

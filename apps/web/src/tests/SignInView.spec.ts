@@ -10,7 +10,7 @@ import { createMemoryHistory } from "vue-router";
 import App from "../App.vue";
 import { db } from "../db";
 import { createAppRouter } from "../router";
-import { session, type SessionUser } from "../session";
+import { _resetSession, session, type SessionUser } from "../session";
 
 const user: SessionUser = {
   id: "user-1",
@@ -39,7 +39,7 @@ function stubApi(routes: Record<string, () => Response>) {
 beforeEach(async () => {
   await db.lists.clear();
   await db.outbox.clear();
-  Object.assign(session, { user: null, restoring: true });
+  _resetSession();
 });
 
 afterEach(() => {

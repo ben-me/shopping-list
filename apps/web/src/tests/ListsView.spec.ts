@@ -11,7 +11,7 @@ import type { List } from "@shopping-list/api/domain";
 import App from "../App.vue";
 import { db } from "../db";
 import { createAppRouter } from "../router";
-import { session, type SessionUser } from "../session";
+import { _resetSession, session, type SessionUser } from "../session";
 
 const user: SessionUser = {
   id: "user-1",
@@ -64,7 +64,7 @@ function settle() {
 beforeEach(async () => {
   await db.lists.clear();
   await db.outbox.clear();
-  Object.assign(session, { user: null, restoring: true });
+  _resetSession();
 });
 
 afterEach(() => {

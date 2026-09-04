@@ -1,4 +1,12 @@
-import { session, restoreSession, signIn, signOut, signUp, type SessionUser } from "../session";
+import {
+  _resetSession,
+  session,
+  restoreSession,
+  signIn,
+  signOut,
+  signUp,
+  type SessionUser,
+} from "../session";
 
 /**
  * Mock the better-auth client module: the real client captures `fetch` at
@@ -59,7 +67,7 @@ function callsTo(path: string) {
 let fetchImpl: ReturnType<typeof stubFetch>;
 
 function resetSession() {
-  Object.assign(session, { user: null, restoring: true });
+  _resetSession();
 }
 
 afterEach(() => {
@@ -74,7 +82,6 @@ describe("session", () => {
 
     expect(callsTo("/api/auth/get-session")).toHaveLength(1);
     expect(session.user).toEqual(user);
-    expect(session.restoring).toBe(false);
   });
 
   it("treats a missing session as signed out", async () => {
@@ -82,7 +89,6 @@ describe("session", () => {
     await restoreSession();
 
     expect(session.user).toBeNull();
-    expect(session.restoring).toBe(false);
   });
 
   it("keeps the app signed out when the server is unreachable on boot", async () => {
@@ -90,7 +96,6 @@ describe("session", () => {
     await restoreSession();
 
     expect(session.user).toBeNull();
-    expect(session.restoring).toBe(false);
   });
 
   it("signs an existing user in and stores the user", async () => {
