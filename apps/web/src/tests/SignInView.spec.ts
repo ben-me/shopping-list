@@ -1,5 +1,10 @@
 import "fake-indexeddb/auto";
 
+vi.mock(
+  "../auth-client",
+  async () => await import("./mocks/auth-client").then((m) => m.makeAuthClientMock()),
+);
+
 import { mount, flushPromises } from "@vue/test-utils";
 import { createMemoryHistory } from "vue-router";
 import App from "../App.vue";
@@ -43,9 +48,16 @@ afterEach(() => {
 
 describe("SignInView", () => {
   it("signs an existing user in and lands on the lists index", async () => {
+    let signedIn = false;
     stubApi({
-      "/api/auth/get-session": () => jsonResponse({}),
-      "/api/auth/sign-in/email": () => jsonResponse({ token: "tok", user }),
+      // The router re-checks the session on every navigation: before sign-in
+      // there is no session, after it the (stubbed) cookie session exists.
+      "/api/auth/get-session": () =>
+        jsonResponse(signedIn ? { session: { token: "tok" }, user } : {}),
+      "/api/auth/sign-in/email": () => {
+        signedIn = true;
+        return jsonResponse({ token: "tok", user });
+      },
     });
     const router = createAppRouter(createMemoryHistory());
     await router.push("/sign-in");
@@ -63,9 +75,14 @@ describe("SignInView", () => {
   });
 
   it("signs a new user up and lands on the lists index", async () => {
+    let signedIn = false;
     stubApi({
-      "/api/auth/get-session": () => jsonResponse({}),
-      "/api/auth/sign-up/email": () => jsonResponse({ token: "tok", user }),
+      "/api/auth/get-session": () =>
+        jsonResponse(signedIn ? { session: { token: "tok" }, user } : {}),
+      "/api/auth/sign-up/email": () => {
+        signedIn = true;
+        return jsonResponse({ token: "tok", user });
+      },
     });
     const router = createAppRouter(createMemoryHistory());
     await router.push("/sign-in");

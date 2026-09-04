@@ -1,5 +1,10 @@
 import "fake-indexeddb/auto";
 
+vi.mock(
+  "../auth-client",
+  async () => await import("./mocks/auth-client").then((m) => m.makeAuthClientMock()),
+);
+
 import { mount, flushPromises } from "@vue/test-utils";
 import { createMemoryHistory } from "vue-router";
 import App from "../App.vue";

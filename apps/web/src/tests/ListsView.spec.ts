@@ -1,5 +1,10 @@
 import "fake-indexeddb/auto";
 
+vi.mock(
+  "../auth-client",
+  async () => await import("./mocks/auth-client").then((m) => m.makeAuthClientMock()),
+);
+
 import { mount, flushPromises } from "@vue/test-utils";
 import { createMemoryHistory } from "vue-router";
 import type { List } from "@shopping-list/api/domain";
@@ -101,9 +106,16 @@ describe("ListsView", () => {
   });
 
   it("signs out and lands on the sign-in view", async () => {
-    stubSignedIn((url) => {
+    let signedOut = false;
+    stubRoutes((url) => {
+      // The router re-checks the session on every navigation, and sign-out
+      // invalidates the (stubbed) session cookie on the server.
+      if (url === "/api/auth/get-session") {
+        return jsonResponse(signedOut ? {} : { session: { token: "tok" }, user });
+      }
       if (url === "/api/auth/sign-out") {
-        return jsonResponse({});
+        signedOut = true;
+        return jsonResponse({ success: true });
       }
       throw new Error(`No stub for ${url}`);
     });
@@ -115,7 +127,6 @@ describe("ListsView", () => {
     await flushPromises();
     await wrapper.find('[data-testid="sign-out"]').trigger("click");
     await flushPromises();
-
     expect(router.currentRoute.value.name).toBe("sign-in");
     expect(wrapper.text()).toContain("Sign in");
   });
