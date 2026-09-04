@@ -28,6 +28,7 @@ async function onAdd() {
     await addItem(db, listId.value, name.value);
     name.value = "";
     await loadItems();
+    void syncOutbox(db).catch(() => undefined);
   } catch (err) {
     error.value = err instanceof Error ? err.message : "Could not add the item";
   }
@@ -36,18 +37,31 @@ async function onAdd() {
 async function onToggle(item: Item, checked: boolean) {
   await setItemChecked(db, item, checked);
   await loadItems();
+  // While online, flush the queued write right away so a quick reload (or a
+  // lost page) cannot drop it. Offline the drain fails harmlessly and the
+  // entry is retried on the next mount.
+  void syncOutbox(db).catch(() => undefined);
 }
 
 async function onRemove(item: Item) {
   await removeItem(db, item);
   await loadItems();
+  void syncOutbox(db).catch(() => undefined);
 }
 
 onMounted(() => {
   void loadList();
   void loadItems();
-  void syncItemsFromServer(db, listId.value).catch(() => undefined);
-  void syncOutbox(db).catch(() => undefined);
+  // Drain the outbox BEFORE pulling the server's Items: any writes still
+  // queued from an earlier session (e.g. an in-flight sync killed by a
+  // reload) must reach the server first, otherwise the pull overwrites the
+  // local state they describe and the change is lost. Once the queue is
+  // flushed, the server is authoritative and wins.
+  void (async () => {
+    await syncOutbox(db).catch(() => undefined);
+    await syncItemsFromServer(db, listId.value).catch(() => undefined);
+    await loadItems();
+  })();
 });
 </script>
 
