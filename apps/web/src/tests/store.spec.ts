@@ -84,9 +84,40 @@ describe("ShoppingDb", () => {
     expect(pending[0]).toMatchObject({
       targetType: "item",
       targetId: "item-1",
+      listId: list.id,
       operation: "update",
       syncedAt: null,
     });
+  });
+
+  it("captures an Item delete in the outbox with the List id, even though the row is gone", async () => {
+    await db.putItem(milk);
+    await db.deleteItem(milk.id, list.id);
+
+    const pending = await db.pendingOutboxEntries();
+
+    expect(pending).toHaveLength(2);
+    expect(pending[1]).toMatchObject({
+      targetType: "item",
+      targetId: milk.id,
+      listId: list.id,
+      operation: "delete",
+    });
+  });
+
+  it("syncs an Item from the server into the local Store without queuing an outbox write", async () => {
+    const serverItem = { ...milk, checked: true, checkedAt: now() };
+    await db.syncItem(serverItem);
+
+    expect(await db.getItems(list.id)).toEqual([serverItem]);
+    expect(await db.pendingOutboxEntries()).toHaveLength(0);
+  });
+
+  it("reads a single Item by id", async () => {
+    await db.putItem(milk);
+
+    expect(await db.getItem(milk.id)).toEqual(milk);
+    expect(await db.getItem("item-nope")).toBeUndefined();
   });
 
   it("drains captured outbox entries through a transport and clears them", async () => {

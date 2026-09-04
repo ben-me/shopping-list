@@ -70,6 +70,13 @@ describe("App", () => {
 
   it("renders the List view for a signed-in session at /list/:listId", async () => {
     stubSignedInSession();
+    await db.syncList({
+      id: "list-1",
+      ownerId: user.id,
+      name: "Household",
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    });
     const router = createAppRouter(createMemoryHistory());
     await router.push("/list/list-1");
     await router.isReady();
@@ -77,7 +84,7 @@ describe("App", () => {
     const wrapper = mount(App, { global: { plugins: [router] } });
     await flushPromises();
 
-    expect(wrapper.text()).toContain("List");
-    expect(wrapper.text()).toContain("list-1");
+    expect(wrapper.text()).toContain("Household");
+    expect(wrapper.text()).toContain("Nothing on this list yet.");
   });
 });
