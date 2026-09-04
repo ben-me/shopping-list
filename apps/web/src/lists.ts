@@ -1,4 +1,4 @@
-import type { List } from "@shopping-list/api/domain";
+import type { Item, List } from "@shopping-list/api/domain";
 import { apiFetch } from "./api";
 import type { ShoppingDb } from "./store";
 
@@ -21,19 +21,42 @@ export async function createList(db: ShoppingDb, ownerId: string, name: string):
 
 export async function syncOutbox(db: ShoppingDb): Promise<void> {
   await db.drainOutbox(async (entry) => {
-    if (entry.targetType !== "list") {
-      throw new Error(`Unsupported outbox target ${entry.targetType}`);
-    }
-    const list = await db.getList(entry.targetId);
-    if (list) {
-      const { list: serverList } = await apiFetch<{ list: List }>(`/api/lists/${list.id}`, {
-        method: "PUT",
-        body: { name: list.name },
-      });
-      if (serverList?.id) {
-        await db.syncList(serverList);
+    if (entry.targetType === "list") {
+      const list = await db.getList(entry.targetId);
+      if (list) {
+        const { list: serverList } = await apiFetch<{ list: List }>(`/api/lists/${list.id}`, {
+          method: "PUT",
+          body: { name: list.name },
+        });
+        if (serverList?.id) {
+          await db.syncList(serverList);
+        }
       }
+      return;
     }
+    if (entry.targetType === "item") {
+      if (entry.operation === "delete") {
+        await apiFetch(`/api/lists/${entry.listId}/items/${entry.targetId}`, {
+          method: "DELETE",
+        });
+        return;
+      }
+      const item = await db.getItem(entry.targetId);
+      if (item) {
+        const { item: serverItem } = await apiFetch<{ item: Item }>(
+          `/api/lists/${item.listId}/items/${item.id}`,
+          {
+            method: "PUT",
+            body: { name: item.name, checked: item.checked, checkedAt: item.checkedAt },
+          },
+        );
+        if (serverItem?.id) {
+          await db.syncItem(serverItem);
+        }
+      }
+      return;
+    }
+    throw new Error(`Unsupported outbox target ${entry.targetType}`);
   });
 }
 

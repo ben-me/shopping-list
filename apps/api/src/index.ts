@@ -4,9 +4,20 @@ import { cors } from "hono/cors";
 import type { ContentfulStatusCode } from "hono/utils/http-status";
 import { createAuth, getTrustedOrigins, type AuthEnv } from "./auth";
 import { createD1Connection, ping } from "./db";
-import { BadRequestError, ForbiddenError, toErrorEnvelope } from "./errors";
+import { BadRequestError, ForbiddenError, NotFoundError, toErrorEnvelope } from "./errors";
 import { requireMember, requireUser, type AppVariables } from "./guards";
-import { createList, getList, getListsForMember, isMember, updateList } from "./queries";
+import {
+  createList,
+  createItem,
+  deleteItem,
+  getItem,
+  getList,
+  getItemsByList,
+  getListsForMember,
+  isMember,
+  updateList,
+  updateItem,
+} from "./queries";
 
 /**
  * The Shopping List API. Runs as a Cloudflare Worker and is the source of truth
@@ -97,6 +108,61 @@ export function createApp() {
   });
 
   /**
+   * The Items on a List, oldest first. Members only — a non-Member gets a 403,
+   * an unknown List a 404, both from {@link requireMember}.
+   */
+  app.get("/api/lists/:listId/items", requireUser, requireMember, async (c) => {
+    const db = createD1Connection(c.env.devDb);
+    const items = await getItemsByList(db, c.req.param("listId") ?? "");
+    return c.json({ items });
+  });
+
+  /**
+   * Sync upsert for an Item (offline-first add/tick/un-tick). The device generates
+   * the id and sends the Item's current state; the server is the source of truth.
+   * An unknown id creates the Item on this List; an existing Item updates only
+   * when it actually belongs to this List and the caller is a Member. Ticking
+   * stamps `checkedAt` (unless the client supplies one); un-ticking clears it.
+   * No Payment is ever touched here — ticking and money are unrelated acts.
+   */
+  app.put("/api/lists/:listId/items/:itemId", requireUser, requireMember, async (c) => {
+    const db = createD1Connection(c.env.devDb);
+    const listId = c.req.param("listId") ?? "";
+    const itemId = c.req.param("itemId") ?? "";
+    const patch = parseItemPatch(await readJsonBody(c));
+    const existing = await getItem(db, itemId);
+    if (existing) {
+      if (existing.listId !== listId) {
+        throw new NotFoundError("Item not found");
+      }
+      const item = await updateItem(db, itemId, patch);
+      return c.json({ item }, 200);
+    }
+    if (!patch.name) {
+      throw new BadRequestError("Item name is required");
+    }
+    const item = await createItem(db, {
+      id: itemId,
+      listId,
+      name: patch.name,
+      checked: patch.checked,
+      checkedAt: patch.checkedAt,
+    });
+    return c.json({ item }, 201);
+  });
+
+  /**
+   * Remove an Item from a List. Idempotent — removing an already-removed Item
+   * still succeeds so an offline delete can be replayed safely. Payments are
+   * independent rows and are never touched by an Item delete.
+   */
+  app.delete("/api/lists/:listId/items/:itemId", requireUser, requireMember, async (c) => {
+    const db = createD1Connection(c.env.devDb);
+    await deleteItem(db, c.req.param("itemId") ?? "");
+    return c.json({ ok: true });
+  });
+
+  /**
    * Sync upsert for a List (offline-first create/rename). The device generates
    * the id and sends the whole List; the server is the source of truth. An unknown
    * id creates a List owned by the caller; an existing List updates only when
@@ -128,25 +194,60 @@ export function createApp() {
   return app;
 }
 
-/**
- * The body of a List upsert is a single required field. A missing, malformed,
- * or blank body collapses to the same 400 so every client failure is legible.
- */
-function parseListName(body: unknown): string {
-  const name = (body as { name?: unknown }).name;
-  if (typeof name !== "string" || name.trim() === "") {
-    throw new BadRequestError("List name is required");
+  /**
+   * The body of an Item upsert is a patch: `name` (required and non-blank when
+   * creating, optional-but-validated when updating), plus optional `checked` and
+   * `checkedAt`. Anything malformed collapses to the same 400.
+   */
+  function parseItemPatch(body: unknown): ItemPatch {
+    const body_ = body as { name?: unknown; checked?: unknown; checkedAt?: unknown };
+    const patch: ItemPatch = {};
+    if (body_.name !== undefined) {
+      if (typeof body_.name !== "string" || body_.name.trim() === "") {
+        throw new BadRequestError("Item name is required");
+      }
+      patch.name = body_.name.trim();
+    }
+    if (body_.checked !== undefined) {
+      if (typeof body_.checked !== "boolean") {
+        throw new BadRequestError("Item checked must be a boolean");
+      }
+      patch.checked = body_.checked;
+    }
+    if (body_.checkedAt !== undefined) {
+      if (typeof body_.checkedAt !== "string") {
+        throw new BadRequestError("Item checkedAt must be a string");
+      }
+      patch.checkedAt = body_.checkedAt;
+    }
+    return patch;
   }
-  return name.trim();
-}
 
-async function readJsonBody(c: AppContext): Promise<unknown> {
-  try {
-    return await c.req.json();
-  } catch {
-    throw new BadRequestError("List name is required");
+  interface ItemPatch {
+    name?: string;
+    checked?: boolean;
+    checkedAt?: string;
   }
-}
+
+  /**
+   * The body of a List upsert is a single required field. A missing, malformed,
+   * or blank body collapses to the same 400 so every client failure is legible.
+   */
+  function parseListName(body: unknown): string {
+    const name = (body as { name?: unknown }).name;
+    if (typeof name !== "string" || name.trim() === "") {
+      throw new BadRequestError("List name is required");
+    }
+    return name.trim();
+  }
+
+  async function readJsonBody(c: AppContext): Promise<unknown> {
+    try {
+      return await c.req.json();
+    } catch {
+      throw new BadRequestError("A JSON body is required");
+    }
+  }
 
 const app = createApp();
 

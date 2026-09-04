@@ -9,12 +9,14 @@ export interface OutboxEntry {
   id?: number;
   targetType: OutboxTarget;
   targetId: string;
+  /** The owning List id, needed to address the server when syncing a delete. */
+  listId?: string;
   operation: OutboxOperation;
   queuedAt: string;
   syncedAt: string | null;
 }
 
-export type OutboxWrite = Pick<OutboxEntry, "targetType" | "targetId" | "operation">;
+export type OutboxWrite = Pick<OutboxEntry, "targetType" | "targetId" | "listId" | "operation">;
 
 export type OutboxTransport = (entry: OutboxEntry) => Promise<void>;
 
@@ -44,6 +46,10 @@ export class ShoppingDb extends Dexie {
     return this.lists.get(listId);
   }
 
+  getItem(id: string): Promise<Item | undefined> {
+    return this.items.get(id);
+  }
+
   getItems(listId: string): Promise<Item[]> {
     return this.items.where("listId").equals(listId).sortBy("createdAt");
   }
@@ -68,6 +74,7 @@ export class ShoppingDb extends Dexie {
     return this.writeWithOutbox(this.items, () => this.items.put(item), {
       targetType: "item",
       targetId: item.id,
+      listId: item.listId,
       operation: "update",
     });
   }
@@ -80,10 +87,11 @@ export class ShoppingDb extends Dexie {
     });
   }
 
-  deleteItem(id: string): Promise<void> {
+  deleteItem(id: string, listId: string): Promise<void> {
     return this.writeWithOutbox(this.items, () => this.items.delete(id), {
       targetType: "item",
       targetId: id,
+      listId,
       operation: "delete",
     });
   }
@@ -94,6 +102,10 @@ export class ShoppingDb extends Dexie {
       targetId: id,
       operation: "delete",
     });
+  }
+
+  async syncItem(item: Item): Promise<void> {
+    await this.items.put(item);
   }
 
   async syncMembership(membership: Membership): Promise<void> {
