@@ -25,13 +25,14 @@ export async function restoreSession(): Promise<void> {
     return;
   }
   try {
-    const body = await apiFetch<{ user?: SessionUser | null }>("/api/auth/get-session");
-    if (body.user) {
-      persistUser(body.user);
+    const body = await apiFetch<{ user?: SessionUser | null } | null>("/api/auth/get-session");
+    const user = body?.user ?? null;
+    if (user) {
+      persistUser(user);
     } else {
       clearStoredUser();
     }
-    state.user = body.user ?? null;
+    state.user = user;
   } catch {
     state.user = readStoredUser();
   } finally {
@@ -58,7 +59,7 @@ export async function signUp(name: string, email: string, password: string): Pro
 }
 
 export async function signOut(): Promise<void> {
-  await apiFetch("/api/auth/sign-out", { method: "POST" }).catch(() => undefined);
+  await apiFetch("/api/auth/sign-out", { method: "POST", body: {} }).catch(() => undefined);
   clearStoredUser();
   state.user = null;
 }
