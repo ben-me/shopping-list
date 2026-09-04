@@ -7,7 +7,11 @@ import { runMigrations, startMiniflare, testEnvFor } from "./test-support";
 import type { AuthEnv } from "./auth";
 import type { ApiErrorEnvelope } from "./errors";
 import type { Item } from "./domain";
-import { payments as paymentsTable } from "./schema";
+import * as schema from "./schema";
+
+function uniq(prefix: string) {
+  return `${prefix}-${crypto.randomUUID()}`;
+}
 
 let signupCounter = 0;
 function uniqueEmail() {
@@ -105,6 +109,13 @@ describe("item endpoints", () => {
     env = testEnvFor(binding);
     app = createApp();
     db = createD1Connection(binding);
+    // Local D1 persists between runs; wipe the domain tables so fixed test ids
+    // always start from a clean List/Item/Payment state. Auth users may remain.
+    await db.delete(schema.items);
+    await db.delete(schema.payments);
+    await db.delete(schema.memberships);
+    await db.delete(schema.invitations);
+    await db.delete(schema.lists);
   });
 
   afterAll(async () => {
@@ -139,14 +150,15 @@ describe("item endpoints", () => {
 
   it("adds an Item through an upsert and it appears on the List", async () => {
     const { cookie } = await signUp(app, env);
-    const listId = "list-add";
+    const listId = uniq("list");
+    const itemId = uniq("item");
     await putList(app, env, cookie, listId, "Household");
 
-    const res = await putItem(app, env, cookie, listId, "item-milk", { name: "Milk" });
+    const res = await putItem(app, env, cookie, listId, itemId, { name: "Milk" });
     expect(res.status).toBe(201);
     const body = (await res.json()) as { item: Item };
     expect(body.item).toMatchObject({
-      id: "item-milk",
+      id: itemId,
       listId,
       name: "Milk",
       checked: false,
@@ -160,11 +172,12 @@ describe("item endpoints", () => {
 
   it("ticks an Item off and the tick survives a reload of the List", async () => {
     const { cookie } = await signUp(app, env);
-    const listId = "list-tick";
+    const listId = uniq("list");
+    const itemId = uniq("item");
     await putList(app, env, cookie, listId, "Household");
-    await putItem(app, env, cookie, listId, "item-bread", { name: "Bread" });
+    await putItem(app, env, cookie, listId, itemId, { name: "Bread" });
 
-    const tick = await putItem(app, env, cookie, listId, "item-bread", { checked: true });
+    const tick = await putItem(app, env, cookie, listId, itemId, { checked: true });
     expect(tick.status).toBe(200);
     const tickBody = (await tick.json()) as { item: Item };
     expect(tickBody.item.checked).toBe(true);
@@ -173,17 +186,18 @@ describe("item endpoints", () => {
     // A fresh read is what a reload would see.
     const reread = await getItems(app, env, cookie, listId);
     const rereadBody = (await reread.json()) as { items: Item[] };
-    expect(rereadBody.items[0]).toMatchObject({ id: "item-bread", checked: true });
+    expect(rereadBody.items[0]).toMatchObject({ id: itemId, checked: true });
   });
 
   it("un-ticks an Item and clears the checked time", async () => {
     const { cookie } = await signUp(app, env);
-    const listId = "list-untick";
+    const listId = uniq("list");
+    const itemId = uniq("item");
     await putList(app, env, cookie, listId, "Household");
-    await putItem(app, env, cookie, listId, "item-eggs", { name: "Eggs" });
-    await putItem(app, env, cookie, listId, "item-eggs", { checked: true });
+    await putItem(app, env, cookie, listId, itemId, { name: "Eggs" });
+    await putItem(app, env, cookie, listId, itemId, { checked: true });
 
-    const untick = await putItem(app, env, cookie, listId, "item-eggs", { checked: false });
+    const untick = await putItem(app, env, cookie, listId, itemId, { checked: false });
     expect(untick.status).toBe(200);
     const body = (await untick.json()) as { item: Item };
     expect(body.item.checked).toBe(false);
@@ -192,9 +206,10 @@ describe("item endpoints", () => {
 
   it("removes an Item and leaves every Payment untouched", async () => {
     const { cookie } = await signUp(app, env);
-    const listId = "list-remove";
+    const listId = uniq("list");
+    const itemId = uniq("item");
     await putList(app, env, cookie, listId, "Household");
-    await putItem(app, env, cookie, listId, "item-milk", { name: "Milk" });
+    await putItem(app, env, cookie, listId, itemId, { name: "Milk" });
     const payment = await createPayment(db, {
       listId,
       memberId: "someone",
@@ -202,23 +217,37 @@ describe("item endpoints", () => {
       paidAt: "2026-01-01T00:00:00.000Z",
     });
 
-    const del = await deleteItem(app, env, cookie, listId, "item-milk");
+    const del = await deleteItem(app, env, cookie, listId, itemId);
     expect(del.status).toBe(200);
 
     const list = await getItems(app, env, cookie, listId);
     const listBody = (await list.json()) as { items: Item[] };
     expect(listBody.items).toHaveLength(0);
 
-    const rows = await db.select().from(paymentsTable).all();
+    const rows = await db.select().from(schema.payments).all();
     expect(rows.find((p) => p.id === payment.id)?.amountInCents).toBe(1250);
+  });
+
+  it("rejects removing an Item through another List's id", async () => {
+    const { cookie } = await signUp(app, env);
+    await putList(app, env, cookie, "list-a", "A");
+    await putList(app, env, cookie, "list-b", "B");
+    await putItem(app, env, cookie, "list-a", "item-keep", { name: "Milk" });
+
+    const res = await deleteItem(app, env, cookie, "list-b", "item-keep");
+    expect(res.status).toBe(404);
+
+    const listA = await getItems(app, env, cookie, "list-a");
+    const listABody = (await listA.json()) as { items: Item[] };
+    expect(listABody.items.map((i) => i.id)).toEqual(["item-keep"]);
   });
 
   it("rejects an Item with a blank name", async () => {
     const { cookie } = await signUp(app, env);
-    const listId = "list-blank";
+    const listId = uniq("list");
     await putList(app, env, cookie, listId, "Household");
 
-    const res = await putItem(app, env, cookie, listId, "item-blank", { name: "   " });
+    const res = await putItem(app, env, cookie, listId, uniq("item"), { name: "   " });
     expect(res.status).toBe(400);
     const body = (await res.json()) as ApiErrorEnvelope;
     expect(body.error).toMatchObject({ status: 400, code: "bad_request" });
@@ -233,11 +262,14 @@ describe("item endpoints", () => {
 
   it("rejects writing an Item onto a List the caller is a Member of from another List's id", async () => {
     const { cookie } = await signUp(app, env);
-    await putList(app, env, cookie, "list-a", "A");
-    await putList(app, env, cookie, "list-b", "B");
-    await putItem(app, env, cookie, "list-a", "item-shared", { name: "Milk" });
+    const listA = uniq("list");
+    const listB = uniq("list");
+    const itemId = uniq("item");
+    await putList(app, env, cookie, listA, "A");
+    await putList(app, env, cookie, listB, "B");
+    await putItem(app, env, cookie, listA, itemId, { name: "Milk" });
 
-    const res = await putItem(app, env, cookie, "list-b", "item-shared", { name: "Hijack" });
+    const res = await putItem(app, env, cookie, listB, itemId, { name: "Hijack" });
     expect(res.status).toBe(404);
   });
 

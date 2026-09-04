@@ -153,12 +153,19 @@ export function createApp() {
 
   /**
    * Remove an Item from a List. Idempotent — removing an already-removed Item
-   * still succeeds so an offline delete can be replayed safely. Payments are
+   * still succeeds so an offline delete can be replayed safely. An Item that
+   * exists but belongs to another List is a 404, not a delete. Payments are
    * independent rows and are never touched by an Item delete.
    */
   app.delete("/api/lists/:listId/items/:itemId", requireUser, requireMember, async (c) => {
     const db = createD1Connection(c.env.devDb);
-    await deleteItem(db, c.req.param("itemId") ?? "");
+    const listId = c.req.param("listId") ?? "";
+    const itemId = c.req.param("itemId") ?? "";
+    const existing = await getItem(db, itemId);
+    if (existing && existing.listId !== listId) {
+      throw new NotFoundError("Item not found");
+    }
+    await deleteItem(db, itemId);
     return c.json({ ok: true });
   });
 
