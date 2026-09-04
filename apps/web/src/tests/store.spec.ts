@@ -68,6 +68,13 @@ describe("ShoppingDb", () => {
     expect(await db.getMemberships(list.id)).toEqual([membership]);
   });
 
+  it("syncs a List into the local Store without queuing an outbox write", async () => {
+    await db.syncList(list);
+
+    expect(await db.getLists()).toEqual([list]);
+    expect(await db.pendingOutboxEntries()).toHaveLength(0);
+  });
+
   it("captures a write made with no connection into the outbox, tagged for the next Sync", async () => {
     await db.putItem(item("item-1", "Milk"));
 

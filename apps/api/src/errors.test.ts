@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   ApiError,
+  BadRequestError,
   ForbiddenError,
   NotFoundError,
   UnauthorizedError,
@@ -28,6 +29,11 @@ describe("error envelope", () => {
     expect(toErrorEnvelope(new ForbiddenError()).envelope.error).toMatchObject({
       status: 403,
       code: "forbidden",
+    });
+    expect(toErrorEnvelope(new BadRequestError("List name is required")).envelope.error).toEqual({
+      status: 400,
+      code: "bad_request",
+      message: "List name is required",
     });
     expect(toErrorEnvelope(new NotFoundError()).envelope.error).toMatchObject({
       status: 404,

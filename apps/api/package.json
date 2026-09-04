@@ -22,7 +22,7 @@
     "cf-typegen": "wrangler types --env-interface CloudflareBindings",
     "db:generate": "drizzle-kit generate",
     "db:migrate": "wrangler d1 migrations apply dev-db-shopping-list --local",
-    "db:migrate:remote": "wrangler d1 migrations apply dev-db-shopping-list",
+    "db:migrate:remote": "wrangler d1 migrations apply dev-db-shopping-list --remote",
     "test:unit": "vitest run",
     "type-check": "tsc --noEmit",
     "fmt": "oxfmt",

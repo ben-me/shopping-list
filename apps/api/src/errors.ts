@@ -27,6 +27,12 @@ export class ApiError extends Error {
   }
 }
 
+export class BadRequestError extends ApiError {
+  constructor(message: string) {
+    super(400, "bad_request", message);
+  }
+}
+
 export class UnauthorizedError extends ApiError {
   constructor(message = "Sign in to continue") {
     super(401, "unauthorized", message);

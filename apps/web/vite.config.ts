@@ -13,7 +13,10 @@ export default defineConfig({
       "@": fileURLToPath(new URL("./src", import.meta.url)),
     },
   },
-  server: { host: true },
+  server: {
+    host: true,
+    proxy: { "/api": "http://localhost:8787" },
+  },
   test: {
     environment: "jsdom",
     exclude: [...configDefaults.exclude, "e2e/**"],

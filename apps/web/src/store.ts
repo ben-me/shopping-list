@@ -100,6 +100,10 @@ export class ShoppingDb extends Dexie {
     await this.memberships.put(membership);
   }
 
+  async syncList(list: List): Promise<void> {
+    await this.lists.put(list);
+  }
+
   async pendingOutboxEntries(): Promise<OutboxEntry[]> {
     const rows = await this.outbox.orderBy("id").toArray();
     return rows.filter((entry) => entry.syncedAt === null);
