@@ -103,7 +103,7 @@ export function createApp() {
    * go through the typed query helper so handlers never hand-roll SQL.
    */
   app.get("/api/lists", requireUser, async (c) => {
-    const db = createD1Connection(c.env.devDb);
+    const { db } = routeContext(c);
     const lists = await getListsForMember(db, c.get("user").id);
     return c.json({ lists });
   });
@@ -113,8 +113,8 @@ export function createApp() {
    * an unknown List a 404, both from {@link requireMember}.
    */
   app.get("/api/lists/:listId/items", requireUser, requireMember, async (c) => {
-    const db = createD1Connection(c.env.devDb);
-    const items = await getItemsByList(db, c.req.param("listId") ?? "");
+    const { db, listId } = routeContext(c);
+    const items = await getItemsByList(db, listId);
     return c.json({ items });
   });
 
@@ -127,9 +127,7 @@ export function createApp() {
    * No Payment is ever touched here — ticking and money are unrelated acts.
    */
   app.put("/api/lists/:listId/items/:itemId", requireUser, requireMember, async (c) => {
-    const db = createD1Connection(c.env.devDb);
-    const listId = c.req.param("listId") ?? "";
-    const itemId = c.req.param("itemId") ?? "";
+    const { db, listId, itemId } = routeContext(c);
     const patch = parseItemPatch(await readJsonBody(c));
     const existing = await getItemOnList(db, listId, itemId);
     if (existing) {
@@ -156,9 +154,7 @@ export function createApp() {
    * independent rows and are never touched by an Item delete.
    */
   app.delete("/api/lists/:listId/items/:itemId", requireUser, requireMember, async (c) => {
-    const db = createD1Connection(c.env.devDb);
-    const listId = c.req.param("listId") ?? "";
-    const itemId = c.req.param("itemId") ?? "";
+    const { db, listId, itemId } = routeContext(c);
     await getItemOnList(db, listId, itemId);
     await deleteItem(db, itemId);
     return c.json({ ok: true });
@@ -171,8 +167,7 @@ export function createApp() {
    * the caller is a Member.
    */
   app.put("/api/lists/:listId", requireUser, async (c) => {
-    const db = createD1Connection(c.env.devDb);
-    const listId = c.req.param("listId") ?? "";
+    const { db, listId } = routeContext(c);
     const name = parseListName(await readJsonBody(c));
     if (!listId) {
       throw new BadRequestError("List id is required");
@@ -195,6 +190,20 @@ export function createApp() {
 
   return app;
 }
+
+  /**
+   * Per-request plumbing shared by the List/Item endpoints: the D1 connection
+   * (only available inside a request, from `c.env`) and the `:listId` /
+   * `:itemId` path params as strings (empty when the route has none). Handlers
+   * destructure only the pieces they need.
+   */
+  function routeContext(c: AppContext): { db: Db; listId: string; itemId: string } {
+    return {
+      db: createD1Connection(c.env.devDb),
+      listId: c.req.param("listId") ?? "",
+      itemId: c.req.param("itemId") ?? "",
+    };
+  }
 
   /**
    * Fetch an Item by id, enforcing that it belongs to the given List. Returns
