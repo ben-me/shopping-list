@@ -77,32 +77,22 @@ export function createApp() {
   });
 
   /**
-   * Health route: confirms the Worker is alive and serving, and that the D1
-   * connection resolves. Runs before any require* middleware so it stays
-   * reachable unauthenticated.
+   * Health route: reachable unauthenticated — it must run before any require*
+   * middleware.
    */
   app.get("/health", async (c) => {
     const db = createD1Connection(c.env.devDb);
-    const row = await ping(db);
-    return c.json({ ok: true, service: "shopping-list-api", db: row?.ok === 1 });
+    const pingResult = await ping(db);
+    return c.json({ ok: true, service: "shopping-list-api", db: pingResult?.ok === 1 });
   });
 
-  /**
-   * Demonstration routes that exercise the shared plumbing. `/api/me` proves
-   * requireUser resolves the signed-in user; `/api/lists/:listId` proves
-   * requireMember admits Members and rejects everyone else. Slice endpoints
-   * (creating a List, Items, Payments, …) build on these same helpers.
-   */
   app.get("/api/me", requireUser, (c) => c.json({ user: c.get("user") }));
 
   app.get("/api/lists/:listId", requireUser, requireMember, (c) => c.json({ list: c.get("list") }));
 
-  /**
-   * The lists index: everything the signed-in user owns or has joined. Reads
-   * go through the typed query helper so handlers never hand-roll SQL.
-   */
+  /** The lists index: everything the signed-in user owns or has joined. */
   app.get("/api/lists", requireUser, async (c) => {
-    const { db } = routeContext(c);
+    const { db } = getRequestContext(c);
     const lists = await getListsForMember(db, c.get("user").id);
     return c.json({ lists });
   });
@@ -112,7 +102,7 @@ export function createApp() {
    * an unknown List a 404, both from {@link requireMember}.
    */
   app.get("/api/lists/:listId/items", requireUser, requireMember, async (c) => {
-    const { db, listId } = routeContext(c);
+    const { db, listId } = getRequestContext(c);
     const items = await getItemsByList(db, listId);
     return c.json({ items });
   });
@@ -126,22 +116,22 @@ export function createApp() {
    * No Payment is ever touched here — ticking and money are unrelated acts.
    */
   app.put("/api/lists/:listId/items/:itemId", requireUser, requireMember, async (c) => {
-    const { db, listId, itemId } = routeContext(c);
-    const patch = parseItemPatch(await readJsonBody(c));
-    const existing = await getItemOnList(db, listId, itemId);
-    if (existing) {
-      const item = await updateItem(db, itemId, patch);
+    const { db, listId, itemId } = getRequestContext(c);
+    const itemUpdate = readItemUpdateFromBody(await readJsonBody(c));
+    const existingItem = await getItemBelongingToList(db, listId, itemId);
+    if (existingItem) {
+      const item = await updateItem(db, itemId, itemUpdate);
       return c.json({ item }, 200);
     }
-    if (!patch.name) {
+    if (!itemUpdate.name) {
       throw new BadRequestError("Item name is required");
     }
     const item = await createItem(db, {
       id: itemId,
       listId,
-      name: patch.name,
-      checked: patch.checked,
-      checkedAt: patch.checkedAt,
+      name: itemUpdate.name,
+      checked: itemUpdate.checked,
+      checkedAt: itemUpdate.checkedAt,
     });
     return c.json({ item }, 201);
   });
@@ -153,8 +143,8 @@ export function createApp() {
    * independent rows and are never touched by an Item delete.
    */
   app.delete("/api/lists/:listId/items/:itemId", requireUser, requireMember, async (c) => {
-    const { db, listId, itemId } = routeContext(c);
-    await getItemOnList(db, listId, itemId);
+    const { db, listId, itemId } = getRequestContext(c);
+    await getItemBelongingToList(db, listId, itemId);
     await deleteItem(db, itemId);
     return c.json({ ok: true });
   });
@@ -166,23 +156,23 @@ export function createApp() {
    * the caller is a Member.
    */
   app.put("/api/lists/:listId", requireUser, async (c) => {
-    const { db, listId } = routeContext(c);
-    const name = parseListName(await readJsonBody(c));
+    const { db, listId } = getRequestContext(c);
+    const newListName = readListNameFromBody(await readJsonBody(c));
     if (!listId) {
       throw new BadRequestError("List id is required");
     }
-    const existing = await getList(db, listId);
-    if (existing) {
-      if (!(await isMember(db, existing, c.get("user").id))) {
+    const existingList = await getList(db, listId);
+    if (existingList) {
+      if (!(await isMember(db, existingList, c.get("user").id))) {
         throw new ForbiddenError("You are not a member of this list");
       }
-      const list = await updateList(db, listId, { name });
+      const list = await updateList(db, listId, { name: newListName });
       return c.json({ list }, 200);
     }
     const list = await createList(db, {
       id: listId,
       ownerId: c.get("user").id,
-      name,
+      name: newListName,
     });
     return c.json({ list }, 201);
   });
@@ -190,13 +180,7 @@ export function createApp() {
   return app;
 }
 
-  /**
-   * Per-request plumbing shared by the List/Item endpoints: the D1 connection
-   * (only available inside a request, from `c.env`) and the `:listId` /
-   * `:itemId` path params as strings (empty when the route has none). Handlers
-   * destructure only the pieces they need.
-   */
-  function routeContext(c: AppContext) {
+  function getRequestContext(c: AppContext) {
     return {
       db: createD1Connection(c.env.devDb),
       listId: c.req.param("listId") ?? "",
@@ -210,59 +194,66 @@ export function createApp() {
    * exists; an Item that exists on a *different* List is a 404, so any endpoint
    * built on this helper can never read or write across Lists.
    */
-  async function getItemOnList(db: Db, listId: string, itemId: string) {
-    const existing = await getItem(db, itemId);
-    if (existing && existing.listId !== listId) {
+  async function getItemBelongingToList(db: Db, listId: string, itemId: string) {
+    const existingItem = await getItem(db, itemId);
+    if (existingItem && existingItem.listId !== listId) {
       throw new NotFoundError("Item not found");
     }
-    return existing;
+    return existingItem;
   }
 
-  /**
-   * The body of an Item upsert is a patch: `name` (required and non-blank when
-   * creating, optional-but-validated when updating), plus optional `checked` and
-   * `checkedAt`. Anything malformed collapses to the same 400.
-   */
-  function parseItemPatch(body: unknown) {
-    const body_ = body as { name?: unknown; checked?: unknown; checkedAt?: unknown };
-    const patch: ItemPatch = {};
-    if (body_.name !== undefined) {
-      if (typeof body_.name !== "string" || body_.name.trim() === "") {
-        throw new BadRequestError("Item name is required");
-      }
-      patch.name = body_.name.trim();
+  /** Type guard for an Item update body: name, checked, and checkedAt are all optional. */
+  function isItemUpdateBody(value: unknown): value is ItemUpdate {
+    if (typeof value !== "object" || value === null) {
+      return false;
     }
-    if (body_.checked !== undefined) {
-      if (typeof body_.checked !== "boolean") {
-        throw new BadRequestError("Item checked must be a boolean");
-      }
-      patch.checked = body_.checked;
+    const { name, checked, checkedAt } = value as Record<string, unknown>;
+    if (name !== undefined && (typeof name !== "string" || name.trim() === "")) {
+      return false;
     }
-    if (body_.checkedAt !== undefined) {
-      if (typeof body_.checkedAt !== "string") {
-        throw new BadRequestError("Item checkedAt must be a string");
-      }
-      patch.checkedAt = body_.checkedAt;
+    if (checked !== undefined && typeof checked !== "boolean") {
+      return false;
     }
-    return patch;
+    if (checkedAt !== undefined && typeof checkedAt !== "string") {
+      return false;
+    }
+    return true;
   }
 
-  interface ItemPatch {
+  function readItemUpdateFromBody(body: unknown) {
+    if (!isItemUpdateBody(body)) {
+      throw new BadRequestError("Invalid item update");
+    }
+    if (body.name === undefined) {
+      return { name: undefined, checked: body.checked, checkedAt: body.checkedAt };
+    }
+    return {
+      name: body.name.trim(),
+      checked: body.checked,
+      checkedAt: body.checkedAt,
+    };
+  }
+
+  interface ItemUpdate {
     name?: string;
     checked?: boolean;
     checkedAt?: string;
   }
 
-  /**
-   * The body of a List upsert is a single required field. A missing, malformed,
-   * or blank body collapses to the same 400 so every client failure is legible.
-   */
-  function parseListName(body: unknown) {
-    const name = (body as { name?: unknown }).name;
-    if (typeof name !== "string" || name.trim() === "") {
+  /** Type guard for a List upsert body: name is required and non-blank. */
+  function isListNameBody(value: unknown): value is { name: string } {
+    if (typeof value !== "object" || value === null) {
+      return false;
+    }
+    const { name } = value as Record<string, unknown>;
+    return typeof name === "string" && name.trim() !== "";
+  }
+
+  function readListNameFromBody(body: unknown) {
+    if (!isListNameBody(body)) {
       throw new BadRequestError("List name is required");
     }
-    return name.trim();
+    return body.name.trim();
   }
 
   async function readJsonBody(c: AppContext) {
