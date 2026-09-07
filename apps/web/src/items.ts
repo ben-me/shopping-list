@@ -47,5 +47,3 @@ export async function syncItemsFromServer(db: ShoppingDb, listId: string): Promi
     await db.syncItem(item);
   }
 }
-
-const now = () => new Date().toISOString();
