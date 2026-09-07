@@ -10,7 +10,7 @@ import { createMemoryHistory } from "vue-router";
 import App from "../App.vue";
 import { db } from "../db";
 import { createAppRouter } from "../router";
-import { _resetSession, session, type SessionUser } from "../session";
+import { _resetSession, type SessionUser } from "../session";
 
 const user: SessionUser = {
   id: "user-1",
