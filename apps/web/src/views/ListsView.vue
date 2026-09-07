@@ -5,6 +5,7 @@ import type { List } from "@shopping-list/api/domain";
 import { db } from "../db";
 import { createList, syncFromServer, syncOutbox } from "../lists";
 import { session, signOut } from "../session";
+import { ignoreRejection, logRejection } from "../utils/fireAndForget";
 
 const router = useRouter();
 const lists = ref<List[]>([]);
@@ -39,9 +40,14 @@ async function onSignOut() {
 }
 
 onMounted(() => {
-  void loadLists();
-  void syncFromServer(db).catch(() => undefined);
-  void syncOutbox(db).catch(() => undefined);
+  // Paint the local state right away, then reconcile with the server. Drain
+  // the outbox BEFORE pulling from the server so a pull cannot overwrite the
+  // local state that queued writes describe (same invariant as ListView).
+  void logRejection(loadLists(), "Loading the lists");
+  void (async () => {
+    await ignoreRejection(syncOutbox(db));
+    await ignoreRejection(syncFromServer(db));
+  })();
 });
 </script>
 
