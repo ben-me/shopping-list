@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, reactive, ref } from "vue";
+import { computed, onMounted, ref } from "vue";
 import { useRoute } from "vue-router";
 import type { Item } from "@shopping-list/api/domain";
 import { db } from "../db";
@@ -11,7 +11,7 @@ const route = useRoute();
 const listId = computed(() => String(route.params.listId ?? ""));
 const listName = ref<string | null>(null);
 const items = ref<Item[]>([]);
-const form = reactive({
+const form = ref({
   name: "",
   error: null as string | null,
 });
@@ -26,43 +26,32 @@ async function loadItems() {
 }
 
 async function onAdd() {
-  form.error = null;
+  form.value.error = null;
   try {
-    await addItem(db, listId.value, form.name);
-    form.name = "";
-    // logRejection never rejects, so a reload failure cannot be misreported
-    // here as "could not add the item".
+    await addItem(db, listId.value, form.value.name);
+    form.value.name = "";
     await logRejection(loadItems(), "Loading the items");
-    void ignoreRejection(syncOutbox(db));
+    ignoreRejection(syncOutbox(db));
   } catch (err) {
-    form.error = err instanceof Error ? err.message : "Could not add the item";
+    form.value.error = err instanceof Error ? err.message : "Could not add the item";
   }
 }
 
 async function onToggle(item: Item, checked: boolean) {
   await logRejection(setItemChecked(db, item, checked), "Ticking the item");
   await logRejection(loadItems(), "Loading the items");
-  // While online, flush the queued write right away so a quick reload (or a
-  // lost page) cannot drop it. Offline the drain fails harmlessly and the
-  // entry is retried on the next mount.
-  void ignoreRejection(syncOutbox(db));
+  ignoreRejection(syncOutbox(db));
 }
 
 async function onRemove(item: Item) {
   await logRejection(removeItem(db, item), "Removing the item");
   await logRejection(loadItems(), "Loading the items");
-  void ignoreRejection(syncOutbox(db));
+  ignoreRejection(syncOutbox(db));
 }
 
 onMounted(() => {
-  // Paint the local state right away, then reconcile with the server.
-  void logRejection(loadList(), "Loading the list");
-  void logRejection(loadItems(), "Loading the items");
-  // Drain the outbox BEFORE pulling the server's Items: any writes still
-  // queued from an earlier session (e.g. an in-flight sync killed by a
-  // reload) must reach the server first, otherwise the pull overwrites the
-  // local state they describe and the change is lost. Once the queue is
-  // flushed, the server is authoritative and wins.
+  logRejection(loadList(), "Loading the list");
+  logRejection(loadItems(), "Loading the items");
   void (async () => {
     await ignoreRejection(syncOutbox(db));
     await ignoreRejection(syncItemsFromServer(db, listId.value));
