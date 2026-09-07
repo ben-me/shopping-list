@@ -73,27 +73,27 @@ onMounted(() => {
 
 <template>
   <h1>{{ listName ?? "List" }}</h1>
-  <p v-if="items.length === 0" data-testid="no-items">Nothing on this list yet.</p>
+  <p v-if="items.length === 0">Nothing on this list yet.</p>
   <ul>
     <li v-for="item in items" :key="item.id">
       <label>
         <input
           type="checkbox"
-          data-testid="item-checkbox"
+          name="checked"
           :checked="item.checked"
           @change="onToggle(item, ($event.target as HTMLInputElement).checked)"
         />
-        <span data-testid="item-name" :class="{ bought: item.checked }">{{ item.name }}</span>
+        <span :class="{ bought: item.checked }">{{ item.name }}</span>
       </label>
-      <button type="button" data-testid="remove-item" @click="onRemove(item)">Remove</button>
+      <button type="button" @click="onRemove(item)">Remove</button>
     </li>
   </ul>
-  <form data-testid="add-item" @submit.prevent="onAdd">
+  <form @submit.prevent="onAdd">
     <label>
       Item name
-      <input v-model="form.name" data-testid="item-name-input" />
+      <input v-model="form.name" name="item" />
     </label>
     <button type="submit">Add an Item</button>
   </form>
-  <p v-if="form.error" data-testid="add-item-error">{{ form.error }}</p>
+  <p v-if="form.error">{{ form.error }}</p>
 </template>

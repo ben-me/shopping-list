@@ -11,7 +11,7 @@ import type { List } from "@shopping-list/api/domain";
 import App from "../App.vue";
 import { db } from "../db";
 import { createAppRouter } from "../router";
-import { _resetSession, session, type SessionUser } from "../session";
+import { _resetSession, type SessionUser } from "../session";
 
 const user: SessionUser = {
   id: "user-1",
@@ -95,7 +95,7 @@ describe("ListsView", () => {
 
     const wrapper = mount(App, { global: { plugins: [router] } });
     await flushPromises();
-    await wrapper.find('[data-testid="list-name"]').setValue("Weekend shop");
+    await wrapper.find('input[name="name"]').setValue("Weekend shop");
     await wrapper.find("form").trigger("submit");
     await flushPromises();
     await settle();
@@ -125,7 +125,9 @@ describe("ListsView", () => {
 
     const wrapper = mount(App, { global: { plugins: [router] } });
     await flushPromises();
-    await wrapper.find('[data-testid="sign-out"]').trigger("click");
+    const signOutButton = wrapper.findAll("button").find((b) => b.text() === "Sign out");
+    expect(signOutButton).toBeDefined();
+    await signOutButton?.trigger("click");
     await flushPromises();
     expect(router.currentRoute.value.name).toBe("sign-in");
     expect(wrapper.text()).toContain("Sign in");

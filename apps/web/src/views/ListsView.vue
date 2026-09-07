@@ -54,10 +54,10 @@ onMounted(() => {
 <template>
   <h1>Shopping Lists</h1>
   <div v-if="session.user">
-    <p data-testid="signed-in-as">Signed in as {{ session.user.name }}</p>
-    <button type="button" data-testid="sign-out" @click="onSignOut">Sign out</button>
+    <p>Signed in as {{ session.user.name }}</p>
+    <button type="button" @click="onSignOut">Sign out</button>
   </div>
-  <p v-if="lists.length === 0" data-testid="empty">Your lists will appear here.</p>
+  <p v-if="lists.length === 0">Your lists will appear here.</p>
   <ul>
     <li v-for="list in lists" :key="list.id">
       <RouterLink :to="{ name: 'list', params: { listId: list.id } }">{{ list.name }}</RouterLink>
@@ -66,9 +66,9 @@ onMounted(() => {
   <form @submit.prevent="onCreate">
     <label>
       List name
-      <input v-model="name" data-testid="list-name" />
+      <input v-model="name" name="name" />
     </label>
     <button type="submit" :disabled="creating || !session.user">Create a List</button>
   </form>
-  <p v-if="error" data-testid="create-error">{{ error }}</p>
+  <p v-if="error">{{ error }}</p>
 </template>
