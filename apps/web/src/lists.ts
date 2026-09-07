@@ -23,15 +23,17 @@ export async function syncOutbox(db: ShoppingDb): Promise<void> {
   await db.drainOutbox(async (entry) => {
     if (entry.targetType === "list") {
       const list = await db.getList(entry.targetId);
-      if (list) {
-        const { list: serverList } = await apiFetch<{ list: List }>(`/api/lists/${list.id}`, {
-          method: "PUT",
-          body: { name: list.name },
-        });
-        if (serverList?.id) {
-          await db.syncList(serverList);
-        }
+      if (!list) {
+        return;
       }
+      const { list: serverList } = await apiFetch<{ list: List }>(`/api/lists/${list.id}`, {
+        method: "PUT",
+        body: { name: list.name },
+      });
+      if (!serverList?.id) {
+        return;
+      }
+      await db.syncList(serverList);
       return;
     }
     if (entry.targetType === "item") {
@@ -42,18 +44,20 @@ export async function syncOutbox(db: ShoppingDb): Promise<void> {
         return;
       }
       const item = await db.getItem(entry.targetId);
-      if (item) {
-        const { item: serverItem } = await apiFetch<{ item: Item }>(
-          `/api/lists/${item.listId}/items/${item.id}`,
-          {
-            method: "PUT",
-            body: { name: item.name, checked: item.checked, checkedAt: item.checkedAt },
-          },
-        );
-        if (serverItem?.id) {
-          await db.syncItem(serverItem);
-        }
+      if (!item) {
+        return;
       }
+      const { item: serverItem } = await apiFetch<{ item: Item }>(
+        `/api/lists/${item.listId}/items/${item.id}`,
+        {
+          method: "PUT",
+          body: { name: item.name, checked: item.checked, checkedAt: item.checkedAt },
+        },
+      );
+      if (!serverItem?.id) {
+        return;
+      }
+      await db.syncItem(serverItem);
       return;
     }
     throw new Error(`Unsupported outbox target ${entry.targetType}`);
@@ -62,7 +66,13 @@ export async function syncOutbox(db: ShoppingDb): Promise<void> {
 
 export async function syncFromServer(db: ShoppingDb): Promise<void> {
   const { lists } = await apiFetch<{ lists: List[] }>("/api/lists");
+  if (!lists) {
+    return;
+  }
   for (const list of lists) {
+    if (!list?.id) {
+      continue;
+    }
     await db.syncList(list);
   }
 }
