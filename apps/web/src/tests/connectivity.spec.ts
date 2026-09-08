@@ -3,7 +3,7 @@ import "fake-indexeddb/auto";
 import type { List } from "@shopping-list/api/domain";
 import { db } from "../db";
 import { addItem } from "../items";
-import { online, startSyncWatcher } from "../connectivity";
+import { onSyncPass, online, runSyncPass, startSyncWatcher } from "../connectivity";
 
 const list: List = {
   id: "list-1",
@@ -131,5 +131,70 @@ describe("startSyncWatcher", () => {
 
     expect(fetchImpl).not.toHaveBeenCalled();
     expect(await db.pendingOutboxEntries()).toHaveLength(1);
+  });
+
+  it("fans out to per-view syncs after the shared drain and pull", async () => {
+    const { requests } = stubServer((url) =>
+      url === "/api/lists" ? jsonResponse({ lists: [] }) : undefined,
+    );
+    let viewSyncCalls = 0;
+    const stopViewSync = onSyncPass(async () => {
+      viewSyncCalls += 1;
+    });
+    watch();
+
+    window.dispatchEvent(new Event("online"));
+    await vi.waitFor(() => {
+      expect(viewSyncCalls).toBe(1);
+    });
+
+    // The shared pull (Lists) happened before the per-view sync.
+    const get = requests.find((r) => r.init?.method === undefined || r.init?.method === "GET");
+    expect(get?.url).toBe("/api/lists");
+    stopViewSync();
+  });
+
+  it("collapses concurrent reconnect triggers into one pass — the outbox drains once", async () => {
+    stubServer(() => new Response(null, { status: 503 }));
+    const item = await addItem(db, list.id, "Milk");
+    const { requests } = stubServer();
+    watch();
+
+    // Two triggers land in the same tick (e.g. `online` racing a visibility
+    // change): the second must collapse into the pass already running.
+    window.dispatchEvent(new Event("online"));
+    window.dispatchEvent(new Event("online"));
+
+    await vi.waitFor(async () => {
+      await expect(await db.pendingOutboxEntries()).toHaveLength(0);
+    });
+
+    const puts = requests.filter((r) => r.init?.method === "PUT");
+    expect(puts).toHaveLength(1);
+    expect(puts[0]?.url).toBe(`/api/lists/${list.id}/items/${item.id}`);
+  });
+
+  it("skips a pass requested while another is in flight", async () => {
+    // A gated server keeps the first pass in flight until the test releases it.
+    let release: (() => void) | undefined;
+    const gate = new Promise<void>((resolve) => (release = resolve));
+    await addItem(db, list.id, "Milk");
+    const { requests } = stubServer(async () => {
+      await gate;
+      return jsonResponse({ lists: [] });
+    });
+    watch();
+
+    window.dispatchEvent(new Event("online")); // pass A: stuck on its first request
+    await new Promise((resolve) => setTimeout(resolve, 10));
+    await expect(runSyncPass(db)).resolves.toBeUndefined(); // collapsed into pass A
+    release?.();
+
+    await vi.waitFor(async () => {
+      await expect(await db.pendingOutboxEntries()).toHaveLength(0);
+    });
+    // Exactly one drain happened: without the guard, pass B would PUT the
+    // same entry again.
+    expect(requests.filter((r) => r.init?.method === "PUT")).toHaveLength(1);
   });
 });

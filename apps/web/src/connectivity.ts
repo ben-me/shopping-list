@@ -10,27 +10,67 @@ import { ignoreRejection } from "./utils/fireAndForget";
  */
 export const online = ref(true);
 
+/** A per-view sync that runs after the shared part of every pass. */
+type ViewSync = (db: ShoppingDb) => Promise<void>;
+
+const viewSyncs = new Set<ViewSync>();
+
 /**
- * One full Sync pass: push every pending outbox write up as a patch, then
- * pull the accumulated remote state back over the local copy. Fails (and is
- * silently ignored by callers) while offline — the outbox simply keeps the
- * queued writes for the next attempt.
+ * Register a per-view sync (e.g. re-pull the open List's Items) to run after
+ * the shared drain + Lists pull of every pass. Returns a cleanup that
+ * unregisters it.
  */
-export async function syncNow(db: ShoppingDb): Promise<void> {
-  await syncOutbox(db);
-  await syncFromServer(db);
+export function onSyncPass(viewSync: ViewSync): () => void {
+  viewSyncs.add(viewSync);
+  return () => {
+    viewSyncs.delete(viewSync);
+  };
+}
+
+let syncPassInFlight = false;
+
+/**
+ * One Sync pass — the single place that owns the ordering invariant: the
+ * outbox drains BEFORE anything is pulled, so a pull can never overwrite the
+ * local state that queued writes describe. After the shared Lists pull, every
+ * registered per-view sync runs in turn.
+ *
+ * A pass already in flight wins: concurrent triggers (the browser firing
+ * `online` twice, a reconnect racing a visibility change) collapse into the
+ * running pass instead of double-draining the same outbox entries. Fails
+ * (and is silently ignored by callers) while offline — the outbox simply
+ * keeps the queued writes for the next attempt.
+ */
+export async function runSyncPass(db: ShoppingDb): Promise<void> {
+  if (syncPassInFlight) {
+    return;
+  }
+  syncPassInFlight = true;
+  try {
+    await syncOutbox(db);
+    await syncFromServer(db);
+    for (const viewSync of viewSyncs) {
+      await ignoreRejection(viewSync(db));
+    }
+  } finally {
+    syncPassInFlight = false;
+  }
 }
 
 /**
  * Keep the device in sync without user action. Installs listeners that:
  *
  * - mirror the browser's connection state into {@link online}; and
- * - run {@link syncNow} when the connection returns or the app becomes
- *   visible again while online (the classic mobile "walked back into
- *   signal" moment).
+ * - run one {@link runSyncPass} when the connection returns or the app
+ *   becomes visible again while online (the classic mobile "walked back
+ *   into signal" moment — mobile browsers do not always fire `online`
+ *   reliably, and the event can fire while the app is hidden).
  *
- * Every sync failure is swallowed — being offline is normal, and the outbox
- * retries on the next trigger. Returns a cleanup that removes the listeners.
+ * This watcher is the only reconnect trigger in the app; views subscribe
+ * with {@link onSyncPass} rather than listening for `online` themselves, so
+ * a reconnect drains the outbox exactly once. Every sync failure is
+ * swallowed — being offline is normal, and the outbox retries on the next
+ * trigger. Returns a cleanup that removes the listeners.
  */
 export function startSyncWatcher(db: ShoppingDb): () => void {
   const markOffline = () => {
@@ -38,12 +78,12 @@ export function startSyncWatcher(db: ShoppingDb): () => void {
   };
   const syncIfOnline = () => {
     if (online.value && document.visibilityState === "visible") {
-      void ignoreRejection(syncNow(db));
+      void ignoreRejection(runSyncPass(db));
     }
   };
   const markOnlineAndSync = () => {
     online.value = true;
-    void ignoreRejection(syncNow(db));
+    void ignoreRejection(runSyncPass(db));
   };
 
   online.value = navigator.onLine;

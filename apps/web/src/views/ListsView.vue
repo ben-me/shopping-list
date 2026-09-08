@@ -3,7 +3,8 @@ import { onMounted, ref } from "vue";
 import { useRouter } from "vue-router";
 import type { List } from "@shopping-list/api/domain";
 import { db } from "../db";
-import { createList, syncFromServer, syncOutbox } from "../lists";
+import { createList } from "../lists";
+import { runSyncPass } from "../connectivity";
 import { session, signOut } from "../session";
 import { ignoreRejection, logRejection } from "../utils/fireAndForget";
 
@@ -41,14 +42,9 @@ async function onSignOut() {
 }
 
 onMounted(() => {
-  // Paint the local state right away, then reconcile with the server. Drain
-  // the outbox BEFORE pulling from the server so a pull cannot overwrite the
-  // local state that queued writes describe (same invariant as ListView).
+  // Paint the local state right away, then reconcile with the server.
   void logRejection(loadLists(), "Loading the lists");
-  void (async () => {
-    await ignoreRejection(syncOutbox(db));
-    await ignoreRejection(syncFromServer(db));
-  })();
+  void ignoreRejection(runSyncPass(db));
 });
 </script>
 

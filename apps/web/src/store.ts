@@ -115,14 +115,10 @@ export class ShoppingDb extends Dexie {
    *   snapshot; the queued write wins on push and the echo comes back then.
    */
   async syncItem(item: Item): Promise<void> {
-    const [pending, local] = await Promise.all([
-      this.pendingOutboxEntries(),
+    const [owesDelete, local] = await Promise.all([
+      this.hasPendingDelete(item.id),
       this.items.get(item.id),
     ]);
-    const owesDelete = pending.some(
-      (entry) =>
-        entry.targetType === "item" && entry.targetId === item.id && entry.operation === "delete",
-    );
     if (owesDelete) {
       return;
     }
@@ -130,6 +126,23 @@ export class ShoppingDb extends Dexie {
       return;
     }
     await this.items.put(item);
+  }
+
+  /**
+   * Indexed point lookup: does this Item still have an unsynced delete in
+   * the outbox? The `targetId` index keeps this O(log n) per synced Item
+   * instead of scanning every outbox row.
+   */
+  private async hasPendingDelete(itemId: string): Promise<boolean> {
+    const pendingDeletes = await this.outbox
+      .where("targetId")
+      .equals(itemId)
+      .filter(
+        (entry) =>
+          entry.targetType === "item" && entry.operation === "delete" && entry.syncedAt === null,
+      )
+      .count();
+    return pendingDeletes > 0;
   }
 
   async syncMembership(membership: Membership): Promise<void> {
