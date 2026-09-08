@@ -97,9 +97,11 @@ export async function createItem(db: Db, input: CreateItemInput): Promise<Item> 
   const [row] = await db
     .insert(schema.items)
     .values({
-      id: newId(),
+      id: input.id ?? newId(),
       listId: input.listId,
       name: input.name,
+      checked: input.checked ?? false,
+      checkedAt: input.checked === true ? (input.checkedAt ?? timestamp) : undefined,
       createdAt: timestamp,
       updatedAt: timestamp,
     })
@@ -313,8 +315,12 @@ export interface UpdateListInput {
 }
 
 export interface CreateItemInput {
+  /** The client picks the id when creating offline-first so Sync can upsert. */
+  id?: string;
   listId: string;
   name: string;
+  checked?: boolean;
+  checkedAt?: string;
 }
 
 export interface UpdateItemInput {

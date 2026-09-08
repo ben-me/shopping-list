@@ -10,7 +10,7 @@ import { createMemoryHistory } from "vue-router";
 import App from "../App.vue";
 import { db } from "../db";
 import { createAppRouter } from "../router";
-import { _resetSession, session, type SessionUser } from "../session";
+import { _resetSession, type SessionUser } from "../session";
 
 const user: SessionUser = {
   id: "user-1",
@@ -64,8 +64,8 @@ describe("SignInView", () => {
     await router.isReady();
 
     const wrapper = mount(App, { global: { plugins: [router] } });
-    await wrapper.find('[data-testid="email"]').setValue("[EMAIL]");
-    await wrapper.find('[data-testid="password"]').setValue("password123");
+    await wrapper.find('input[name="email"]').setValue("[EMAIL]");
+    await wrapper.find('input[name="password"]').setValue("password123");
     await wrapper.find("form").trigger("submit");
     await flushPromises();
 
@@ -90,9 +90,9 @@ describe("SignInView", () => {
 
     const wrapper = mount(App, { global: { plugins: [router] } });
     await wrapper.find("button[type=button]").trigger("click");
-    await wrapper.find('[data-testid="name"]').setValue("Test User");
-    await wrapper.find('[data-testid="email"]').setValue("[EMAIL]");
-    await wrapper.find('[data-testid="password"]').setValue("password123");
+    await wrapper.find('input[name="name"]').setValue("Test User");
+    await wrapper.find('input[name="email"]').setValue("[EMAIL]");
+    await wrapper.find('input[name="password"]').setValue("password123");
     await wrapper.find("form").trigger("submit");
     await flushPromises();
 
@@ -110,8 +110,8 @@ describe("SignInView", () => {
     await router.isReady();
 
     const wrapper = mount(App, { global: { plugins: [router] } });
-    await wrapper.find('[data-testid="email"]').setValue("[EMAIL]");
-    await wrapper.find('[data-testid="password"]').setValue("wrong");
+    await wrapper.find('input[name="email"]').setValue("[EMAIL]");
+    await wrapper.find('input[name="password"]').setValue("wrong");
     await wrapper.find("form").trigger("submit");
     await flushPromises();
 

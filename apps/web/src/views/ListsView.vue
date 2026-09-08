@@ -5,6 +5,7 @@ import type { List } from "@shopping-list/api/domain";
 import { db } from "../db";
 import { createList, syncFromServer, syncOutbox } from "../lists";
 import { session, signOut } from "../session";
+import { ignoreRejection, logRejection } from "../utils/fireAndForget";
 
 const router = useRouter();
 const lists = ref<List[]>([]);
@@ -24,13 +25,14 @@ async function onCreate() {
   creating.value = true;
   try {
     await createList(db, session.user.id, name.value);
-    name.value = "";
-    await loadLists();
   } catch (err) {
     error.value = err instanceof Error ? err.message : "Could not create the list";
+    return;
   } finally {
     creating.value = false;
   }
+  name.value = "";
+  await logRejection(loadLists(), "Loading the lists");
 }
 
 async function onSignOut() {
@@ -39,19 +41,24 @@ async function onSignOut() {
 }
 
 onMounted(() => {
-  void loadLists();
-  void syncFromServer(db).catch(() => undefined);
-  void syncOutbox(db).catch(() => undefined);
+  // Paint the local state right away, then reconcile with the server. Drain
+  // the outbox BEFORE pulling from the server so a pull cannot overwrite the
+  // local state that queued writes describe (same invariant as ListView).
+  void logRejection(loadLists(), "Loading the lists");
+  void (async () => {
+    await ignoreRejection(syncOutbox(db));
+    await ignoreRejection(syncFromServer(db));
+  })();
 });
 </script>
 
 <template>
   <h1>Shopping Lists</h1>
   <div v-if="session.user">
-    <p data-testid="signed-in-as">Signed in as {{ session.user.name }}</p>
-    <button type="button" data-testid="sign-out" @click="onSignOut">Sign out</button>
+    <p>Signed in as {{ session.user.name }}</p>
+    <button type="button" @click="onSignOut">Sign out</button>
   </div>
-  <p v-if="lists.length === 0" data-testid="empty">Your lists will appear here.</p>
+  <p v-if="lists.length === 0">Your lists will appear here.</p>
   <ul>
     <li v-for="list in lists" :key="list.id">
       <RouterLink :to="{ name: 'list', params: { listId: list.id } }">{{ list.name }}</RouterLink>
@@ -60,9 +67,9 @@ onMounted(() => {
   <form @submit.prevent="onCreate">
     <label>
       List name
-      <input v-model="name" data-testid="list-name" />
+      <input v-model="name" name="name" />
     </label>
     <button type="submit" :disabled="creating || !session.user">Create a List</button>
   </form>
-  <p v-if="error" data-testid="create-error">{{ error }}</p>
+  <p v-if="error">{{ error }}</p>
 </template>
