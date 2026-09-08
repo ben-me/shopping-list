@@ -85,7 +85,7 @@ describe("ListView", () => {
     await flushPromises();
 
     expect(wrapper.text()).toContain("Household");
-    expect(wrapper.find('ul li span').text()).toContain("Milk");
+    expect(wrapper.find("ul li span").text()).toContain("Milk");
   });
 
   it("adds an Item and it appears immediately, even when the server is unreachable", async () => {
@@ -94,12 +94,12 @@ describe("ListView", () => {
     const wrapper = await mountList();
     await flushPromises();
     await wrapper.find('input[name="item"]').setValue("Bread");
-    await wrapper.find('form').trigger("submit");
+    await wrapper.find("form").trigger("submit");
     await flushPromises();
     await settle();
     await settle();
 
-    const names = wrapper.findAll('ul li span').map((n) => n.text());
+    const names = wrapper.findAll("ul li span").map((n) => n.text());
     expect(names).toContain("Bread");
     expect((await db.getItems(list.id)).map((i) => i.name)).toEqual(["Bread"]);
     expect(await db.pendingOutboxEntries()).toHaveLength(1);
@@ -111,7 +111,7 @@ describe("ListView", () => {
     const wrapper = await mountList();
     await flushPromises();
     await wrapper.find('input[name="item"]').setValue("Milk");
-    await wrapper.find('form').trigger("submit");
+    await wrapper.find("form").trigger("submit");
     await flushPromises();
     await settle();
 
@@ -124,7 +124,9 @@ describe("ListView", () => {
     await flushPromises();
     await settle();
 
-    expect((remounted.find('input[type="checkbox"]').element as HTMLInputElement).checked).toBe(true);
+    expect((remounted.find('input[type="checkbox"]').element as HTMLInputElement).checked).toBe(
+      true,
+    );
     const stored = (await db.getItems(list.id))[0];
     expect(stored).toBeDefined();
     expect(stored).toMatchObject({ name: "Milk", checked: true });
@@ -137,7 +139,7 @@ describe("ListView", () => {
     const wrapper = await mountList();
     await flushPromises();
     await wrapper.find('input[name="item"]').setValue("Milk");
-    await wrapper.find('form').trigger("submit");
+    await wrapper.find("form").trigger("submit");
     await flushPromises();
     await settle();
 
@@ -162,15 +164,15 @@ describe("ListView", () => {
     const wrapper = await mountList();
     await flushPromises();
     await wrapper.find('input[name="item"]').setValue("Milk");
-    await wrapper.find('form').trigger("submit");
+    await wrapper.find("form").trigger("submit");
     await flushPromises();
     await settle();
 
-    await wrapper.find('li button').trigger("click");
+    await wrapper.find("li button").trigger("click");
     await flushPromises();
     await settle();
 
-    expect(wrapper.findAll('ul li span')).toHaveLength(0);
+    expect(wrapper.findAll("ul li span")).toHaveLength(0);
     expect(await db.getItems(list.id)).toHaveLength(0);
   });
 
@@ -180,7 +182,7 @@ describe("ListView", () => {
     const wrapper = await mountList();
     await flushPromises();
     await wrapper.find('input[name="item"]').setValue("Milk");
-    await wrapper.find('form').trigger("submit");
+    await wrapper.find("form").trigger("submit");
     await flushPromises();
     await settle();
     await wrapper.find('input[type="checkbox"]').setValue();

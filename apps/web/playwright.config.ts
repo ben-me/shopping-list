@@ -33,7 +33,8 @@ export default defineConfig({
 
   webServer: [
     {
-      command: "pnpm --filter @shopping-list/api run db:migrate && pnpm --filter @shopping-list/api run dev",
+      command:
+        "pnpm --filter @shopping-list/api run db:migrate && pnpm --filter @shopping-list/api run dev",
       url: API_HEALTH,
       reuseExistingServer: !process.env.CI,
       timeout: 120 * 1000,

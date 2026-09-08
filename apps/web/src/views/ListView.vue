@@ -29,12 +29,13 @@ async function onAdd() {
   form.value.error = null;
   try {
     await addItem(db, listId.value, form.value.name);
-    form.value.name = "";
-    await logRejection(loadItems(), "Loading the items");
-    ignoreRejection(syncOutbox(db));
   } catch (err) {
     form.value.error = err instanceof Error ? err.message : "Could not add the item";
+    return;
   }
+  form.value.name = "";
+  await logRejection(loadItems(), "Loading the items");
+  ignoreRejection(syncOutbox(db));
 }
 
 async function onToggle(item: Item, checked: boolean) {

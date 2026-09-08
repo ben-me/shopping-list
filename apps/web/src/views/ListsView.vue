@@ -25,13 +25,14 @@ async function onCreate() {
   creating.value = true;
   try {
     await createList(db, session.user.id, name.value);
-    name.value = "";
-    await loadLists();
   } catch (err) {
     error.value = err instanceof Error ? err.message : "Could not create the list";
+    return;
   } finally {
     creating.value = false;
   }
+  name.value = "";
+  await logRejection(loadLists(), "Loading the lists");
 }
 
 async function onSignOut() {
