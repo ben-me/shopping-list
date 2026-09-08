@@ -11,7 +11,6 @@ import App from "../App.vue";
 import { db } from "../db";
 import { createAppRouter } from "../router";
 import { _resetSession, type SessionUser } from "../session";
-
 const user: SessionUser = {
   id: "user-1",
   name: "Test User",
@@ -86,5 +85,25 @@ describe("App", () => {
 
     expect(wrapper.text()).toContain("Household");
     expect(wrapper.text()).toContain("Nothing on this list yet.");
+  });
+
+  it("shows the offline banner while the device has no connection", async () => {
+    stubSignedInSession();
+    const router = createAppRouter(createMemoryHistory());
+    await router.push("/");
+    await router.isReady();
+
+    const wrapper = mount(App, { global: { plugins: [router] } });
+    await flushPromises();
+    expect(wrapper.find("[data-testid='offline-banner']").exists()).toBe(false);
+
+    window.dispatchEvent(new Event("offline"));
+    await flushPromises();
+    expect(wrapper.find("[data-testid='offline-banner']").exists()).toBe(true);
+    expect(wrapper.text()).toContain("Offline");
+
+    window.dispatchEvent(new Event("online"));
+    await flushPromises();
+    expect(wrapper.find("[data-testid='offline-banner']").exists()).toBe(false);
   });
 });

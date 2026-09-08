@@ -272,4 +272,49 @@ describe("item endpoints", () => {
     const del = await deleteItem(member.cookie, listId, "item-soap");
     expect(del.status).toBe(200);
   });
+
+  it("persists two offline adds of 'the same' Item as two Items — no dedupe", async () => {
+    const { cookie } = await signUp();
+    const listId = uniq("list");
+    await putList(cookie, listId, "Household");
+
+    // Two devices each generate their own id for "the same" Item while
+    // offline; both are real events and both must survive the Sync.
+    await putItem(cookie, listId, uniq("item"), { name: "Milk" });
+    await putItem(cookie, listId, uniq("item"), { name: "Milk" });
+
+    const res = await getItems(cookie, listId);
+    expect(res.status).toBe(200);
+    const { items } = (await res.json()) as { items: Item[] };
+    expect(items).toHaveLength(2);
+    expect(items.map((i) => i.name)).toEqual(["Milk", "Milk"]);
+  });
+
+  it("converges on last-write-wins per field when two devices edit one Item", async () => {
+    const { cookie } = await signUp();
+    const listId = uniq("list");
+    const itemId = uniq("item");
+    await putList(cookie, listId, "Household");
+    await putItem(cookie, listId, itemId, { name: "Milk" });
+
+    // Device A ticks the Item off.
+    await putItem(cookie, listId, itemId, { checked: true });
+
+    // Device B renames it, sending only the field it changed.
+    const rename = await putItem(cookie, listId, itemId, { name: "Oat milk" });
+    expect(rename.status).toBe(200);
+
+    // B's write wins for `name`; A's write survives for `checked` — fields
+    // reconcile independently, never record-wide.
+    let items = ((await (await getItems(cookie, listId)).json()) as { items: Item[] }).items;
+    expect(items).toHaveLength(1);
+    expect(items[0]).toMatchObject({ name: "Oat milk", checked: true });
+    expect(items[0]?.checkedAt).toBeTruthy();
+
+    // Device A un-ticks: `checked` flips back while `name` keeps B's value.
+    await putItem(cookie, listId, itemId, { checked: false });
+    items = ((await (await getItems(cookie, listId)).json()) as { items: Item[] }).items;
+    expect(items[0]).toMatchObject({ name: "Oat milk", checked: false });
+    expect(items[0]?.checkedAt).toBeUndefined();
+  });
 });
