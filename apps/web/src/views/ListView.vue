@@ -1,7 +1,8 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from "vue";
+import { computed, onMounted, onUnmounted, ref } from "vue";
 import { useRoute } from "vue-router";
 import type { Item } from "@shopping-list/api/domain";
+import { onSyncPass, runSyncPass } from "../connectivity";
 import { db } from "../db";
 import { addItem, removeItem, setItemChecked, syncItemsFromServer } from "../items";
 import { syncOutbox } from "../lists";
@@ -50,14 +51,25 @@ async function onRemove(item: Item) {
   ignoreRejection(syncOutbox(db));
 }
 
+let stopSyncPass: (() => void) | null = null;
+
 onMounted(() => {
   logRejection(loadList(), "Loading the list");
   logRejection(loadItems(), "Loading the items");
-  void (async () => {
-    await ignoreRejection(syncOutbox(db));
+  // Re-pull this List's Items after every sync pass (the mount pass and
+  // every reconnect): the shared pass drains and pulls Lists, then fans
+  // out to this per-view sync. `listId` is read at call time, so the pull
+  // follows the route even if the component is reused for another List.
+  stopSyncPass = onSyncPass(async (db) => {
     await ignoreRejection(syncItemsFromServer(db, listId.value));
     await logRejection(loadItems(), "Loading the items");
-  })();
+  });
+  void ignoreRejection(runSyncPass(db));
+});
+
+onUnmounted(() => {
+  stopSyncPass?.();
+  stopSyncPass = null;
 });
 </script>
 

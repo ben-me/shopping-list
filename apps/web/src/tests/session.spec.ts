@@ -60,6 +60,15 @@ function stubFetch(response: Response) {
   return fetchImpl;
 }
 
+/** Simulates the network being down: the fetch itself fails. */
+function stubUnreachableFetch() {
+  const fetchImpl = vi.fn<typeof fetch>(async () => {
+    throw new TypeError("Failed to fetch");
+  });
+  vi.stubGlobal("fetch", fetchImpl);
+  return fetchImpl;
+}
+
 function callsTo(path: string) {
   return fetchImpl.mock.calls.filter(([url]) => String(url).includes(path));
 }
@@ -68,6 +77,7 @@ let fetchImpl: ReturnType<typeof stubFetch>;
 
 function resetSession() {
   _resetSession();
+  localStorage.clear();
 }
 
 afterEach(() => {
@@ -91,8 +101,40 @@ describe("session", () => {
     expect(session.user).toBeNull();
   });
 
-  it("keeps the app signed out when the server is unreachable on boot", async () => {
+  it("keeps the app signed out when the server is unreachable on boot with no cached user", async () => {
     fetchImpl = stubFetch(jsonResponse({ message: "unavailable" }, 503));
+    await restoreSession();
+
+    expect(session.user).toBeNull();
+  });
+
+  it("falls back to the cached user when the server is unreachable, so the app still opens offline", async () => {
+    fetchImpl = stubFetch(jsonResponse({ session: { token: "tok" }, user }));
+    await restoreSession();
+    expect(session.user).toEqual(user);
+    expect(callsTo("/api/auth/get-session")).toHaveLength(1);
+
+    // Now the network dies: the fetch itself fails rather than the server
+    // answering "no session".
+    fetchImpl = stubUnreachableFetch();
+    await restoreSession();
+
+    expect(callsTo("/api/auth/get-session")).toHaveLength(1);
+    expect(session.user).toEqual(user);
+  });
+
+  it("does not resurrect a cached user the server has signed out", async () => {
+    fetchImpl = stubFetch(jsonResponse({ session: { token: "tok" }, user }));
+    await restoreSession();
+
+    // The server is reachable and says there is no session.
+    fetchImpl = stubFetch(jsonResponse(null));
+    await restoreSession();
+
+    expect(session.user).toBeNull();
+
+    // And the cache is gone: a later offline boot stays signed out.
+    fetchImpl = stubUnreachableFetch();
     await restoreSession();
 
     expect(session.user).toBeNull();
@@ -132,13 +174,15 @@ describe("session", () => {
     expect(session.user).toBeNull();
   });
 
-  it("signs out clears the session", async () => {
-    session.user = user;
+  it("signs out clears the session and the cached user", async () => {
+    fetchImpl = stubFetch(jsonResponse({ session: { token: "tok" }, user }));
+    await restoreSession();
     fetchImpl = stubFetch(jsonResponse({ success: true }));
     await signOut();
 
     expect(callsTo("/api/auth/sign-out")).toHaveLength(1);
     expect(session.user).toBeNull();
+    expect(localStorage.getItem("shopping-list:session-user")).toBeNull();
   });
 
   it("signs out even when the server is unreachable", async () => {

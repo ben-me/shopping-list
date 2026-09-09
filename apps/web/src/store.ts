@@ -104,8 +104,45 @@ export class ShoppingDb extends Dexie {
     });
   }
 
+  /**
+   * Apply a server copy of an Item to the local Store — the inbound half of a
+   * Sync. Two guards keep an in-flight pull from clobbering fresher local
+   * state (ADR 0001, last-write-wins per field):
+   *
+   * - a pending outbox delete is a tombstone: the Item stays removed even if
+   *   the pull was issued before the removal and still carries the old copy;
+   * - a newer local edit (still queued for Sync) beats an older server
+   *   snapshot; the queued write wins on push and the echo comes back then.
+   */
   async syncItem(item: Item): Promise<void> {
+    const [owesDelete, local] = await Promise.all([
+      this.hasPendingDelete(item.id),
+      this.items.get(item.id),
+    ]);
+    if (owesDelete) {
+      return;
+    }
+    if (local && local.updatedAt > item.updatedAt) {
+      return;
+    }
     await this.items.put(item);
+  }
+
+  /**
+   * Indexed point lookup: does this Item still have an unsynced delete in
+   * the outbox? The `targetId` index keeps this O(log n) per synced Item
+   * instead of scanning every outbox row.
+   */
+  private async hasPendingDelete(itemId: string): Promise<boolean> {
+    const pendingDeletes = await this.outbox
+      .where("targetId")
+      .equals(itemId)
+      .filter(
+        (entry) =>
+          entry.targetType === "item" && entry.operation === "delete" && entry.syncedAt === null,
+      )
+      .count();
+    return pendingDeletes > 0;
   }
 
   async syncMembership(membership: Membership): Promise<void> {

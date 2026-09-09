@@ -142,4 +142,50 @@ describe("ShoppingDb", () => {
     expect(await db.pendingOutboxEntries()).toHaveLength(1);
     expect((await db.pendingOutboxEntries())[0]?.syncedAt).toBeNull();
   });
+
+  it("does not resurrect an Item the local outbox still owes a delete for", async () => {
+    await db.putItem(milk);
+    await db.deleteItem(milk.id, list.id);
+
+    // A pull that was in flight when the Item was removed comes back with the
+    // server's copy — it must not undo the local delete.
+    await db.syncItem(milk);
+
+    expect(await db.getItem(milk.id)).toBeUndefined();
+    expect(await db.pendingOutboxEntries()).toHaveLength(2);
+  });
+
+  it("does not clobber a newer local edit with an older server copy of the same Item", async () => {
+    const stale = "2026-09-01T00:00:00.000Z";
+    const olderServerCopy: Item = { ...milk, name: "Milk", checked: false, updatedAt: stale };
+    const newerLocalEdit: Item = {
+      ...milk,
+      checked: true,
+      checkedAt: now(),
+      updatedAt: "2026-09-02T00:00:00.000Z",
+    };
+    await db.putItem({ ...newerLocalEdit });
+
+    // A pull issued before the tick (and still holding the old server state)
+    // must not overwrite the newer local edit that is queued for Sync.
+    await db.syncItem(olderServerCopy);
+
+    expect(await db.getItem(milk.id)).toMatchObject({
+      checked: true,
+      updatedAt: newerLocalEdit.updatedAt,
+    });
+  });
+
+  it("applies a server copy that is newer than the local Item", async () => {
+    await db.putItem({ ...milk, updatedAt: "2026-09-01T00:00:00.000Z" });
+    const newerServerCopy: Item = {
+      ...milk,
+      name: "Oat milk",
+      updatedAt: "2026-09-02T00:00:00.000Z",
+    };
+
+    await db.syncItem(newerServerCopy);
+
+    expect(await db.getItem(milk.id)).toMatchObject({ name: "Oat milk" });
+  });
 });
