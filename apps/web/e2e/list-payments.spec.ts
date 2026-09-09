@@ -2,7 +2,7 @@ import { expect, test } from "@playwright/test";
 import { createList, input, paymentRow, signUp } from "./support";
 
 /**
- * The real user flow for money: sign up, create a List, record a Payment,
+ * The real user flow for payments: sign up, create a List, record a Payment,
  * then reload — proving the Payment is durably on the List (the server is
  * the source of truth).
  */

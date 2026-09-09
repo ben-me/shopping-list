@@ -188,6 +188,47 @@ describe("payment endpoints", () => {
     });
   });
 
+  it("merges a partial edit per field: an amount-only edit keeps the other edit's date", async () => {
+    const { cookie } = await signUp();
+    const listId = uniq("list");
+    const paymentId = uniq("pay");
+    await putList(cookie, listId, "Household");
+    await putPayment(cookie, listId, paymentId, {
+      amountInCents: 1250,
+      paidAt: "2026-02-01T10:00:00.000Z",
+    });
+
+    // One device edits only the date; another edits only the amount. Both
+    // writes survive — fields reconcile independently, never row-wide.
+    await putPayment(cookie, listId, paymentId, { paidAt: "2026-02-03T18:30:00.000Z" });
+    const amountEdit = await putPayment(cookie, listId, paymentId, { amountInCents: 990 });
+    expect(amountEdit.status).toBe(200);
+
+    const payments = ((await (await getPayments(cookie, listId)).json()) as {
+      payments: Payment[];
+    }).payments;
+    expect(payments[0]).toMatchObject({
+      amountInCents: 990,
+      paidAt: "2026-02-03T18:30:00.000Z",
+    });
+  });
+
+  it("rejects an edit that carries no Payment fields at all", async () => {
+    const { cookie } = await signUp();
+    const listId = uniq("list");
+    const paymentId = uniq("pay");
+    await putList(cookie, listId, "Household");
+    await putPayment(cookie, listId, paymentId, {
+      amountInCents: 1250,
+      paidAt: "2026-02-01T10:00:00.000Z",
+    });
+
+    const res = await putPayment(cookie, listId, paymentId, {});
+    expect(res.status).toBe(400);
+    const body = (await res.json()) as ApiErrorEnvelope;
+    expect(body.error).toMatchObject({ status: 400, code: "bad_request" });
+  });
+
   it("rejects editing or deleting another Member's Payment", async () => {
     const owner = await signUp();
     const member = await signUp();

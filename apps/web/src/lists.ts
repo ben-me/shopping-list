@@ -67,7 +67,7 @@ export async function syncOutbox(db: ShoppingDb): Promise<void> {
         });
         return;
       }
-      const payment = await db.payments.get(entry.targetId);
+      const payment = await db.getPayment(entry.targetId);
       if (!payment) {
         return;
       }

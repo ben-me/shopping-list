@@ -166,30 +166,36 @@ export function createApp() {
 
   /**
    * Sync upsert for a Payment (offline-first record/edit). The device generates
-   * the id and sends the Payment's current state; the server is the source of
-   * truth. An unknown id creates the Payment **recorded by the caller** — a
-   * Member never records on behalf of someone else. An existing Payment updates
-   * only when it belongs to this List AND was recorded by the caller: touching
-   * another Member's Payment is rejected. Payments are independent rows — Sync
-   * never merges or dedupes two of them.
+   * the id; the server is the source of truth. An unknown id creates the
+   * Payment **recorded by the caller** (amount and date both required) — a
+   * Member never records on behalf of someone else. An existing Payment
+   * updates only when it belongs to this List AND was recorded by the caller,
+   * and only in the fields the device sent, so concurrent edits reconcile per
+   * field (ADR 0001). Touching another Member's Payment is rejected. Payments
+   * are independent rows — Sync never merges or dedupes two of them.
    */
   app.put("/api/lists/:listId/payments/:paymentId", requireUser, requireMember, async (c) => {
     const { db, listId, paymentId } = getRequestContext(c);
-    const { amountInCents, paidAt } = readPaymentBody(await readJsonBody(c));
+    const paymentUpdate = readPaymentUpdateFromBody(await readJsonBody(c));
     const existingPayment = await getPaymentBelongingToList(db, listId, paymentId);
     if (existingPayment) {
       if (existingPayment.memberId !== c.get("user").id) {
         throw new ForbiddenError("You can only edit your own payments");
       }
-      const payment = await updatePayment(db, paymentId, { amountInCents, paidAt });
+      // Only the fields the device sent are written, so concurrent edits of
+      // one Payment reconcile per field (ADR 0001).
+      const payment = await updatePayment(db, paymentId, paymentUpdate);
       return c.json({ payment }, 200);
+    }
+    if (paymentUpdate.amountInCents === undefined || paymentUpdate.paidAt === undefined) {
+      throw new BadRequestError("A Payment needs an amount in cents and a date");
     }
     const payment = await createPayment(db, {
       id: paymentId,
       listId,
       memberId: c.get("user").id,
-      amountInCents,
-      paidAt,
+      amountInCents: paymentUpdate.amountInCents,
+      paidAt: paymentUpdate.paidAt,
     });
     return c.json({ payment }, 201);
   });
@@ -266,27 +272,40 @@ export function createApp() {
 
   /**
    * Type guard for a Payment upsert body: an integer amount in cents and a
-   * date are both required — they are what a Payment is.
+   * date, each optional but at least one required. A create fills in both;
+   * an edit sends only the fields it changed, so the server merges per field.
    */
-  function isPaymentBody(value: unknown): value is { amountInCents: number; paidAt: string } {
+  function isPaymentUpdateBody(
+    value: unknown,
+  ): value is { amountInCents?: number; paidAt?: string } {
     if (typeof value !== "object" || value === null) {
       return false;
     }
     const { amountInCents, paidAt } = value as Record<string, unknown>;
-    return (
-      typeof amountInCents === "number" &&
-      Number.isInteger(amountInCents) &&
-      amountInCents > 0 &&
-      typeof paidAt === "string" &&
-      paidAt.trim() !== ""
-    );
+    if (
+      amountInCents !== undefined &&
+      (typeof amountInCents !== "number" || !Number.isInteger(amountInCents) || amountInCents <= 0)
+    ) {
+      return false;
+    }
+    if (paidAt !== undefined && (typeof paidAt !== "string" || paidAt.trim() === "")) {
+      return false;
+    }
+    return amountInCents !== undefined || paidAt !== undefined;
   }
 
-  function readPaymentBody(body: unknown) {
-    if (!isPaymentBody(body)) {
+  function readPaymentUpdateFromBody(body: unknown) {
+    if (!isPaymentUpdateBody(body)) {
       throw new BadRequestError("A Payment needs an amount in cents and a date");
     }
-    return { amountInCents: body.amountInCents, paidAt: body.paidAt.trim() };
+    const update: { amountInCents?: number; paidAt?: string } = {};
+    if (body.amountInCents !== undefined) {
+      update.amountInCents = body.amountInCents;
+    }
+    if (body.paidAt !== undefined) {
+      update.paidAt = body.paidAt.trim();
+    }
+    return update;
   }
 
   /**

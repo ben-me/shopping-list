@@ -60,6 +60,10 @@ export class ShoppingDb extends Dexie {
     return this.items.get(id);
   }
 
+  getPayment(id: string): Promise<Payment | undefined> {
+    return this.payments.get(id);
+  }
+
   getItems(listId: string): Promise<Item[]> {
     return this.items.where("listId").equals(listId).sortBy("createdAt");
   }

@@ -37,7 +37,11 @@ export async function addPayment(
   return payment;
 }
 
-/** Edit a Payment's amount and/or date (last-write-wins per field on Sync). */
+/**
+ * Edit a Payment's amount and/or date. The edit is queued as a whole-row
+ * put of the Payment's new state; the server reconciles it last-write-wins
+ * against any concurrent edit (ADR 0001).
+ */
 export async function updatePayment(
   db: ShoppingDb,
   payment: Payment,

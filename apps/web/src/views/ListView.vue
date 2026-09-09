@@ -77,11 +77,15 @@ async function onRemove(item: Item) {
 
 async function onRecordPayment() {
   paymentForm.value.error = null;
+  if (!session.user) {
+    paymentForm.value.error = "Sign in to record a payment";
+    return;
+  }
   try {
     await addPayment(
       db,
       listId.value,
-      session.user?.id ?? "",
+      session.user.id,
       eurosToCents(paymentForm.value.amount),
       isoFromDate(paymentForm.value.date),
     );
