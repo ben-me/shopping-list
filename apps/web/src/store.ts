@@ -93,6 +93,7 @@ export class ShoppingDb extends Dexie {
     return this.writeWithOutbox(this.payments, () => this.payments.put(payment), {
       targetType: "payment",
       targetId: payment.id,
+      listId: payment.listId,
       operation: "update",
     });
   }
@@ -106,10 +107,11 @@ export class ShoppingDb extends Dexie {
     });
   }
 
-  deletePayment(id: string): Promise<void> {
+  deletePayment(id: string, listId: string): Promise<void> {
     return this.writeWithOutbox(this.payments, () => this.payments.delete(id), {
       targetType: "payment",
       targetId: id,
+      listId,
       operation: "delete",
     });
   }
@@ -126,7 +128,7 @@ export class ShoppingDb extends Dexie {
    */
   async syncItem(item: Item): Promise<void> {
     const [owesDelete, local] = await Promise.all([
-      this.hasPendingDelete(item.id),
+      this.hasPendingDelete("item", item.id),
       this.items.get(item.id),
     ]);
     if (owesDelete) {
@@ -139,17 +141,37 @@ export class ShoppingDb extends Dexie {
   }
 
   /**
-   * Indexed point lookup: does this Item still have an unsynced delete in
-   * the outbox? The `targetId` index keeps this O(log n) per synced Item
+   * The inbound half of a Sync for a Payment, with the same guards as
+   * {@link syncItem}: a pending delete is a tombstone, and a newer local edit
+   * beats an older server snapshot. Payments are independent rows — a pulled
+   * Payment is applied as its own row and never merged into another.
+   */
+  async syncPayment(payment: Payment): Promise<void> {
+    const [owesDelete, local] = await Promise.all([
+      this.hasPendingDelete("payment", payment.id),
+      this.payments.get(payment.id),
+    ]);
+    if (owesDelete) {
+      return;
+    }
+    if (local && local.updatedAt > payment.updatedAt) {
+      return;
+    }
+    await this.payments.put(payment);
+  }
+
+  /**
+   * Indexed point lookup: does this target still have an unsynced delete in
+   * the outbox? The `targetId` index keeps this O(log n) per synced row
    * instead of scanning every outbox row.
    */
-  private async hasPendingDelete(itemId: string): Promise<boolean> {
+  private async hasPendingDelete(targetType: OutboxTarget, targetId: string): Promise<boolean> {
     const pendingDeletes = await this.outbox
       .where("targetId")
-      .equals(itemId)
+      .equals(targetId)
       .filter(
         (entry) =>
-          entry.targetType === "item" && entry.operation === "delete" && entry.syncedAt === null,
+          entry.targetType === targetType && entry.operation === "delete" && entry.syncedAt === null,
       )
       .count();
     return pendingDeletes > 0;

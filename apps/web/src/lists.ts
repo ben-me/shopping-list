@@ -1,4 +1,4 @@
-import type { Item, List } from "@shopping-list/api/domain";
+import type { Item, List, Payment } from "@shopping-list/api/domain";
 import { apiFetch } from "./api";
 import type { ShoppingDb } from "./store";
 
@@ -58,6 +58,30 @@ export async function syncOutbox(db: ShoppingDb): Promise<void> {
         return;
       }
       await db.syncItem(serverItem);
+      return;
+    }
+    if (entry.targetType === "payment") {
+      if (entry.operation === "delete") {
+        await apiFetch(`/api/lists/${entry.listId}/payments/${entry.targetId}`, {
+          method: "DELETE",
+        });
+        return;
+      }
+      const payment = await db.payments.get(entry.targetId);
+      if (!payment) {
+        return;
+      }
+      const { payment: serverPayment } = await apiFetch<{ payment: Payment }>(
+        `/api/lists/${payment.listId}/payments/${payment.id}`,
+        {
+          method: "PUT",
+          body: { amountInCents: payment.amountInCents, paidAt: payment.paidAt },
+        },
+      );
+      if (!serverPayment?.id) {
+        return;
+      }
+      await db.syncPayment(serverPayment);
       return;
     }
     throw new Error(`Unsupported outbox target ${entry.targetType}`);
