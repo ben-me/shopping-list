@@ -133,6 +133,32 @@ describe("startSyncWatcher", () => {
     expect(await db.pendingOutboxEntries()).toHaveLength(1);
   });
 
+  it("prunes synced outbox rows past the retention window after a successful drain", async () => {
+    const stale = new Date(Date.now() - 25 * 60 * 60 * 1000).toISOString();
+    await db.outbox.bulkAdd([
+      {
+        targetType: "item",
+        targetId: "stale-1",
+        operation: "update",
+        queuedAt: stale,
+        syncedAt: stale,
+      },
+      {
+        targetType: "item",
+        targetId: "pending-1",
+        operation: "update",
+        queuedAt: new Date().toISOString(),
+        syncedAt: null,
+      },
+    ]);
+    stubServer((url) => (url === "/api/lists" ? jsonResponse({ lists: [] }) : undefined));
+
+    await runSyncPass(db);
+
+    const remaining = await db.outbox.toArray();
+    expect(remaining.map((entry) => entry.targetId)).toEqual(["pending-1"]);
+  });
+
   it("fans out to per-view syncs after the shared drain and pull", async () => {
     const { requests } = stubServer((url) =>
       url === "/api/lists" ? jsonResponse({ lists: [] }) : undefined,

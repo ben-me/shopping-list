@@ -18,7 +18,9 @@ export function onSyncPass(viewSync: ViewSync): () => void {
 /**
  * One Sync pass — the single place that owns the ordering invariant: the
  * outbox drains BEFORE anything is pulled, so a pull can never overwrite the
- * local state that queued writes describe. After the shared Lists pull, every
+ * local state that queued writes describe. A successful drain is followed by
+ * pruning synced outbox rows past the retention window, bounding the table.
+ * After the shared Lists pull, every
  * registered per-view sync runs in turn.
  *
  * A pass already in flight wins: concurrent triggers (the browser firing
@@ -35,13 +37,14 @@ export async function runSyncPass(db: ShoppingDb): Promise<void> {
   syncPassInFlight = true;
   try {
     await syncOutbox(db);
+    await db.pruneSyncedOutbox();
     await syncFromServer(db);
     for (const viewSync of viewSyncs) {
       await ignoreRejection(viewSync(db));
     }
   } finally {
     syncPassInFlight = false;
-  } 
+  }
 }
 
 /**
