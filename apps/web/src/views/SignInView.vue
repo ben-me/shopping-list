@@ -40,16 +40,16 @@ function toggleMode() {
     <template v-if="mode === 'sign-up'">
       <label>
         Name
-        <input v-model="name" name="name" data-testid="name" />
+        <input v-model="name" name="name" />
       </label>
     </template>
     <label>
       Email
-      <input v-model="email" type="email" name="email" data-testid="email" />
+      <input v-model="email" type="email" name="email" />
     </label>
     <label>
       Password
-      <input v-model="password" type="password" name="password" data-testid="password" />
+      <input v-model="password" type="password" name="password" />
     </label>
     <button type="submit" :disabled="submitting">
       {{ mode === "sign-in" ? "Sign in" : "Sign up" }}

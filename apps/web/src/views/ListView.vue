@@ -82,19 +82,18 @@ onUnmounted(() => {
         <input
           type="checkbox"
           name="checked"
-          data-testid="item-checkbox"
           :checked="item.checked"
           @change="onToggle(item, ($event.target as HTMLInputElement).checked)"
         />
         <span :class="{ bought: item.checked }">{{ item.name }}</span>
       </label>
-      <button type="button" data-testid="remove-item" @click="onRemove(item)">Remove</button>
+      <button type="button" @click="onRemove(item)">Remove</button>
     </li>
   </ul>
   <form @submit.prevent="onAdd">
     <label>
       Item name
-      <input v-model="form.name" name="item" data-testid="item-name-input" />
+      <input v-model="form.name" name="item" />
     </label>
     <button type="submit">Add an Item</button>
   </form>

@@ -95,15 +95,16 @@ describe("App", () => {
 
     const wrapper = mount(App, { global: { plugins: [router] } });
     await flushPromises();
-    expect(wrapper.find("[data-testid='offline-banner']").exists()).toBe(false);
+    const offlineBanner = () => wrapper.find('[role="status"]');
+    expect(offlineBanner().exists()).toBe(false);
 
     window.dispatchEvent(new Event("offline"));
     await flushPromises();
-    expect(wrapper.find("[data-testid='offline-banner']").exists()).toBe(true);
+    expect(offlineBanner().exists()).toBe(true);
     expect(wrapper.text()).toContain("Offline");
 
     window.dispatchEvent(new Event("online"));
     await flushPromises();
-    expect(wrapper.find("[data-testid='offline-banner']").exists()).toBe(false);
+    expect(offlineBanner().exists()).toBe(false);
   });
 });

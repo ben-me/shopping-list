@@ -12,19 +12,24 @@ import { expect, test, type Page } from "@playwright/test";
 
 const PASSWORD = "e2e-secret-123";
 
+/** Inputs are located by their real `name` attributes — no test-only attributes. */
+function input(page: Page, formName: string) {
+  return page.locator(`input[name="${formName}"]`);
+}
+
 async function signUp(page: Page, name: string) {
   const email = `e2e-${randomUUID()}@example.com`;
   await page.goto("/");
   await page.getByRole("button", { name: "Create an account" }).click();
-  await page.getByTestId("name").fill(name);
-  await page.getByTestId("email").fill(email);
-  await page.getByTestId("password").fill(PASSWORD);
+  await input(page, "name").fill(name);
+  await input(page, "email").fill(email);
+  await input(page, "password").fill(PASSWORD);
   await page.getByRole("button", { name: "Sign up" }).click();
-  await expect(page.getByTestId("signed-in-as")).toContainText(name);
+  await expect(page.getByText("Signed in as")).toContainText(name);
 }
 
 async function createList(page: Page, name: string) {
-  await page.getByTestId("list-name").fill(name);
+  await input(page, "name").fill(name);
   await page.getByRole("button", { name: "Create a List" }).click();
   await page.getByRole("link", { name }).click();
   await expect(page.getByRole("heading", { name })).toBeVisible();
@@ -35,7 +40,7 @@ function itemRow(page: Page, name: string) {
 }
 
 async function addItem(page: Page, name: string) {
-  await page.getByTestId("item-name-input").fill(name);
+  await input(page, "item").fill(name);
   await page.getByRole("button", { name: "Add an Item" }).click();
   await expect(itemRow(page, name)).toBeVisible();
 }
@@ -81,22 +86,22 @@ test("a member can add, tick, un-tick, and remove Items, and the List survives r
   });
 
   await test.step("tick an Item off and reload — it stays ticked", async () => {
-    await itemRow(page, "Milk").getByTestId("item-checkbox").check();
+    await itemRow(page, "Milk").getByRole("checkbox").check();
     await itemSettled(page, "Milk", true);
     await page.reload();
-    await expect(itemRow(page, "Milk").getByTestId("item-checkbox")).toBeChecked();
-    await expect(itemRow(page, "Eggs").getByTestId("item-checkbox")).not.toBeChecked();
+    await expect(itemRow(page, "Milk").getByRole("checkbox")).toBeChecked();
+    await expect(itemRow(page, "Eggs").getByRole("checkbox")).not.toBeChecked();
   });
 
   await test.step("un-tick and reload — it stays un-ticked", async () => {
-    await itemRow(page, "Milk").getByTestId("item-checkbox").uncheck();
+    await itemRow(page, "Milk").getByRole("checkbox").uncheck();
     await itemSettled(page, "Milk", false);
     await page.reload();
-    await expect(itemRow(page, "Milk").getByTestId("item-checkbox")).not.toBeChecked();
+    await expect(itemRow(page, "Milk").getByRole("checkbox")).not.toBeChecked();
   });
 
   await test.step("remove an Item and reload — it stays removed", async () => {
-    await itemRow(page, "Milk").getByTestId("remove-item").click();
+    await itemRow(page, "Milk").getByRole("button", { name: "Remove" }).click();
     await itemSettled(page, "Milk", null);
     await expect(itemRow(page, "Milk")).toHaveCount(0);
     await page.reload();
@@ -119,7 +124,7 @@ test("an offline write is queued locally and syncs when the connection returns",
 
   await test.step("go offline and add an Item — the edit is never blocked", async () => {
     await page.context().setOffline(true);
-    await page.getByTestId("item-name-input").fill("Matches");
+    await input(page, "item").fill("Matches");
     await page.getByRole("button", { name: "Add an Item" }).click();
     await expect(itemRow(page, "Matches")).toBeVisible();
 

@@ -51,7 +51,7 @@ onMounted(() => {
 <template>
   <h1>Shopping Lists</h1>
   <div v-if="session.user">
-    <p data-testid="signed-in-as">Signed in as {{ session.user.name }}</p>
+    <p>Signed in as {{ session.user.name }}</p>
     <button type="button" @click="onSignOut">Sign out</button>
   </div>
   <p v-if="lists.length === 0">Your lists will appear here.</p>
@@ -63,7 +63,7 @@ onMounted(() => {
   <form @submit.prevent="onCreate">
     <label>
       List name
-      <input v-model="name" name="name" data-testid="list-name" />
+      <input v-model="name" name="name" />
     </label>
     <button type="submit" :disabled="creating || !session.user">Create a List</button>
   </form>
