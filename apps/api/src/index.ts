@@ -9,14 +9,19 @@ import { requireMember, requireUser, type AppVariables } from "./guards";
 import {
   createList,
   createItem,
+  createPayment,
   deleteItem,
+  deletePayment,
   getItem,
   getList,
   getItemsByList,
   getListsForMember,
+  getPayment,
+  getPaymentsByList,
   isMember,
   updateList,
   updateItem,
+  updatePayment,
 } from "./queries";
 
 /**
@@ -150,6 +155,62 @@ export function createApp() {
   });
 
   /**
+   * The Payments on a List, newest paid first. Members only — a non-Member
+   * gets a 403, an unknown List a 404, both from {@link requireMember}.
+   */
+  app.get("/api/lists/:listId/payments", requireUser, requireMember, async (c) => {
+    const { db, listId } = getRequestContext(c);
+    const payments = await getPaymentsByList(db, listId);
+    return c.json({ payments });
+  });
+
+  /**
+   * Sync upsert for a Payment (offline-first record/edit). The device generates
+   * the id and sends the Payment's current state; the server is the source of
+   * truth. An unknown id creates the Payment **recorded by the caller** — a
+   * Member never records on behalf of someone else. An existing Payment updates
+   * only when it belongs to this List AND was recorded by the caller: touching
+   * another Member's Payment is rejected. Payments are independent rows — Sync
+   * never merges or dedupes two of them.
+   */
+  app.put("/api/lists/:listId/payments/:paymentId", requireUser, requireMember, async (c) => {
+    const { db, listId, paymentId } = getRequestContext(c);
+    const { amountInCents, paidAt } = readPaymentBody(await readJsonBody(c));
+    const existingPayment = await getPaymentBelongingToList(db, listId, paymentId);
+    if (existingPayment) {
+      if (existingPayment.memberId !== c.get("user").id) {
+        throw new ForbiddenError("You can only edit your own payments");
+      }
+      const payment = await updatePayment(db, paymentId, { amountInCents, paidAt });
+      return c.json({ payment }, 200);
+    }
+    const payment = await createPayment(db, {
+      id: paymentId,
+      listId,
+      memberId: c.get("user").id,
+      amountInCents,
+      paidAt,
+    });
+    return c.json({ payment }, 201);
+  });
+
+  /**
+   * Remove a Payment. Idempotent — removing an already-removed Payment still
+   * succeeds so an offline delete can be replayed safely. A Payment that exists
+   * but belongs to another List is a 404; a Payment recorded by another Member
+   * is a 403, never a delete.
+   */
+  app.delete("/api/lists/:listId/payments/:paymentId", requireUser, requireMember, async (c) => {
+    const { db, listId, paymentId } = getRequestContext(c);
+    const existingPayment = await getPaymentBelongingToList(db, listId, paymentId);
+    if (existingPayment && existingPayment.memberId !== c.get("user").id) {
+      throw new ForbiddenError("You can only delete your own payments");
+    }
+    await deletePayment(db, paymentId);
+    return c.json({ ok: true });
+  });
+
+  /**
    * Sync upsert for a List (offline-first create/rename). The device generates
    * the id and sends the whole List; the server is the source of truth. An unknown
    * id creates a List owned by the caller; an existing List updates only when
@@ -185,7 +246,47 @@ export function createApp() {
       db: createD1Connection(c.env.devDb),
       listId: c.req.param("listId") ?? "",
       itemId: c.req.param("itemId") ?? "",
+      paymentId: c.req.param("paymentId") ?? "",
     };
+  }
+
+  /**
+   * Fetch a Payment by id, enforcing that it belongs to the given List. Returns
+   * the Payment when it exists on that List, and `undefined` when no such
+   * Payment exists; a Payment that exists on a *different* List is a 404, so
+   * any endpoint built on this helper can never read or write across Lists.
+   */
+  async function getPaymentBelongingToList(db: Db, listId: string, paymentId: string) {
+    const existingPayment = await getPayment(db, paymentId);
+    if (existingPayment && existingPayment.listId !== listId) {
+      throw new NotFoundError("Payment not found");
+    }
+    return existingPayment;
+  }
+
+  /**
+   * Type guard for a Payment upsert body: an integer amount in cents and a
+   * date are both required — they are what a Payment is.
+   */
+  function isPaymentBody(value: unknown): value is { amountInCents: number; paidAt: string } {
+    if (typeof value !== "object" || value === null) {
+      return false;
+    }
+    const { amountInCents, paidAt } = value as Record<string, unknown>;
+    return (
+      typeof amountInCents === "number" &&
+      Number.isInteger(amountInCents) &&
+      amountInCents > 0 &&
+      typeof paidAt === "string" &&
+      paidAt.trim() !== ""
+    );
+  }
+
+  function readPaymentBody(body: unknown) {
+    if (!isPaymentBody(body)) {
+      throw new BadRequestError("A Payment needs an amount in cents and a date");
+    }
+    return { amountInCents: body.amountInCents, paidAt: body.paidAt.trim() };
   }
 
   /**
