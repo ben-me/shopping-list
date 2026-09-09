@@ -37,7 +37,9 @@ export async function runSyncPass(db: ShoppingDb): Promise<void> {
   syncPassInFlight = true;
   try {
     await syncOutbox(db);
-    await db.pruneSyncedOutbox();
+    // Housekeeping after the drain succeeded: a prune failure must not gate
+    // the pull — it simply retries on the next pass.
+    await ignoreRejection(db.pruneSyncedOutbox());
     await syncFromServer(db);
     for (const viewSync of viewSyncs) {
       await ignoreRejection(viewSync(db));
