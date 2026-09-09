@@ -12,7 +12,6 @@ import { expect, test, type Page } from "@playwright/test";
 
 const PASSWORD = "e2e-secret-123";
 
-/** Inputs are located by their real `name` attributes — no test-only attributes. */
 function input(page: Page, formName: string) {
   return page.locator(`input[name="${formName}"]`);
 }
