@@ -19,8 +19,6 @@ onUnmounted(() => {
 </script>
 
 <template>
-  <p v-if="!online" role="status">
-    Offline — your changes will sync when you reconnect
-  </p>
+  <p v-if="!online" role="status">Offline — your changes will sync when you reconnect</p>
   <RouterView />
 </template>
