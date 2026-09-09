@@ -1,9 +1,9 @@
 import { expect, test } from "@playwright/test";
 import { addItem, createList, itemRow, signUp } from "./support";
 
-const shellWarmed = `(async () => {
-  const { isShellWarmed } = await import("/src/pwa.ts");
-  return isShellWarmed();
+const serviceWorkerReady = `(async () => {
+  const { serviceWorkerReady } = await import("/src/pwa.ts");
+  return serviceWorkerReady();
 })()`;
 
 /**
@@ -22,7 +22,7 @@ test("after a first visit, a cold start with no network opens the app on last-sy
     // NetworkFirst route caches every asset it fetches. Production precaches
     // the shell at install and needs no reload.
     await page.reload();
-    await expect.poll(() => page.evaluate(shellWarmed)).toBe(true);
+    await expect.poll(() => page.evaluate(serviceWorkerReady)).toBe(true);
   });
 
   await signUp(page, "E2E PWA");
