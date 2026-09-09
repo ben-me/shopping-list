@@ -1,102 +1,38 @@
-export const SERVICE_WORKER_URL = "/sw.js";
-export const SHELL_CACHE = "shopping-list-shell-v1";
-// Keep in sync with the API guard in public/sw.js.
-const API_PREFIX = "/api/";
+/**
+ * The load this page started with was already controlled by the service
+ * worker, so everything it fetched went through the worker's routes and is
+ * cached. Captured at module evaluation, before a mid-load activation could
+ * take over control.
+ */
+const controlledAtBoot =
+  typeof navigator !== "undefined" &&
+  "serviceWorker" in navigator &&
+  !!navigator.serviceWorker.controller;
 
 let shellWarmed = false;
 
-/** True once the worker is active and the shell cache holds the app shell. */
+/** True once the worker is active and the shell can be served from cache. */
 export function isShellWarmed(): boolean {
   return shellWarmed;
 }
 
 /**
- * Register the service worker and warm the shell cache (the first page load
- * runs before the worker controls it, so its fetches bypass the cache).
- * Never blocks or fails the app: the PWA is an enhancement.
+ * Wait for the service worker and report shell readiness. In a production
+ * build the precache manifest installs the whole shell during install, so
+ * the first visit is offline-capable. In dev there is no build output to
+ * precache: only a load controlled from the start gets its assets cached by
+ * the worker's NetworkFirst route, so a first visit needs one reload (the
+ * e2e warm-up does it, see e2e/pwa-offline.spec.ts). The PWA is an
+ * enhancement: failures never block the app.
  */
 export async function warmServiceWorker(): Promise<void> {
   if (!("serviceWorker" in navigator)) {
     return;
   }
   try {
-    await navigator.serviceWorker.register(SERVICE_WORKER_URL);
     await navigator.serviceWorker.ready;
-    await warmShellCache();
-    shellWarmed = true;
+    shellWarmed = import.meta.env.PROD || controlledAtBoot;
   } catch {
     // Installing the PWA never blocks the app.
   }
-}
-
-async function warmShellCache(): Promise<void> {
-  if (!("caches" in window)) {
-    return;
-  }
-  const cache = await caches.open(SHELL_CACHE);
-  const entries = performance.getEntriesByType("resource") as PerformanceResourceTiming[];
-  const warmable = entries
-    .filter((entry) => sameOriginShellAsset(entry.name))
-    .map((entry) => ({ url: entry.name, destination: destinationOf(entry) }));
-  await Promise.all([
-    warmCacheEntry(cache, { url: "/", destination: "" }),
-    ...warmable.map((entry) => warmCacheEntry(cache, entry)),
-  ]);
-}
-
-async function warmCacheEntry(
-  cache: Cache,
-  warmable: { url: string; destination: string },
-): Promise<void> {
-  try {
-    const key = cacheKey(warmable.url, warmable.destination);
-    if (await cache.match(key)) {
-      return;
-    }
-    // The dev server content-negotiates some assets by `Accept` (a CSS file
-    // is a stylesheet for `text/css` and a JS module otherwise), so the
-    // warm-up must ask for the same representation the real request uses.
-    const headers: HeadersInit =
-      warmable.destination === "style" ? { Accept: "text/css,*/*;q=0.1" } : {};
-    const response = await fetch(warmable.url, { headers });
-    if (response.ok) {
-      await putInCache(cache, key, response);
-    }
-  } catch {
-    // A single asset failing to warm never blocks the others.
-  }
-}
-
-function sameOriginShellAsset(url: string): boolean {
-  const parsed = new URL(url, window.location.origin);
-  return parsed.origin === window.location.origin && !parsed.pathname.startsWith(API_PREFIX);
-}
-
-/** The destination a resource entry was loaded with ("" when unknown). */
-export function destinationOf(entry: PerformanceResourceTiming): string {
-  switch (entry.initiatorType) {
-    case "script":
-      return "script";
-    case "link":
-      return "style";
-    default:
-      return "";
-  }
-}
-
-/** Mirror of putInShellCache's keying in public/sw.js. */
-export function cacheKey(url: string, destination: string): string {
-  const separator = url.includes("?") ? "&" : "?";
-  return destination ? `${url}${separator}sw-dest=${destination}` : url;
-}
-
-/** Store without `Vary`, under the key the service worker will look up. */
-async function putInCache(cache: Cache, key: string, response: Response): Promise<void> {
-  const headers = new Headers(response.headers);
-  headers.delete("Vary");
-  const body = await response.arrayBuffer();
-  await cache.put(
-    key,
-    new Response(body, { status: response.status, statusText: response.statusText, headers }),
-  );
 }

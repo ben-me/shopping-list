@@ -1,6 +1,11 @@
 import { expect, test } from "@playwright/test";
 import { addItem, createList, itemRow, signUp } from "./support";
 
+const shellWarmed = `(async () => {
+  const { isShellWarmed } = await import("/src/pwa.ts");
+  return isShellWarmed();
+})()`;
+
 /**
  * The PWA shell: after a first visit the service worker has cached the app
  * shell, so a cold start with no network opens the app on the last-synced
@@ -10,18 +15,19 @@ import { addItem, createList, itemRow, signUp } from "./support";
 test("after a first visit, a cold start with no network opens the app on last-synced data", async ({
   page,
 }) => {
+  await test.step("first visit: the service worker becomes active and the shell cache warms", async () => {
+    await page.goto("/");
+    // In dev there is nothing to precache, so a first visit needs one
+    // reload: the reload is controlled from the start, and the worker's
+    // NetworkFirst route caches every asset it fetches. Production precaches
+    // the shell at install and needs no reload.
+    await page.reload();
+    await expect.poll(() => page.evaluate(shellWarmed)).toBe(true);
+  });
+
   await signUp(page, "E2E PWA");
   await createList(page, "Pantry");
   await addItem(page, "Rice");
-
-  await test.step("the service worker is active and the shell cache is warm", async () => {
-    await page.waitForFunction(
-      `async () => {
-        const { isShellWarmed } = await import("/src/pwa.ts");
-        return isShellWarmed();
-      }`,
-    );
-  });
 
   await test.step("go offline and cold-start the app in a fresh page", async () => {
     await page.context().setOffline(true);
