@@ -8,12 +8,6 @@ export const online = ref(true);
 /** A per-view sync that runs after the shared part of every pass. */
 type ViewSync = (db: ShoppingDb) => Promise<void>;
 const viewSyncs = new Set<ViewSync>();
-
-/**
- * Register a per-view sync (e.g. re-pull the open List's Items) to run after
- * the shared drain + Lists pull of every pass. Returns a cleanup that
- * unregisters it.
- */
 export function onSyncPass(viewSync: ViewSync): () => void {
   viewSyncs.add(viewSync);
   return () => {
