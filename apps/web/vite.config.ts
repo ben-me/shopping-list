@@ -13,7 +13,7 @@ export default defineConfig({
     vueDevTools(),
     VitePWA({
       registerType: "autoUpdate",
-      includeAssets: ["favicon.ico", "icons/*.png"],
+      includeAssets: ["favicon.ico", "favicon.svg"],
       manifest: {
         name: "Shopping List",
         short_name: "Shopping List",
@@ -24,10 +24,11 @@ export default defineConfig({
         background_color: "#ffffff",
         theme_color: "#16a34a",
         icons: [
-          { src: "/icons/icon-192.png", sizes: "192x192", type: "image/png" },
-          { src: "/icons/icon-512.png", sizes: "512x512", type: "image/png" },
+          { src: "/pwa-64x64.png", sizes: "64x64", type: "image/png" },
+          { src: "/pwa-192x192.png", sizes: "192x192", type: "image/png" },
+          { src: "/pwa-512x512.png", sizes: "512x512", type: "image/png", purpose: "any" },
           {
-            src: "/icons/icon-maskable-512.png",
+            src: "/maskable-icon-512x512.png",
             sizes: "512x512",
             type: "image/png",
             purpose: "maskable",
