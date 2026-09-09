@@ -14,16 +14,13 @@ export type AuthEnv = {
   devDb: D1Database;
   BETTER_AUTH_SECRET: string;
   BETTER_AUTH_URL: string;
-  /** Comma-separated list of origins allowed to make authenticated requests. */
-  BETTER_AUTH_TRUSTED_ORIGINS?: string;
+  BETTER_AUTH_TRUSTED_ORIGINS?: string | string[];
 };
 
-/** The origins (comma-separated in env) allowed to make authenticated requests. */
 export function getTrustedOrigins(env: AuthEnv): string[] {
-  return (env.BETTER_AUTH_TRUSTED_ORIGINS ?? "")
-    .split(",")
-    .map((origin) => origin.trim())
-    .filter(Boolean);
+  const raw = env.BETTER_AUTH_TRUSTED_ORIGINS;
+  const origins = Array.isArray(raw) ? raw : (raw ?? "").split(",");
+  return origins.map((origin) => origin.trim());
 }
 
 /**
