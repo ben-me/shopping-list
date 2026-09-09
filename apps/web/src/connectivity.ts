@@ -3,16 +3,10 @@ import { syncFromServer, syncOutbox } from "./lists";
 import type { ShoppingDb } from "./store";
 import { ignoreRejection } from "./utils/fireAndForget";
 
-/**
- * Whether the device currently has a connection, mirrored from the browser's
- * `online`/`offline` events. The UI reads this to show the offline banner;
- * it starts optimistic (`true`) and is corrected by the first install or event.
- */
 export const online = ref(true);
 
 /** A per-view sync that runs after the shared part of every pass. */
 type ViewSync = (db: ShoppingDb) => Promise<void>;
-
 const viewSyncs = new Set<ViewSync>();
 
 /**
@@ -27,8 +21,6 @@ export function onSyncPass(viewSync: ViewSync): () => void {
   };
 }
 
-let syncPassInFlight = false;
-
 /**
  * One Sync pass — the single place that owns the ordering invariant: the
  * outbox drains BEFORE anything is pulled, so a pull can never overwrite the
@@ -41,6 +33,7 @@ let syncPassInFlight = false;
  * (and is silently ignored by callers) while offline — the outbox simply
  * keeps the queued writes for the next attempt.
  */
+let syncPassInFlight = false;
 export async function runSyncPass(db: ShoppingDb): Promise<void> {
   if (syncPassInFlight) {
     return;
@@ -54,7 +47,7 @@ export async function runSyncPass(db: ShoppingDb): Promise<void> {
     }
   } finally {
     syncPassInFlight = false;
-  }
+  } 
 }
 
 /**
