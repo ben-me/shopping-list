@@ -37,6 +37,10 @@ export function itemRow(page: Page, name: string) {
   return page.getByRole("listitem").filter({ hasText: name });
 }
 
+export function paymentRow(page: Page, amount: string) {
+  return page.locator("li[data-payment-id]").filter({ hasText: amount });
+}
+
 export async function addItem(page: Page, name: string) {
   await input(page, "item").fill(name);
   await page.getByRole("button", { name: "Add an Item" }).click();
