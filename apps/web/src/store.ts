@@ -20,6 +20,16 @@ export type OutboxWrite = Pick<OutboxEntry, "targetType" | "targetId" | "listId"
 
 export type OutboxTransport = (entry: OutboxEntry) => Promise<void>;
 
+/**
+ * How long a synced outbox row is kept after it reached the server. Every
+ * write appends an outbox row, so the table would grow without bound unless
+ * synced rows are pruned. A synced row is also the only local record that an
+ * offline write actually made it — and the only way to diagnose an entry that
+ * sat pending for days — so rows are pruned by age rather than deleted the
+ * moment they sync: the window keeps that history without unbounded growth.
+ */
+export const OUTBOX_RETENTION_MS = 24 * 60 * 60 * 1000;
+
 export class ShoppingDb extends Dexie {
   lists!: Table<List, string>;
   items!: Table<Item, string>;
@@ -167,6 +177,18 @@ export class ShoppingDb extends Dexie {
       drainedEntries.push(entry);
     }
     return drainedEntries;
+  }
+
+  /**
+   * Remove synced outbox rows older than {@link OUTBOX_RETENTION_MS}. Rows
+   * still pending (`syncedAt === null`) never match: IndexedDB leaves records
+   * whose indexed value is null out of the index entirely, so this is a
+   * bounded range scan over the `syncedAt` index — not a scan-and-filter of
+   * the whole table (same lesson as the `targetId` point lookup).
+   */
+  async pruneSyncedOutbox(): Promise<void> {
+    const cutoff = new Date(Date.now() - OUTBOX_RETENTION_MS).toISOString();
+    await this.outbox.where("syncedAt").belowOrEqual(cutoff).delete();
   }
 
   private writeWithOutbox<T>(

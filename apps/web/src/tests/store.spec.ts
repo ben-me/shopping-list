@@ -1,6 +1,6 @@
 import "fake-indexeddb/auto";
 
-import { ShoppingDb } from "../store";
+import { OUTBOX_RETENTION_MS, ShoppingDb } from "../store";
 import type { Item, List, Membership, Payment } from "@shopping-list/api/domain";
 
 let dbNumber = 0;
@@ -141,6 +141,40 @@ describe("ShoppingDb", () => {
 
     expect(await db.pendingOutboxEntries()).toHaveLength(1);
     expect((await db.pendingOutboxEntries())[0]?.syncedAt).toBeNull();
+  });
+
+  it("prunes synced outbox rows past the retention window, keeping pending and fresh synced rows", async () => {
+    const ms = (n: number) => new Date(Date.now() - n).toISOString();
+    const stale = ms(OUTBOX_RETENTION_MS + 60_000);
+    const fresh = ms(60_000);
+    await db.outbox.bulkAdd([
+      {
+        targetType: "item",
+        targetId: "old-1",
+        operation: "update",
+        queuedAt: stale,
+        syncedAt: stale,
+      },
+      {
+        targetType: "item",
+        targetId: "fresh-1",
+        operation: "update",
+        queuedAt: fresh,
+        syncedAt: fresh,
+      },
+      {
+        targetType: "item",
+        targetId: "pending-1",
+        operation: "update",
+        queuedAt: fresh,
+        syncedAt: null,
+      },
+    ]);
+
+    await db.pruneSyncedOutbox();
+
+    const remaining = await db.outbox.toArray();
+    expect(remaining.map((entry) => entry.targetId).sort()).toEqual(["fresh-1", "pending-1"]);
   });
 
   it("does not resurrect an Item the local outbox still owes a delete for", async () => {
