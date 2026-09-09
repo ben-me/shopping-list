@@ -5,26 +5,15 @@ const API_PREFIX = "/api/";
 
 let shellWarmed = false;
 
-/**
- * True once the service worker is active and the shell cache holds the app
- * shell, so a cold start with no network can serve it from cache.
- */
+/** True once the worker is active and the shell cache holds the app shell. */
 export function isShellWarmed(): boolean {
   return shellWarmed;
 }
 
 /**
- * Register the service worker and warm the shell cache so the very first
- * visit already yields an offline-capable app.
- *
- * The shell cache normally fills as a background side effect of the service
- * worker's fetch handler — but a first visit loads the page before the
- * worker is controlling it, so those fetches bypass the cache entirely.
- * Warming re-fetches everything the page actually loaded (same-origin
- * assets only, never `/api`) into the shell cache once the worker is ready.
- *
- * The PWA is an enhancement: every failure here is swallowed and the app
- * keeps working as a plain online page.
+ * Register the service worker and warm the shell cache (the first page load
+ * runs before the worker controls it, so its fetches bypass the cache).
+ * Never blocks or fails the app: the PWA is an enhancement.
  */
 export async function warmServiceWorker(): Promise<void> {
   if (!("serviceWorker" in navigator)) {
@@ -83,13 +72,7 @@ function sameOriginShellAsset(url: string): boolean {
   return parsed.origin === window.location.origin && !parsed.pathname.startsWith(API_PREFIX);
 }
 
-/**
- * The request destination a resource entry was loaded with — part of the
- * shell cache key (mirrors cacheKey in public/sw.js). Resource timing only
- * exposes the initiator, so the common initiators are mapped and anything
- * else warms under the plain URL; a mismatching warm entry is simply
- * fetched and stored again under its real key by the service worker.
- */
+/** The destination a resource entry was loaded with ("" when unknown). */
 export function destinationOf(entry: PerformanceResourceTiming): string {
   switch (entry.initiatorType) {
     case "script":
@@ -101,17 +84,13 @@ export function destinationOf(entry: PerformanceResourceTiming): string {
   }
 }
 
+/** Mirror of putInShellCache's keying in public/sw.js. */
 export function cacheKey(url: string, destination: string): string {
   const separator = url.includes("?") ? "&" : "?";
   return destination ? `${url}${separator}sw-dest=${destination}` : url;
 }
 
-/**
- * Store a response without its `Vary` header — the dev server sends
- * `Vary: Origin`, and a literal Vary match would miss every request that
- * carries an `Origin` header (module scripts do). Mirrors putInShellCache
- * in public/sw.js.
- */
+/** Store without `Vary`, under the key the service worker will look up. */
 async function putInCache(cache: Cache, key: string, response: Response): Promise<void> {
   const headers = new Headers(response.headers);
   headers.delete("Vary");

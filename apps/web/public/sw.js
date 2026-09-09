@@ -1,26 +1,20 @@
 /**
- * The Shopping List service worker: it caches only the app shell — the
- * document and the static assets the page itself loads — so a cold start
- * with no network opens the app on the last-synced data instead of an error
- * page.
+ * The Shopping List service worker: it caches the app shell — the document
+ * and static assets — so a cold start with no network opens the app on the
+ * last-synced data instead of an error page. It never touches `/api`: the
+ * local Store (dexie) is the read source, so stale data can never be served
+ * as if it were fresh.
  *
- * It never touches `/api`: responses there are data, and the local Store
- * (dexie) is the read source. The service worker can therefore never serve
- * stale data as if it were fresh.
+ * Static assets are cache-first (immutable hashed files in a build); the
+ * dev server's mutable assets are re-warmed by src/pwa.ts on every online
+ * load. Navigations are network-first with the cached shell as fallback.
  *
- * Static shell assets are cache-first: in a build they are immutable
- * (hashed filenames), and dev-server assets are re-fetched into the cache
- * by the page's own warm-up (src/pwa.ts) on every online load. Navigations
- * are network-first so an online visit always gets the latest document,
- * with the cached shell as the offline fallback.
- *
- * `Vary` is stripped when storing: the dev server sends `Vary: Origin`, and
- * module scripts fetch with an `Origin` header that the URL-keyed cache
- * entry lacks — a literal Vary match would then miss every script request.
- * The request's destination is part of the cache key because the dev server
- * serves some URLs in two representations (a CSS file as a JS module for
- * imports and as a stylesheet for `<link>`), negotiated by the request —
- * under a single key, one representation would be served to both.
+ * Stored responses lose their `Vary` header and are keyed by request
+ * destination: the dev server sends `Vary: Origin` (module scripts fetch
+ * with an Origin header the URL-keyed entry lacks — a literal Vary match
+ * would miss every script), and serves some URLs in two representations
+ * (a CSS file as a JS module for imports, a stylesheet for `<link>`),
+ * negotiated by the request.
  */
 const SHELL_CACHE = "shopping-list-shell-v1";
 // Keep in sync with the API guard in src/pwa.ts.
@@ -98,14 +92,15 @@ async function cacheFirst(request) {
   }
 }
 
-async function putInShellCache(url, response) {
+/** Store without `Vary`, under the request-destination-keyed cache key. */
+async function putInShellCache(key, response) {
   const headers = new Headers(response.headers);
   headers.delete("Vary");
   const body = await response.arrayBuffer();
   await (
     await caches.open(SHELL_CACHE)
   ).put(
-    url,
+    key,
     new Response(body, { status: response.status, statusText: response.statusText, headers }),
   );
 }

@@ -9,6 +9,5 @@ app.use(router);
 
 app.mount("#app");
 
-// The PWA shell installs and warms in the background; it must never delay
-// first paint. Failures are swallowed inside warmServiceWorker.
+// The PWA shell installs in the background; it must never delay first paint.
 void warmServiceWorker();
