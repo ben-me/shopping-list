@@ -48,9 +48,8 @@ export function createApp() {
   const app = new Hono<{ Bindings: Bindings; Variables: AppVariables }>();
 
   /**
-   * Allow the web app (a separate origin in dev) to make authenticated requests
-   * to the whole API. CORS with `credentials` requires an explicit origin — echo
-   * back the request origin only when it is on the trusted list.
+   * The web app runs on a separate origin, and CORS with `credentials` requires
+   * an explicit origin — echo the request origin back only when it is trusted.
    */
   app.use(
     "*",
@@ -66,25 +65,16 @@ export function createApp() {
   );
 
   /**
-   * Mount better-auth. The D1 binding is only available inside the request, so
-   * the auth instance is built per request from `c.env`. better-auth validates
-   * the method and returns a `Response` that hono sends as-is.
+   * The D1 binding is only available inside the request, so the auth instance
+   * is built per request from `c.env`.
    */
   app.all("/api/auth/*", (c) => createAuth(c.env).handler(c.req.raw));
 
-  /**
-   * Every endpoint fails through the same error envelope: known {@link ApiError}s
-   * keep their status, code, and message; anything else is a generic 500.
-   */
   app.onError((error, c) => {
     const { status, envelope } = toErrorEnvelope(error);
     return c.json(envelope, status as ContentfulStatusCode);
   });
 
-  /**
-   * Health route: reachable unauthenticated — it must run before any require*
-   * middleware.
-   */
   app.get("/health", async (c) => {
     const db = createD1Connection(c.env.devDb);
     const pingResult = await ping(db);
@@ -95,17 +85,12 @@ export function createApp() {
 
   app.get("/api/lists/:listId", requireUser, requireMember, (c) => c.json({ list: c.get("list") }));
 
-  /** The lists index: everything the signed-in user owns or has joined. */
   app.get("/api/lists", requireUser, async (c) => {
     const { db } = getRequestContext(c);
     const lists = await getListsForMember(db, c.get("user").id);
     return c.json({ lists });
   });
 
-  /**
-   * The Items on a List, oldest first. Members only — a non-Member gets a 403,
-   * an unknown List a 404, both from {@link requireMember}.
-   */
   app.get("/api/lists/:listId/items", requireUser, requireMember, async (c) => {
     const { db, listId } = getRequestContext(c);
     const items = await getItemsByList(db, listId);
@@ -113,12 +98,8 @@ export function createApp() {
   });
 
   /**
-   * Sync upsert for an Item (offline-first add/tick/un-tick). The device generates
-   * the id and sends the Item's current state; the server is the source of truth.
-   * An unknown id creates the Item on this List; an existing Item updates only
-   * when it actually belongs to this List and the caller is a Member. Ticking
-   * stamps `checkedAt` (unless the client supplies one); un-ticking clears it.
-   * No Payment is ever touched here — ticking and money are unrelated acts.
+   * Sync upsert (offline-first): the device generates the id and sends the
+   * Item's current state; the server is the source of truth.
    */
   app.put("/api/lists/:listId/items/:itemId", requireUser, requireMember, async (c) => {
     const { db, listId, itemId } = getRequestContext(c);
@@ -126,6 +107,9 @@ export function createApp() {
     const existingItem = await getItemBelongingToList(db, listId, itemId);
     if (existingItem) {
       const item = await updateItem(db, itemId, itemUpdate);
+      if (!item) {
+        throw new NotFoundError("Item not found");
+      }
       return c.json({ item }, 200);
     }
     if (!itemUpdate.name) {
@@ -141,12 +125,7 @@ export function createApp() {
     return c.json({ item }, 201);
   });
 
-  /**
-   * Remove an Item from a List. Idempotent — removing an already-removed Item
-   * still succeeds so an offline delete can be replayed safely. An Item that
-   * exists but belongs to another List is a 404, not a delete. Payments are
-   * independent rows and are never touched by an Item delete.
-   */
+  /** Idempotent so an offline delete can be replayed safely. */
   app.delete("/api/lists/:listId/items/:itemId", requireUser, requireMember, async (c) => {
     const { db, listId, itemId } = getRequestContext(c);
     await getItemBelongingToList(db, listId, itemId);
@@ -154,10 +133,6 @@ export function createApp() {
     return c.json({ ok: true });
   });
 
-  /**
-   * The Payments on a List, newest paid first. Members only — a non-Member
-   * gets a 403, an unknown List a 404, both from {@link requireMember}.
-   */
   app.get("/api/lists/:listId/payments", requireUser, requireMember, async (c) => {
     const { db, listId } = getRequestContext(c);
     const payments = await getPaymentsByList(db, listId);
@@ -165,14 +140,9 @@ export function createApp() {
   });
 
   /**
-   * Sync upsert for a Payment (offline-first record/edit). The device generates
-   * the id; the server is the source of truth. An unknown id creates the
-   * Payment **recorded by the caller** (amount and date both required) — a
-   * Member never records on behalf of someone else. An existing Payment
-   * updates only when it belongs to this List AND was recorded by the caller,
-   * and only in the fields the device sent, so concurrent edits reconcile per
-   * field (ADR 0001). Touching another Member's Payment is rejected. Payments
-   * are independent rows — Sync never merges or dedupes two of them.
+   * Sync upsert (offline-first). Only the fields the device sent are written,
+   * so concurrent edits of one Payment reconcile per field (ADR 0001); a
+   * Member never records or edits on behalf of someone else.
    */
   app.put("/api/lists/:listId/payments/:paymentId", requireUser, requireMember, async (c) => {
     const { db, listId, paymentId } = getRequestContext(c);
@@ -182,9 +152,10 @@ export function createApp() {
       if (existingPayment.memberId !== c.get("user").id) {
         throw new ForbiddenError("You can only edit your own payments");
       }
-      // Only the fields the device sent are written, so concurrent edits of
-      // one Payment reconcile per field (ADR 0001).
       const payment = await updatePayment(db, paymentId, paymentUpdate);
+      if (!payment) {
+        throw new NotFoundError("Payment not found");
+      }
       return c.json({ payment }, 200);
     }
     if (paymentUpdate.amountInCents === undefined || paymentUpdate.paidAt === undefined) {
@@ -200,12 +171,7 @@ export function createApp() {
     return c.json({ payment }, 201);
   });
 
-  /**
-   * Remove a Payment. Idempotent — removing an already-removed Payment still
-   * succeeds so an offline delete can be replayed safely. A Payment that exists
-   * but belongs to another List is a 404; a Payment recorded by another Member
-   * is a 403, never a delete.
-   */
+  /** Idempotent so an offline delete can be replayed safely. */
   app.delete("/api/lists/:listId/payments/:paymentId", requireUser, requireMember, async (c) => {
     const { db, listId, paymentId } = getRequestContext(c);
     const existingPayment = await getPaymentBelongingToList(db, listId, paymentId);
@@ -216,12 +182,7 @@ export function createApp() {
     return c.json({ ok: true });
   });
 
-  /**
-   * Sync upsert for a List (offline-first create/rename). The device generates
-   * the id and sends the whole List; the server is the source of truth. An unknown
-   * id creates a List owned by the caller; an existing List updates only when
-   * the caller is a Member.
-   */
+  /** Sync upsert (offline-first): an unknown id creates a List owned by the caller. */
   app.put("/api/lists/:listId", requireUser, async (c) => {
     const { db, listId } = getRequestContext(c);
     const newListName = readListNameFromBody(await readJsonBody(c));
@@ -234,6 +195,9 @@ export function createApp() {
         throw new ForbiddenError("You are not a member of this list");
       }
       const list = await updateList(db, listId, { name: newListName });
+      if (!list) {
+        throw new NotFoundError("List not found");
+      }
       return c.json({ list }, 200);
     }
     const list = await createList(db, {
@@ -257,10 +221,8 @@ export function createApp() {
   }
 
   /**
-   * Fetch a Payment by id, enforcing that it belongs to the given List. Returns
-   * the Payment when it exists on that List, and `undefined` when no such
-   * Payment exists; a Payment that exists on a *different* List is a 404, so
-   * any endpoint built on this helper can never read or write across Lists.
+   * A Payment that exists on a different List is a 404, so endpoints built on
+   * this helper can never read or write across Lists.
    */
   async function getPaymentBelongingToList(db: Db, listId: string, paymentId: string) {
     const existingPayment = await getPayment(db, paymentId);
@@ -270,11 +232,6 @@ export function createApp() {
     return existingPayment;
   }
 
-  /**
-   * Type guard for a Payment upsert body: an integer amount in cents and a
-   * date, each optional but at least one required. A create fills in both;
-   * an edit sends only the fields it changed, so the server merges per field.
-   */
   function isPaymentUpdateBody(
     value: unknown,
   ): value is { amountInCents?: number; paidAt?: string } {
@@ -309,10 +266,8 @@ export function createApp() {
   }
 
   /**
-   * Fetch an Item by id, enforcing that it belongs to the given List. Returns
-   * the Item when it exists on that List, and `undefined` when no such Item
-   * exists; an Item that exists on a *different* List is a 404, so any endpoint
-   * built on this helper can never read or write across Lists.
+   * An Item that exists on a different List is a 404, so endpoints built on
+   * this helper can never read or write across Lists.
    */
   async function getItemBelongingToList(db: Db, listId: string, itemId: string) {
     const existingItem = await getItem(db, itemId);
@@ -322,7 +277,6 @@ export function createApp() {
     return existingItem;
   }
 
-  /** Type guard for an Item update body: name, checked, and checkedAt are all optional. */
   function isItemUpdateBody(value: unknown): value is ItemUpdate {
     if (typeof value !== "object" || value === null) {
       return false;
@@ -360,7 +314,6 @@ export function createApp() {
     checkedAt?: string;
   }
 
-  /** Type guard for a List upsert body: name is required and non-blank. */
   function isListNameBody(value: unknown): value is { name: string } {
     if (typeof value !== "object" || value === null) {
       return false;
