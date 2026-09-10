@@ -140,10 +140,6 @@ onMounted(() => {
   logRejection(loadList(), "Loading the list");
   logRejection(loadItems(), "Loading the items");
   logRejection(loadPayments(), "Loading the payments");
-  // Re-pull this List's Items and Payments after every sync pass (the mount
-  // pass and every reconnect): the shared pass drains and pulls Lists, then
-  // fans out to this per-view sync. `listId` is read at call time, so the
-  // pull follows the route even if the component is reused for another List.
   stopSyncPass = onSyncPass(async (db) => {
     await ignoreRejection(syncItemsFromServer(db, listId.value));
     await ignoreRejection(syncPaymentsFromServer(db, listId.value));
