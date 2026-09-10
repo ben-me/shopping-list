@@ -262,19 +262,21 @@ describe("ListView", () => {
     const wrapper = await mountList();
     await flushPromises();
 
-    const mine = wrapper.find('li[data-payment-id="pay-mine"]');
-    const theirs = wrapper.find('li[data-payment-id="pay-theirs"]');
-    expect(mine.exists()).toBe(true);
-    expect(theirs.exists()).toBe(true);
+    const rowByAmount = (amount: string) =>
+      wrapper.findAll(".payments li").filter((row) => row.text().includes(amount))[0];
+    const mine = rowByAmount("12.50");
+    const theirs = rowByAmount("7.00");
+    expect(mine).toBeDefined();
+    expect(theirs).toBeDefined();
 
     // My Payment offers edit and delete; theirs offers neither.
-    expect(mine.find('button[name="edit-payment"]').exists()).toBe(true);
-    expect(mine.find('button[name="delete-payment"]').exists()).toBe(true);
-    expect(theirs.find('button[name="edit-payment"]').exists()).toBe(false);
-    expect(theirs.find('button[name="delete-payment"]').exists()).toBe(false);
+    expect(mine!.find('button[name="edit-payment"]').exists()).toBe(true);
+    expect(mine!.find('button[name="delete-payment"]').exists()).toBe(true);
+    expect(theirs!.find('button[name="edit-payment"]').exists()).toBe(false);
+    expect(theirs!.find('button[name="delete-payment"]').exists()).toBe(false);
 
     // Editing my Payment updates the amount and the date.
-    await mine.find('button[name="edit-payment"]').trigger("click");
+    await mine!.find('button[name="edit-payment"]').trigger("click");
     await flushPromises();
     await wrapper.find('input[name="edit-amount"]').setValue("9.90");
     await wrapper.find('input[name="edit-date"]').setValue("2026-02-03");
@@ -289,7 +291,7 @@ describe("ListView", () => {
     });
 
     // Deleting my Payment removes it; theirs remains.
-    await wrapper.find('li[data-payment-id="pay-mine"] button[name="delete-payment"]').trigger(
+    await mine!.find('button[name="delete-payment"]').trigger(
       "click",
     );
     await flushPromises();

@@ -189,7 +189,7 @@ onUnmounted(() => {
     <h2>Payments</h2>
     <p v-if="payments.length === 0">No payments recorded yet.</p>
     <ul>
-      <li v-for="payment in payments" :key="payment.id" :data-payment-id="payment.id">
+      <li v-for="payment in payments" :key="payment.id">
         <template v-if="editingPaymentId === payment.id">
           <form class="edit-payment-form" @submit.prevent="onSaveEdit(payment)">
             <label>

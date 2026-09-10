@@ -1,8 +1,7 @@
 import type { Payment } from "@shopping-list/api/domain";
 import { apiFetch } from "./api";
 import type { ShoppingDb } from "./store";
-
-const now = () => new Date().toISOString();
+import now from "./utils/now";
 
 /**
  * Record a Payment: a free amount in EUR minor units and a date, standing on

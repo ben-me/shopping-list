@@ -38,7 +38,7 @@ export function itemRow(page: Page, name: string) {
 }
 
 export function paymentRow(page: Page, amount: string) {
-  return page.locator("li[data-payment-id]").filter({ hasText: amount });
+  return page.locator(".payments li").filter({ hasText: amount });
 }
 
 export async function addItem(page: Page, name: string) {

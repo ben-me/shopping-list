@@ -1,6 +1,7 @@
 import type { Item, List, Payment } from "@shopping-list/api/domain";
 import { apiFetch } from "./api";
 import type { ShoppingDb } from "./store";
+import now from "./utils/now";
 
 export async function createList(db: ShoppingDb, ownerId: string, name: string): Promise<List> {
   const trimmed = name.trim();
@@ -100,5 +101,3 @@ export async function syncFromServer(db: ShoppingDb): Promise<void> {
     await db.syncList(list);
   }
 }
-
-const now = () => new Date().toISOString();

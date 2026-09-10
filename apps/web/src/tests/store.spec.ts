@@ -2,10 +2,9 @@ import "fake-indexeddb/auto";
 
 import { OUTBOX_RETENTION_MS, ShoppingDb } from "../store";
 import type { Item, List, Membership, Payment } from "@shopping-list/api/domain";
+import now from "@/utils/now";
 
 let dbNumber = 0;
-
-const now = () => new Date().toISOString();
 
 const list: List = {
   id: "list-1",
