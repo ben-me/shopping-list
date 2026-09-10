@@ -1,58 +1,17 @@
 import type { Miniflare } from "miniflare";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { createApp } from "./index";
-import { createD1Connection, type Db } from "./db";
+import type { Db } from "./db";
 import { createMembership } from "./queries";
-import { runMigrations, startMiniflare, testEnvFor } from "./test-support";
+import {
+  getUserId as getUserIdViaApi,
+  putList as putListViaApi,
+  signUp as signUpViaApi,
+  startTestApp,
+} from "./test-support";
 import type { AuthEnv } from "./auth";
 import type { List } from "./domain";
 import type { ApiErrorEnvelope } from "./errors";
-
-let signupCounter = 0;
-function uniqueEmail() {
-  signupCounter += 1;
-  return `listuser${signupCounter}@example.com`;
-}
-
-async function signUp(app: ReturnType<typeof createApp>, env: AuthEnv) {
-  const email = uniqueEmail();
-  const res = await app.request(
-    "/api/auth/sign-up/email",
-    {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ name: "Test User", email, password: "password123" }),
-    },
-    env,
-  );
-  expect(res.status).toBe(200);
-  return { cookie: res.headers.getSetCookie().join("; "), email };
-}
-
-async function getUserId(app: ReturnType<typeof createApp>, env: AuthEnv, cookie: string) {
-  const res = await app.request("/api/me", { headers: { cookie } }, env);
-  const body = (await res.json()) as { user: { id: string } };
-  expect(res.status).toBe(200);
-  return body.user.id;
-}
-
-function putList(
-  app: ReturnType<typeof createApp>,
-  env: AuthEnv,
-  cookie: string,
-  listId: string,
-  name: string,
-) {
-  return app.request(
-    `/api/lists/${listId}`,
-    {
-      method: "PUT",
-      headers: { "content-type": "application/json", cookie },
-      body: JSON.stringify({ name }),
-    },
-    env,
-  );
-}
 
 describe("lists endpoints", () => {
   let mf: Miniflare;
@@ -60,13 +19,20 @@ describe("lists endpoints", () => {
   let app: ReturnType<typeof createApp>;
   let db: Db;
 
+  function signUp() {
+    return signUpViaApi(app, env, "listuser");
+  }
+
+  function getUserId(cookie: string) {
+    return getUserIdViaApi(app, env, cookie);
+  }
+
+  function putList(cookie: string, listId: string, name: string) {
+    return putListViaApi(app, env, cookie, listId, name);
+  }
+
   beforeAll(async () => {
-    mf = await startMiniflare("local-d1-lists-db");
-    const binding = await mf.getD1Database("devDb");
-    await runMigrations(binding);
-    env = testEnvFor(binding);
-    app = createApp();
-    db = createD1Connection(binding);
+    ({ mf, env, app, db } = await startTestApp("local-d1-lists-db"));
   });
 
   afterAll(async () => {
@@ -82,11 +48,11 @@ describe("lists endpoints", () => {
   });
 
   it("creates a List owned by the caller through an upsert", async () => {
-    const { cookie } = await signUp(app, env);
-    const ownerId = await getUserId(app, env, cookie);
+    const { cookie } = await signUp();
+    const ownerId = await getUserId(cookie);
     const listId = "list-" + crypto.randomUUID();
 
-    const res = await putList(app, env, cookie, listId, "Household");
+    const res = await putList(cookie, listId, "Household");
     expect(res.status).toBe(201);
     const body = (await res.json()) as { list: List };
     expect(body.list).toMatchObject({ id: listId, ownerId, name: "Household" });
@@ -95,13 +61,13 @@ describe("lists endpoints", () => {
   });
 
   it("updates a List the caller is a Member of and rejects an outsider", async () => {
-    const owner = await signUp(app, env);
-    const ownerId = await getUserId(app, env, owner.cookie);
-    const outsider = await signUp(app, env);
+    const owner = await signUp();
+    const ownerId = await getUserId(owner.cookie);
+    const outsider = await signUp();
     const listId = "list-" + crypto.randomUUID();
-    await putList(app, env, owner.cookie, listId, "Before");
+    await putList(owner.cookie, listId, "Before");
 
-    const outsiderRes = await putList(app, env, outsider.cookie, listId, "Hijacked");
+    const outsiderRes = await putList(outsider.cookie, listId, "Hijacked");
     const outsiderBody = (await outsiderRes.json()) as ApiErrorEnvelope;
     expect(outsiderRes.status).toBe(403);
     expect(outsiderBody).toEqual({
@@ -112,16 +78,16 @@ describe("lists endpoints", () => {
       },
     });
 
-    const res = await putList(app, env, owner.cookie, listId, "After");
+    const res = await putList(owner.cookie, listId, "After");
     expect(res.status).toBe(200);
     const body = (await res.json()) as { list: List };
     expect(body.list).toMatchObject({ id: listId, ownerId, name: "After" });
   });
 
   it("rejects an empty or whitespace-only List name", async () => {
-    const { cookie } = await signUp(app, env);
+    const { cookie } = await signUp();
 
-    const res = await putList(app, env, cookie, "list-emptyname", "   ");
+    const res = await putList(cookie, "list-emptyname", "   ");
     const body = (await res.json()) as ApiErrorEnvelope;
 
     expect(res.status).toBe(400);
@@ -131,14 +97,14 @@ describe("lists endpoints", () => {
   });
 
   it("lists the Lists the user owns or has joined", async () => {
-    const alice = await signUp(app, env);
-    const bob = await signUp(app, env);
-    const aliceId = await getUserId(app, env, alice.cookie);
-    const bobId = await getUserId(app, env, bob.cookie);
+    const alice = await signUp();
+    const bob = await signUp();
+    const aliceId = await getUserId(alice.cookie);
+    const bobId = await getUserId(bob.cookie);
 
-    await putList(app, env, alice.cookie, "list-alice", "Household");
+    await putList(alice.cookie, "list-alice", "Household");
     const bobsListId = "list-bob";
-    await putList(app, env, bob.cookie, bobsListId, "Bobs shop");
+    await putList(bob.cookie, bobsListId, "Bobs shop");
     await createMembership(db, { listId: bobsListId, memberId: aliceId });
 
     const aliceRes = await app.request("/api/lists", { headers: { cookie: alice.cookie } }, env);

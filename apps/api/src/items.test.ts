@@ -1,23 +1,20 @@
 import type { Miniflare } from "miniflare";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { createApp } from "./index";
-import { createD1Connection, type Db } from "./db";
+import type { Db } from "./db";
 import { createMembership, createPayment } from "./queries";
-import { runMigrations, startMiniflare, testEnvFor } from "./test-support";
+import {
+  getUserId as getUserIdViaApi,
+  putList as putListViaApi,
+  signUp as signUpViaApi,
+  startTestApp,
+  uniq,
+  wipeDomainTables,
+} from "./test-support";
 import type { AuthEnv } from "./auth";
 import type { ApiErrorEnvelope } from "./errors";
 import type { Item } from "./domain";
 import * as schema from "./schema";
-
-function uniq(prefix: string) {
-  return `${prefix}-${crypto.randomUUID()}`;
-}
-
-let signupCounter = 0;
-function uniqueEmail() {
-  signupCounter += 1;
-  return `itemuser${signupCounter}@example.com`;
-}
 
 describe("item endpoints", () => {
   let mf: Miniflare;
@@ -25,39 +22,16 @@ describe("item endpoints", () => {
   let app: ReturnType<typeof createApp>;
   let db: Db;
 
-
-  async function getUserId(cookie: string) {
-    const res = await app.request("/api/me", { headers: { cookie } }, env);
-    const body = (await res.json()) as { user: { id: string } };
-    expect(res.status).toBe(200);
-    return body.user.id;
+  function signUp() {
+    return signUpViaApi(app, env, "itemuser");
   }
 
-  async function signUp() {
-    const email = uniqueEmail();
-    const res = await app.request(
-      "/api/auth/sign-up/email",
-      {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ name: "Test User", email, password: "password123" }),
-      },
-      env,
-    );
-    expect(res.status).toBe(200);
-    return { cookie: res.headers.getSetCookie().join("; "), email };
+  function getUserId(cookie: string) {
+    return getUserIdViaApi(app, env, cookie);
   }
 
   function putList(cookie: string, listId: string, name: string) {
-    return app.request(
-      `/api/lists/${listId}`,
-      {
-        method: "PUT",
-        headers: { "content-type": "application/json", cookie },
-        body: JSON.stringify({ name }),
-      },
-      env,
-    );
+    return putListViaApi(app, env, cookie, listId, name);
   }
 
   function putItem(cookie: string, listId: string, itemId: string, body: unknown) {
@@ -85,19 +59,8 @@ describe("item endpoints", () => {
   }
 
   beforeAll(async () => {
-    mf = await startMiniflare("local-d1-items-db");
-    const binding = await mf.getD1Database("devDb");
-    await runMigrations(binding);
-    env = testEnvFor(binding);
-    app = createApp();
-    db = createD1Connection(binding);
-    // Local D1 persists between runs; wipe the domain tables so fixed test ids
-    // always start from a clean List/Item/Payment state. Auth users may remain.
-    await db.delete(schema.items);
-    await db.delete(schema.payments);
-    await db.delete(schema.memberships);
-    await db.delete(schema.invitations);
-    await db.delete(schema.lists);
+    ({ mf, env, app, db } = await startTestApp("local-d1-items-db"));
+    await wipeDomainTables(db);
   });
 
   afterAll(async () => {
