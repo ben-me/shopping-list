@@ -219,11 +219,7 @@ export class ShoppingDb extends Dexie {
     await this.outbox.where("syncedAt").belowOrEqual(cutoff).delete();
   }
 
-  /**
-   * Remove every row the device holds. Used when a *different* User takes
-   * over the Store: IndexedDB is shared by everyone who signs in on this
-   * device, and the offline copy must never outlive the User it belongs to.
-   */
+  /** Remove every row the device holds: a different User took the Store over. */
   async clearAll(): Promise<void> {
     await Promise.all([
       this.lists.clear(),
@@ -234,12 +230,7 @@ export class ShoppingDb extends Dexie {
     ]);
   }
 
-  /**
-   * Remove a List and everything that belongs to it. Used when Sync learns
-   * the server no longer returns the List for this user — a leftover local
-   * copy must never be served as current, and its queued writes are dead too
-   * (the server no longer accepts them for this user).
-   */
+  /** Drop a List and everything that belongs to it, queued writes included. */
   async removeList(listId: string): Promise<void> {
     const outboxIds = (
       await this.outbox

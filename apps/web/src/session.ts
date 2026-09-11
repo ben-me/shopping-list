@@ -57,23 +57,16 @@ async function fetchSession() {
   await adoptUser(session.user);
 }
 
-/**
- * Make the new session user the Store's account: cache them and scope the
- * local Store to them. A Store failure (IndexedDB unavailable, quota) must
- * never block the session flow — the app opens, and Sync simply re-runs
- * later, so the wipe is strictly best-effort.
- */
+/** Scope the Store to the session user; best-effort so the session always opens. */
 async function adoptUser(user: SessionUser | null) {
   cacheUser(user);
   if (!user) {
     return;
   }
   try {
-    // A different user taking over this browser must never see (or sync) the
-    // previous user's offline copy.
     await ensureStoreForUser(db, user.id);
   } catch {
-    // Best-effort: the session and the UI are more important than the wipe.
+    // Best-effort: never block the session.
   }
 }
 

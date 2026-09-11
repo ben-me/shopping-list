@@ -202,8 +202,6 @@ describe("session", () => {
     const secondUser: SessionUser = { id: "user-2", name: "Second User", email: "[EMAIL]" };
     fetchImpl = stubFetch(jsonResponse({ session: { token: "tok" }, user }));
     await restoreSession();
-
-    // The first user's offline copy sits in the local Store.
     await db.syncList({
       id: "list-1",
       ownerId: user.id,
@@ -213,8 +211,7 @@ describe("session", () => {
     });
     expect(await db.getLists()).toHaveLength(1);
 
-    // A different user signs in on the same device: the copy is wiped before
-    // any view could paint it.
+    // A different user signs in: wiped before any view could paint it.
     fetchImpl.mockImplementation(async () => jsonResponse({ token: "tok", user: secondUser }));
     await signIn("[EMAIL]", "password123");
 
