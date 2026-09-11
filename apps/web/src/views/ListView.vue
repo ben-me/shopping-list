@@ -1,18 +1,21 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref } from "vue";
 import { useRoute } from "vue-router";
-import type { Item, Payment } from "@shopping-list/api/domain";
+import type { Item, List, Payment } from "@shopping-list/api/domain";
 import { onSyncPass, runSyncPass } from "../connectivity";
 import { db } from "../db";
 import { addItem, removeItem, setItemChecked, syncItemsFromServer } from "../items";
+import { memberIdsOf } from "../members";
 import { addPayment, removePayment, syncPaymentsFromServer, updatePayment } from "../payments";
 import { syncOutbox } from "../lists";
 import { session } from "../session";
+import { computeOwed } from "../utils/computeOwed";
 import { ignoreRejection, logRejection } from "../utils/fireAndForget";
 
 const route = useRoute();
 const listId = computed(() => String(route.params.listId ?? ""));
-const listName = ref<string | null>(null);
+const list = ref<List | null>(null);
+const members = ref<string[]>([]);
 const items = ref<Item[]>([]);
 const payments = ref<Payment[]>([]);
 const itemForm = ref({
@@ -36,9 +39,47 @@ const formatEuro = (cents: number) => euroFormat.format(cents / 100);
 const isoFromDate = (date: string) => new Date(`${date}T12:00:00.000Z`).toISOString();
 const isOwn = (payment: Payment) => payment.memberId === session.user?.id;
 
+/**
+ * The List header's money standing, recomputed live from the loaded Members
+ * and Payments — the display surface for the pure Split/Owed calculation.
+ */
+const standing = computed(() => computeOwed(members.value, payments.value));
+
+const memberLabel = (memberId: string) => (memberId === session.user?.id ? "You" : memberId);
+
+/** The Owed wording and colour for one Member: red owes the group, green the group owes. */
+const owedPresentation = (amountInCents: number) =>
+  amountInCents > 0
+    ? { label: `owes ${formatEuro(amountInCents)}`, className: "owes" }
+    : amountInCents < 0
+      ? { label: `is owed ${formatEuro(-amountInCents)}`, className: "owed" }
+      : { label: "settled", className: "settled" };
+
+/**
+ * One row per Member for the header, each with the equal share. Empty when the
+ * List has fewer than two Members — no Split is possible, and a lone Member
+ * sees only the running total (spec: no Owed figure).
+ */
+const standingRows = computed(() => {
+  const { shareInCents, owed } = standing.value;
+  if (shareInCents === null) {
+    return [];
+  }
+  return owed.map((figure) => ({
+    memberId: figure.memberId,
+    name: memberLabel(figure.memberId),
+    share: formatEuro(shareInCents),
+    ...owedPresentation(figure.amountInCents),
+  }));
+});
+
 async function loadList() {
-  const list = await db.getList(listId.value);
-  listName.value = list?.name ?? null;
+  list.value = (await db.getList(listId.value)) ?? null;
+  await loadMembers();
+}
+
+async function loadMembers() {
+  members.value = list.value ? await memberIdsOf(db, list.value) : [];
 }
 
 async function loadItems() {
@@ -142,6 +183,7 @@ onMounted(() => {
   stopSyncPass = onSyncPass(async (db) => {
     await ignoreRejection(syncItemsFromServer(db, listId.value));
     await ignoreRejection(syncPaymentsFromServer(db, listId.value));
+    await logRejection(loadMembers(), "Loading the members");
     await logRejection(loadItems(), "Loading the items");
     await logRejection(loadPayments(), "Loading the payments");
   });
@@ -155,7 +197,22 @@ onUnmounted(() => {
 </script>
 
 <template>
-  <h1>{{ listName ?? "List" }}</h1>
+  <h1>{{ list?.name ?? "List" }}</h1>
+  <section class="standing" aria-label="Money standing">
+    <p class="total-paid">Total paid: {{ formatEuro(standing.totalInCents) }}</p>
+    <ul v-if="standingRows.length > 0" class="standing-members">
+      <li
+        v-for="row in standingRows"
+        :key="row.memberId"
+        class="standing-member"
+        :class="row.className"
+      >
+        <span class="member-name">{{ row.name }}</span>
+        <span class="member-share">share {{ row.share }}</span>
+        <span class="member-owed">{{ row.label }}</span>
+      </li>
+    </ul>
+  </section>
   <p v-if="items.length === 0">Nothing on this list yet.</p>
   <ul>
     <li v-for="item in items" :key="item.id">
@@ -236,3 +293,44 @@ onUnmounted(() => {
     <p v-if="paymentForm.error">{{ paymentForm.error }}</p>
   </section>
 </template>
+
+<style scoped>
+.standing {
+  margin-bottom: 1rem;
+}
+
+.total-paid {
+  font-weight: 600;
+}
+
+.standing-members {
+  list-style: none;
+  padding: 0;
+  margin: 0.25rem 0 0;
+}
+
+.standing-member {
+  margin: 0.125rem 0;
+}
+
+.standing-member span + span::before {
+  content: " — ";
+}
+
+.standing-member .member-name {
+  font-weight: 600;
+}
+
+/* Red: this Member owes the group. Green: the group owes them. */
+.standing-member.owes {
+  color: #dc2626;
+}
+
+.standing-member.owed {
+  color: #16a34a;
+}
+
+.standing-member.settled {
+  color: #6b7280;
+}
+</style>
