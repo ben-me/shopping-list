@@ -89,10 +89,22 @@ export async function syncOutbox(db: ShoppingDb): Promise<void> {
   });
 }
 
+/**
+ * Server-authoritative: drop local Lists the server no longer returns
+ * (previous user's leftovers, removed memberships). The outbox has already
+ * drained (runSyncPass), so just-pushed offline Lists survive.
+ */
 export async function syncFromServer(db: ShoppingDb): Promise<void> {
   const { lists } = await apiFetch<{ lists: List[] }>("/api/lists");
   if (!lists) {
     return;
+  }
+  const serverListIds = new Set(lists.map((list) => list.id));
+  const localLists = await db.getLists();
+  for (const localList of localLists) {
+    if (!serverListIds.has(localList.id)) {
+      await db.removeList(localList.id);
+    }
   }
   for (const list of lists) {
     if (!list?.id) {

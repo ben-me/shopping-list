@@ -135,4 +135,38 @@ describe("syncFromServer", () => {
     expect(await db.getList(list.id)).toEqual(serverList);
     expect(await db.pendingOutboxEntries()).toHaveLength(0);
   });
+
+  it("drops local Lists the server no longer returns, with everything that belongs to them", async () => {
+    const serverList: List = {
+      id: "list-server-1",
+      ownerId: "user-1",
+      name: "Mine",
+      createdAt: "2026-09-01T00:00:00.000Z",
+      updatedAt: "2026-09-01T00:00:00.000Z",
+    };
+    const staleList: List = {
+      id: "list-stale",
+      ownerId: "user-1",
+      name: "Leftover",
+      createdAt: "2026-09-01T00:00:00.000Z",
+      updatedAt: "2026-09-01T00:00:00.000Z",
+    };
+    await db.syncList(serverList);
+    await db.syncList(staleList);
+    await db.putItem({
+      id: "item-stale",
+      listId: staleList.id,
+      name: "Milk",
+      checked: false,
+      createdAt: "2026-09-01T00:00:00.000Z",
+      updatedAt: "2026-09-01T00:00:00.000Z",
+    }); // queued write for the stale List
+
+    stubFetch(() => jsonResponse({ lists: [serverList] }));
+    await syncFromServer(db);
+
+    expect(await db.getLists()).toEqual([serverList]);
+    expect(await db.getItems(staleList.id)).toEqual([]);
+    expect(await db.pendingOutboxEntries()).toHaveLength(0);
+  });
 });
