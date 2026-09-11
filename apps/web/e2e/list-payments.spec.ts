@@ -16,7 +16,13 @@ test("a member records a Payment and it survives reloads", async ({ page }) => {
 
   await expect(paymentRow(page, "12,50")).toBeVisible();
 
+  await test.step("the List header shows the running total, and a lone Member gets no Owed figure", async () => {
+    await expect(page.locator(".total-paid")).toContainText("12,50");
+    await expect(page.locator(".standing-member")).toHaveCount(0);
+  });
+
   await page.reload();
 
   await expect(paymentRow(page, "12,50")).toBeVisible();
+  await expect(page.locator(".total-paid")).toContainText("12,50");
 });
