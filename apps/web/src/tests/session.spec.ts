@@ -1,6 +1,7 @@
 import "fake-indexeddb/auto";
 
 import { db } from "../db";
+import * as storeOwner from "../store-owner";
 import {
   _resetSession,
   session,
@@ -226,6 +227,18 @@ describe("session", () => {
 
     expect(callsTo("/api/auth/get-session")).toHaveLength(1);
     expect(session.user).toEqual(user);
+  });
+
+  it("still restores the session when scoping the Store fails", async () => {
+    const spy = vi
+      .spyOn(storeOwner, "ensureStoreForUser")
+      .mockRejectedValue(new Error("IndexedDB unavailable"));
+    fetchImpl = stubFetch(jsonResponse({ session: { token: "tok" }, user }));
+
+    await expect(restoreSession()).resolves.toBeUndefined();
+
+    expect(session.user).toEqual(user);
+    spy.mockRestore();
   });
 
   it("allows a later restore to re-fetch after the first completed", async () => {

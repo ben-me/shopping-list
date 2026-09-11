@@ -32,7 +32,7 @@ describe("ensureStoreForUser", () => {
     await ensureStoreForUser(db, "user-1");
 
     expect(await db.getLists()).toEqual([list]);
-    expect(localStorage.getItem("shopping-list:store-owner")).toBe("user-1");
+    expect(localStorage.getItem("shopping-list:store-account")).toBe("user-1");
   });
 
   it("is a no-op for the same user, so sign-out and back-in keeps the offline copy", async () => {
@@ -65,6 +65,6 @@ describe("ensureStoreForUser", () => {
     expect(await db.getPayments(list.id)).toEqual([]);
     expect(await db.getMemberships(list.id)).toEqual([]);
     expect(await db.pendingOutboxEntries()).toEqual([]);
-    expect(localStorage.getItem("shopping-list:store-owner")).toBe("user-2");
+    expect(localStorage.getItem("shopping-list:store-account")).toBe("user-2");
   });
 });

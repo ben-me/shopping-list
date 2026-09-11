@@ -54,12 +54,26 @@ async function fetchSession() {
     // still opens on last-synced data rather than forcing a sign-in.
     session.user = cachedUser();
   }
-  cacheUser(session.user);
-  if (session.user) {
-    // Scope the local Store to whoever the session says the user is: a
-    // different user taking over this browser must never see (or sync) the
+  await adoptUser(session.user);
+}
+
+/**
+ * Make the new session user the Store's account: cache them and scope the
+ * local Store to them. A Store failure (IndexedDB unavailable, quota) must
+ * never block the session flow — the app opens, and Sync simply re-runs
+ * later, so the wipe is strictly best-effort.
+ */
+async function adoptUser(user: SessionUser | null) {
+  cacheUser(user);
+  if (!user) {
+    return;
+  }
+  try {
+    // A different user taking over this browser must never see (or sync) the
     // previous user's offline copy.
-    await ensureStoreForUser(db, session.user.id);
+    await ensureStoreForUser(db, user.id);
+  } catch {
+    // Best-effort: the session and the UI are more important than the wipe.
   }
 }
 
@@ -69,8 +83,7 @@ export async function signIn(email: string, password: string) {
     throw new Error(error.message ?? "Sign-in failed");
   }
   session.user = data?.user as SessionUser;
-  cacheUser(session.user);
-  await ensureStoreForUser(db, session.user.id);
+  await adoptUser(session.user);
 }
 
 export async function signUp(name: string, email: string, password: string) {
@@ -79,8 +92,7 @@ export async function signUp(name: string, email: string, password: string) {
     throw new Error(error.message ?? "Sign-up failed");
   }
   session.user = data?.user;
-  cacheUser(session.user);
-  await ensureStoreForUser(db, session.user.id);
+  await adoptUser(session.user);
 }
 
 export async function signOut() {

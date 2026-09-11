@@ -92,10 +92,10 @@ export async function syncOutbox(db: ShoppingDb): Promise<void> {
 /**
  * Pull the server's Lists for this user into the Store (server is
  * authoritative), then drop local Lists the server no longer returns: a
- * leftover copy from a previous user on the same device — or from a revoked
+ * leftover copy from a previous user on the same device — or a removed
  * Membership — must never be served as current. The outbox has already
  * drained by the time this runs (runSyncPass), so a List created offline and
- * pushed just before is present on the server and survives the reconcile.
+ * pushed just before is present on the server and survives the prune.
  */
 export async function syncFromServer(db: ShoppingDb): Promise<void> {
   const { lists } = await apiFetch<{ lists: List[] }>("/api/lists");
