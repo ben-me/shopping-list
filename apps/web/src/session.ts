@@ -1,5 +1,7 @@
 import { reactive } from "vue";
 import { authClient } from "./auth-client";
+import { db } from "./db";
+import { ensureStoreForUser } from "./store-owner";
 
 const SESSION_CACHE_KEY = "shopping-list:session-user";
 
@@ -47,11 +49,17 @@ async function fetchSession() {
   try {
     const { data } = await authClient.getSession();
     session.user = data?.user ?? null;
-    cacheUser(session.user);
   } catch {
     // Server unreachable (offline): fall back to the cached user so the app
     // still opens on last-synced data rather than forcing a sign-in.
     session.user = cachedUser();
+  }
+  cacheUser(session.user);
+  if (session.user) {
+    // Scope the local Store to whoever the session says the user is: a
+    // different user taking over this browser must never see (or sync) the
+    // previous user's offline copy.
+    await ensureStoreForUser(db, session.user.id);
   }
 }
 
@@ -62,6 +70,7 @@ export async function signIn(email: string, password: string) {
   }
   session.user = data?.user as SessionUser;
   cacheUser(session.user);
+  await ensureStoreForUser(db, session.user.id);
 }
 
 export async function signUp(name: string, email: string, password: string) {
@@ -71,6 +80,7 @@ export async function signUp(name: string, email: string, password: string) {
   }
   session.user = data?.user;
   cacheUser(session.user);
+  await ensureStoreForUser(db, session.user.id);
 }
 
 export async function signOut() {

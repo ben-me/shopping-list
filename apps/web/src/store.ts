@@ -175,7 +175,9 @@ export class ShoppingDb extends Dexie {
       .equals(targetId)
       .filter(
         (entry) =>
-          entry.targetType === targetType && entry.operation === "delete" && entry.syncedAt === null,
+          entry.targetType === targetType &&
+          entry.operation === "delete" &&
+          entry.syncedAt === null,
       )
       .count();
     return pendingDeletes > 0;
@@ -215,6 +217,45 @@ export class ShoppingDb extends Dexie {
   async pruneSyncedOutbox(): Promise<void> {
     const cutoff = new Date(Date.now() - OUTBOX_RETENTION_MS).toISOString();
     await this.outbox.where("syncedAt").belowOrEqual(cutoff).delete();
+  }
+
+  /**
+   * Remove every row the device holds. Used when a *different* User takes
+   * over the Store: IndexedDB is shared by everyone who signs in on this
+   * device, and the offline copy must never outlive the User it belongs to.
+   */
+  async clearAll(): Promise<void> {
+    await Promise.all([
+      this.lists.clear(),
+      this.items.clear(),
+      this.payments.clear(),
+      this.memberships.clear(),
+      this.outbox.clear(),
+    ]);
+  }
+
+  /**
+   * Remove a List and everything that belongs to it. Used when Sync learns
+   * the server no longer returns the List for this user — a leftover local
+   * copy must never be served as current, and its queued writes are dead too
+   * (the server no longer accepts them for this user).
+   */
+  async removeList(listId: string): Promise<void> {
+    const outboxIds = (
+      await this.outbox
+        .filter(
+          (entry) =>
+            entry.listId === listId || (entry.targetType === "list" && entry.targetId === listId),
+        )
+        .toArray()
+    ).map((entry) => entry.id!);
+    await Promise.all([
+      this.lists.delete(listId),
+      this.items.where("listId").equals(listId).delete(),
+      this.payments.where("listId").equals(listId).delete(),
+      this.memberships.where("listId").equals(listId).delete(),
+      outboxIds.length > 0 ? this.outbox.bulkDelete(outboxIds) : Promise.resolve(),
+    ]);
   }
 
   private writeWithOutbox<T>(

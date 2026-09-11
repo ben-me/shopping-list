@@ -1,3 +1,6 @@
+import "fake-indexeddb/auto";
+
+import { db } from "../db";
 import {
   _resetSession,
   session,
@@ -183,6 +186,30 @@ describe("session", () => {
     expect(callsTo("/api/auth/sign-out")).toHaveLength(1);
     expect(session.user).toBeNull();
     expect(localStorage.getItem("shopping-list:session-user")).toBeNull();
+  });
+
+  it("wipes the previous user's local data when a different user signs in", async () => {
+    const secondUser: SessionUser = { id: "user-2", name: "Second User", email: "[EMAIL]" };
+    fetchImpl = stubFetch(jsonResponse({ session: { token: "tok" }, user }));
+    await restoreSession();
+
+    // The first user's offline copy sits in the local Store.
+    await db.syncList({
+      id: "list-1",
+      ownerId: user.id,
+      name: "Mine",
+      createdAt: "2026-01-01T00:00:00.000Z",
+      updatedAt: "2026-01-01T00:00:00.000Z",
+    });
+    expect(await db.getLists()).toHaveLength(1);
+
+    // A different user signs in on the same device: the copy is wiped before
+    // any view could paint it.
+    fetchImpl.mockImplementation(async () => jsonResponse({ token: "tok", user: secondUser }));
+    await signIn("[EMAIL]", "password123");
+
+    expect(session.user).toEqual(secondUser);
+    expect(await db.getLists()).toEqual([]);
   });
 
   it("signs out even when the server is unreachable", async () => {

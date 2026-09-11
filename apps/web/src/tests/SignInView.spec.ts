@@ -72,6 +72,7 @@ describe("SignInView", () => {
     expect(router.currentRoute.value.name).toBe("lists");
     expect(wrapper.text()).toContain("Shopping Lists");
     expect(wrapper.text()).toContain("Signed in as Test User");
+    expect(wrapper.text()).toContain("Your lists will appear here.");
   });
 
   it("signs a new user up and lands on the lists index", async () => {

@@ -89,10 +89,25 @@ export async function syncOutbox(db: ShoppingDb): Promise<void> {
   });
 }
 
+/**
+ * Pull the server's Lists for this user into the Store (server is
+ * authoritative), then drop local Lists the server no longer returns: a
+ * leftover copy from a previous user on the same device — or from a revoked
+ * Membership — must never be served as current. The outbox has already
+ * drained by the time this runs (runSyncPass), so a List created offline and
+ * pushed just before is present on the server and survives the reconcile.
+ */
 export async function syncFromServer(db: ShoppingDb): Promise<void> {
   const { lists } = await apiFetch<{ lists: List[] }>("/api/lists");
   if (!lists) {
     return;
+  }
+  const serverListIds = new Set(lists.map((list) => list.id));
+  const localLists = await db.getLists();
+  for (const localList of localLists) {
+    if (!serverListIds.has(localList.id)) {
+      await db.removeList(localList.id);
+    }
   }
   for (const list of lists) {
     if (!list?.id) {
