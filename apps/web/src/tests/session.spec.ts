@@ -178,15 +178,24 @@ describe("session", () => {
     expect(session.user).toBeNull();
   });
 
-  it("signs out clears the session and the cached user", async () => {
+  it("signs out clears the session, the cached user, and every row in the local Store", async () => {
     fetchImpl = stubFetch(jsonResponse({ session: { token: "tok" }, user }));
     await restoreSession();
+    await db.syncList({
+      id: "list-1",
+      ownerId: user.id,
+      name: "Mine",
+      createdAt: "2026-01-01T00:00:00.000Z",
+      updatedAt: "2026-01-01T00:00:00.000Z",
+    });
+    expect(await db.getLists()).toHaveLength(1);
     fetchImpl = stubFetch(jsonResponse({ success: true }));
     await signOut();
 
     expect(callsTo("/api/auth/sign-out")).toHaveLength(1);
     expect(session.user).toBeNull();
     expect(localStorage.getItem("shopping-list:session-user")).toBeNull();
+    expect(await db.getLists()).toEqual([]);
   });
 
   it("wipes the previous user's local data when a different user signs in", async () => {
@@ -213,12 +222,20 @@ describe("session", () => {
     expect(await db.getLists()).toEqual([]);
   });
 
-  it("signs out even when the server is unreachable", async () => {
+  it("signs out even when the server is unreachable — and still wipes the Store", async () => {
     session.user = user;
+    await db.syncList({
+      id: "list-1",
+      ownerId: user.id,
+      name: "Mine",
+      createdAt: "2026-01-01T00:00:00.000Z",
+      updatedAt: "2026-01-01T00:00:00.000Z",
+    });
     fetchImpl = stubFetch(jsonResponse({ message: "unavailable" }, 503));
     await signOut();
 
     expect(session.user).toBeNull();
+    expect(await db.getLists()).toEqual([]);
   });
 
   it("shares one in-flight restore between concurrent callers", async () => {

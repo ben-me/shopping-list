@@ -129,6 +129,7 @@ describe("ListsView", () => {
     expect(signOutButton).toBeDefined();
     await signOutButton?.trigger("click");
     await flushPromises();
+    await settle(); // the Store wipe in the sign-out path settles a tick later
     expect(router.currentRoute.value.name).toBe("sign-in");
     expect(wrapper.text()).toContain("Sign in");
   });

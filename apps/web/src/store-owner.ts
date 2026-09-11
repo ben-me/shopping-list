@@ -9,10 +9,10 @@ const STORE_ACCOUNT_KEY = "shopping-list:store-account";
  * becomes the session, the previous User's rows are wiped and a fresh account
  * can never see (or sync) someone else's Lists, offline or not.
  *
- * The first User on a device (no account recorded) keeps the Store as-is:
- * that is an existing install whose local copy belongs to them. Signing back
- * in as the same User is a no-op, so the offline copy survives sign-out and
- * back-in; the wipe happens strictly on *identity change*.
+ * The first User on a device (no account recorded) keeps the Store as-is
+ * (an existing install's offline copy). Signing back in as the same User is
+ * a no-op; sign-out already empties the Store (session.ts), so this wipe is
+ * only the backstop for the device changing hands without a sign-out.
  *
  * Known limitation (why the first-use rule exists): a marker-less Store is
  * treated as a pre-fix install, so if localStorage alone is lost while

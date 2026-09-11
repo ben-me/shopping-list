@@ -35,7 +35,7 @@ describe("ensureStoreForUser", () => {
     expect(localStorage.getItem("shopping-list:store-account")).toBe("user-1");
   });
 
-  it("is a no-op for the same user, so sign-out and back-in keeps the offline copy", async () => {
+  it("is a no-op for the same user, so the backstop never wipes their own store", async () => {
     await ensureStoreForUser(db, "user-1");
     await db.syncList(list);
 

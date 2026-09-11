@@ -102,6 +102,15 @@ export async function signOut() {
     // The session is dead client-side even if the request failed.
     session.user = null;
     cacheUser(null);
+    await clearLocalStore();
+  }
+}
+
+async function clearLocalStore() {
+  try {
+    await db.clearAll();
+  } catch {
+    // Best-effort: the session must clear even if the Store fails.
   }
 }
 
