@@ -424,7 +424,9 @@ describe("ListView", () => {
   it("re-divides the standing when Membership changes arrive on Sync", async () => {
     stubRoutes((url) => {
       if (url === "/api/lists") {
-        return jsonResponse({ lists: [] });
+        // The server still returns the List (Sync prunes local Lists the
+        // server no longer returns); only Memberships and Payments change.
+        return jsonResponse({ lists: [list] });
       }
       if (url.endsWith("/items")) {
         return jsonResponse({ items: [] });
