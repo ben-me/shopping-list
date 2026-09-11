@@ -46,14 +46,32 @@ const isOwn = (payment: Payment) => payment.memberId === session.user?.id;
 const standing = computed(() => computeOwed(members.value, payments.value));
 
 const memberLabel = (memberId: string) => (memberId === session.user?.id ? "You" : memberId);
-const owedLabel = (amountInCents: number) =>
+
+/** The Owed wording and colour for one Member: red owes the group, green the group owes. */
+const owedPresentation = (amountInCents: number) =>
   amountInCents > 0
-    ? `owes ${formatEuro(amountInCents)}`
+    ? { label: `owes ${formatEuro(amountInCents)}`, className: "owes" }
     : amountInCents < 0
-      ? `is owed ${formatEuro(-amountInCents)}`
-      : "settled";
-const owedClass = (amountInCents: number) =>
-  amountInCents > 0 ? "owes" : amountInCents < 0 ? "owed" : "settled";
+      ? { label: `is owed ${formatEuro(-amountInCents)}`, className: "owed" }
+      : { label: "settled", className: "settled" };
+
+/**
+ * One row per Member for the header, each with the equal share. Empty when the
+ * List has fewer than two Members — no Split is possible, and a lone Member
+ * sees only the running total (spec: no Owed figure).
+ */
+const standingRows = computed(() => {
+  const { shareInCents, owed } = standing.value;
+  if (shareInCents === null) {
+    return [];
+  }
+  return owed.map((figure) => ({
+    memberId: figure.memberId,
+    name: memberLabel(figure.memberId),
+    share: formatEuro(shareInCents),
+    ...owedPresentation(figure.amountInCents),
+  }));
+});
 
 async function loadList() {
   list.value = (await db.getList(listId.value)) ?? null;
@@ -182,16 +200,16 @@ onUnmounted(() => {
   <h1>{{ list?.name ?? "List" }}</h1>
   <section class="standing" aria-label="Money standing">
     <p class="total-paid">Total paid: {{ formatEuro(standing.totalInCents) }}</p>
-    <ul v-if="standing.owed.length > 0" class="standing-members">
+    <ul v-if="standingRows.length > 0" class="standing-members">
       <li
-        v-for="figure in standing.owed"
-        :key="figure.memberId"
+        v-for="row in standingRows"
+        :key="row.memberId"
         class="standing-member"
-        :class="owedClass(figure.amountInCents)"
+        :class="row.className"
       >
-        <span class="member-name">{{ memberLabel(figure.memberId) }}</span>
-        <span class="member-share">share {{ formatEuro(standing.shareInCents ?? 0) }}</span>
-        <span class="member-owed">{{ owedLabel(figure.amountInCents) }}</span>
+        <span class="member-name">{{ row.name }}</span>
+        <span class="member-share">share {{ row.share }}</span>
+        <span class="member-owed">{{ row.label }}</span>
       </li>
     </ul>
   </section>
