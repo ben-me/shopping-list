@@ -15,7 +15,7 @@ const listId = computed(() => String(route.params.listId ?? ""));
 const listName = ref<string | null>(null);
 const items = ref<Item[]>([]);
 const payments = ref<Payment[]>([]);
-const form = ref({
+const itemForm = ref({
   name: "",
   error: null as string | null,
 });
@@ -31,9 +31,8 @@ const editForm = ref({
   error: null as string | null,
 });
 
-const euroFormat = new Intl.NumberFormat("en-IE", { style: "currency", currency: "EUR" });
+const euroFormat = new Intl.NumberFormat("de-DE", { style: "currency", currency: "EUR" });
 const formatEuro = (cents: number) => euroFormat.format(cents / 100);
-const eurosToCents = (euros: string) => Math.round(Number.parseFloat(euros) * 100);
 const isoFromDate = (date: string) => new Date(`${date}T12:00:00.000Z`).toISOString();
 const isOwn = (payment: Payment) => payment.memberId === session.user?.id;
 
@@ -51,14 +50,14 @@ async function loadPayments() {
 }
 
 async function onAdd() {
-  form.value.error = null;
+  itemForm.value.error = null;
   try {
-    await addItem(db, listId.value, form.value.name);
+    await addItem(db, listId.value, itemForm.value.name);
   } catch (err) {
-    form.value.error = err instanceof Error ? err.message : "Could not add the item";
+    itemForm.value.error = err instanceof Error ? err.message : "Could not add the item";
     return;
   }
-  form.value.name = "";
+  itemForm.value.name = "";
   await logRejection(loadItems(), "Loading the items");
   ignoreRejection(syncOutbox(db));
 }
@@ -86,7 +85,7 @@ async function onRecordPayment() {
       db,
       listId.value,
       session.user.id,
-      eurosToCents(paymentForm.value.amount),
+      paymentForm.value.amount,
       isoFromDate(paymentForm.value.date),
     );
   } catch (err) {
@@ -116,7 +115,7 @@ async function onSaveEdit(payment: Payment) {
   editForm.value.error = null;
   try {
     await updatePayment(db, payment, {
-      amountInCents: eurosToCents(editForm.value.amount),
+      amountInEur: editForm.value.amount,
       paidAt: isoFromDate(editForm.value.date),
     });
   } catch (err) {
@@ -175,11 +174,11 @@ onUnmounted(() => {
   <form @submit.prevent="onAdd">
     <label>
       Item name
-      <input v-model="form.name" name="item" />
+      <input v-model="itemForm.name" name="item" />
     </label>
     <button type="submit">Add an Item</button>
   </form>
-  <p v-if="form.error">{{ form.error }}</p>
+  <p v-if="itemForm.error">{{ itemForm.error }}</p>
 
   <section class="payments">
     <h2>Payments</h2>
@@ -189,8 +188,8 @@ onUnmounted(() => {
         <template v-if="editingPaymentId === payment.id">
           <form class="edit-payment-form" @submit.prevent="onSaveEdit(payment)">
             <label>
-              Amount
-              <input v-model="editForm.amount" name="edit-amount" type="number" step="0.01" min="0.01" />
+              Amount €
+              <input v-model="editForm.amount" name="edit-amount" type="text" inputmode="decimal" />
             </label>
             <label>
               Date
@@ -202,8 +201,8 @@ onUnmounted(() => {
           </form>
         </template>
         <template v-else>
-          <span class="payment-amount">{{ formatEuro(payment.amountInCents) }}</span>
-          <span class="payment-date">{{ payment.paidAt.slice(0, 10) }}</span>
+          {{ formatEuro(payment.amountInCents) }}
+          {{ payment.paidAt.slice(0, 10) }}
           <button
             v-if="isOwn(payment)"
             type="button"
@@ -225,14 +224,8 @@ onUnmounted(() => {
     </ul>
     <form class="payments-form" @submit.prevent="onRecordPayment">
       <label>
-        Amount
-        <input
-          v-model="paymentForm.amount"
-          name="payment-amount"
-          type="number"
-          step="0.01"
-          min="0.01"
-        />
+        Amount €
+        <input v-model="paymentForm.amount" name="payment-amount" type="text" inputmode="decimal" />
       </label>
       <label>
         Date

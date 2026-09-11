@@ -3,22 +3,26 @@ import { apiFetch } from "./api";
 import type { ShoppingDb } from "./store";
 import now from "./utils/now";
 
-/**
- * Record a Payment: a free amount in EUR minor units and a date, standing on
- * its own — never attached to an Item. The Payment is recorded by the Member
- * calling this (`memberId` is the signed-in user's id); no one records on
- * behalf of someone else.
- */
+// The value is a plain number as typed (a comma or a dot may separate the
+// decimals). The euro sign is a frontend concern only, never part of the
+// value, so there is no sign handling here.
+function eurosToCents(amountInEur: string): number {
+  const match = /^(\d+)(?:[.,](\d+))?$/.exec(amountInEur.trim());
+  const cents = match === null ? 0 : Number(match[1] + (match[2] ?? "").slice(0, 2).padEnd(2, "0"));
+  if (!Number.isSafeInteger(cents) || cents <= 0) {
+    throw new Error("Give the payment a positive amount");
+  }
+  return cents;
+}
+
 export async function addPayment(
   db: ShoppingDb,
   listId: string,
   memberId: string,
-  amountInCents: number,
+  amountInEur: string,
   paidAt: string,
 ): Promise<Payment> {
-  if (!Number.isInteger(amountInCents) || amountInCents <= 0) {
-    throw new Error("Give the payment a positive amount");
-  }
+  const amountInCents = eurosToCents(amountInEur);
   if (!paidAt.trim()) {
     throw new Error("Give the payment a date");
   }
@@ -37,26 +41,25 @@ export async function addPayment(
 }
 
 /**
- * Edit a Payment's amount and/or date. The edit is queued as a whole-row
- * put of the Payment's new state; the server reconciles it last-write-wins
- * against any concurrent edit (ADR 0001).
+ * Edit a Payment's amount (the euro string as the user typed it) and/or date.
+ * The edit is queued as a whole-row put of the Payment's new state; the server
+ * reconciles it last-write-wins against any concurrent edit (ADR 0001).
  */
 export async function updatePayment(
   db: ShoppingDb,
   payment: Payment,
-  patch: { amountInCents?: number; paidAt?: string },
+  patch: { amountInEur?: string; paidAt?: string },
 ): Promise<Payment> {
-  if (patch.amountInCents !== undefined) {
-    if (!Number.isInteger(patch.amountInCents) || patch.amountInCents <= 0) {
-      throw new Error("Give the payment a positive amount");
-    }
+  let amountInCents = payment.amountInCents;
+  if (patch.amountInEur !== undefined) {
+    amountInCents = eurosToCents(patch.amountInEur);
   }
   if (patch.paidAt !== undefined && !patch.paidAt.trim()) {
     throw new Error("Give the payment a date");
   }
   const updated: Payment = {
     ...payment,
-    amountInCents: patch.amountInCents ?? payment.amountInCents,
+    amountInCents,
     paidAt: patch.paidAt !== undefined ? patch.paidAt.trim() : payment.paidAt,
     updatedAt: now(),
   };
