@@ -1,6 +1,7 @@
-import type { Item, List } from "@shopping-list/api/domain";
+import type { Item, List, Payment } from "@shopping-list/api/domain";
 import { apiFetch } from "./api";
 import type { ShoppingDb } from "./store";
+import now from "./utils/now";
 
 export async function createList(db: ShoppingDb, ownerId: string, name: string): Promise<List> {
   const trimmed = name.trim();
@@ -60,6 +61,30 @@ export async function syncOutbox(db: ShoppingDb): Promise<void> {
       await db.syncItem(serverItem);
       return;
     }
+    if (entry.targetType === "payment") {
+      if (entry.operation === "delete") {
+        await apiFetch(`/api/lists/${entry.listId}/payments/${entry.targetId}`, {
+          method: "DELETE",
+        });
+        return;
+      }
+      const payment = await db.getPayment(entry.targetId);
+      if (!payment) {
+        return;
+      }
+      const { payment: serverPayment } = await apiFetch<{ payment: Payment }>(
+        `/api/lists/${payment.listId}/payments/${payment.id}`,
+        {
+          method: "PUT",
+          body: { amountInCents: payment.amountInCents, paidAt: payment.paidAt },
+        },
+      );
+      if (!serverPayment?.id) {
+        return;
+      }
+      await db.syncPayment(serverPayment);
+      return;
+    }
     throw new Error(`Unsupported outbox target ${entry.targetType}`);
   });
 }
@@ -76,5 +101,3 @@ export async function syncFromServer(db: ShoppingDb): Promise<void> {
     await db.syncList(list);
   }
 }
-
-const now = () => new Date().toISOString();

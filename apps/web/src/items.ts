@@ -1,8 +1,7 @@
 import type { Item } from "@shopping-list/api/domain";
 import { apiFetch } from "./api";
 import type { ShoppingDb } from "./store";
-
-const now = () => new Date().toISOString();
+import now from "./utils/now";
 
 export async function addItem(db: ShoppingDb, listId: string, name: string): Promise<Item> {
   const trimmed = name.trim();

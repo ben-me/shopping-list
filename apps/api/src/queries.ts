@@ -159,7 +159,7 @@ export async function createPayment(db: Db, input: CreatePaymentInput): Promise<
   const [row] = await db
     .insert(schema.payments)
     .values({
-      id: newId(),
+      id: input.id ?? newId(),
       listId: input.listId,
       memberId: input.memberId,
       amountInCents: input.amountInCents,
@@ -330,6 +330,8 @@ export interface UpdateItemInput {
 }
 
 export interface CreatePaymentInput {
+  /** The client picks the id when creating offline-first so Sync can upsert. */
+  id?: string;
   listId: string;
   memberId: string;
   amountInCents: number;

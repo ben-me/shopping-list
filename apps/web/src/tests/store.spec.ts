@@ -2,10 +2,9 @@ import "fake-indexeddb/auto";
 
 import { OUTBOX_RETENTION_MS, ShoppingDb } from "../store";
 import type { Item, List, Membership, Payment } from "@shopping-list/api/domain";
+import now from "@/utils/now";
 
 let dbNumber = 0;
-
-const now = () => new Date().toISOString();
 
 const list: List = {
   id: "list-1",
@@ -221,5 +220,62 @@ describe("ShoppingDb", () => {
     await db.syncItem(newerServerCopy);
 
     expect(await db.getItem(milk.id)).toMatchObject({ name: "Oat milk" });
+  });
+
+  it("applies a pulled Payment as its own row — a second Payment is never merged into it", async () => {
+    const ms = (n: number) => new Date(Date.now() - n).toISOString();
+    await db.putPayment({ ...pay1, updatedAt: ms(120_000) });
+    const newerServerCopy: Payment = {
+      ...pay1,
+      amountInCents: 990,
+      updatedAt: ms(60_000),
+    };
+    const otherPayment = payment("pay-2", "user-2", 700);
+
+    await db.syncPayment(newerServerCopy);
+    await db.syncPayment(otherPayment);
+
+    const stored = await db.getPayments(list.id);
+    expect(stored).toHaveLength(2);
+    expect(stored.find((p) => p.id === pay1.id)).toMatchObject({ amountInCents: 990 });
+    expect(stored.find((p) => p.id === otherPayment.id)).toMatchObject({ amountInCents: 700 });
+  });
+
+  it("does not resurrect a Payment the local outbox still owes a delete for", async () => {
+    await db.putPayment(pay1);
+    await db.deletePayment(pay1.id, list.id);
+
+    // A pull that was in flight when the Payment was removed comes back with
+    // the server's copy — it must not undo the local delete.
+    await db.syncPayment(pay1);
+
+    expect(await db.getPayments(list.id)).toHaveLength(0);
+  });
+
+  it("does not clobber a newer local edit with an older server copy of a Payment", async () => {
+    const ms = (n: number) => new Date(Date.now() - n).toISOString();
+    const newerLocalUpdatedAt = ms(60_000);
+    await db.putPayment({ ...pay1, amountInCents: 990, updatedAt: newerLocalUpdatedAt });
+
+    await db.syncPayment({ ...pay1, amountInCents: 1250, updatedAt: ms(120_000) });
+
+    expect(await db.getPayments(list.id)).toHaveLength(1);
+    expect((await db.getPayments(list.id))[0]).toMatchObject({
+      amountInCents: 990,
+      updatedAt: newerLocalUpdatedAt,
+    });
+  });
+
+  it("queues a Payment delete with the List id so Sync can address the server", async () => {
+    await db.putPayment(pay1);
+    await db.deletePayment(pay1.id, list.id);
+
+    const pending = await db.pendingOutboxEntries();
+    expect(pending[1]).toMatchObject({
+      targetType: "payment",
+      targetId: pay1.id,
+      listId: list.id,
+      operation: "delete",
+    });
   });
 });

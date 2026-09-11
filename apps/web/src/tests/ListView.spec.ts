@@ -60,6 +60,7 @@ async function mountList() {
 beforeEach(async () => {
   await db.lists.clear();
   await db.items.clear();
+  await db.payments.clear();
   await db.outbox.clear();
   await db.syncList(list);
   _resetSession();
@@ -192,5 +193,109 @@ describe("ListView", () => {
     const pending = await db.pendingOutboxEntries();
     expect(pending.map((e) => e.targetType)).toEqual(["item", "item"]);
     expect(await db.getPayments(list.id)).toHaveLength(0);
+  });
+
+  it("records a Payment with an amount and a date, and it survives a reload", async () => {
+    stubRoutes(() => new Response(null, { status: 503 }));
+
+    const wrapper = await mountList();
+    await flushPromises();
+    await wrapper.find('input[name="payment-amount"]').setValue("12.50");
+    await wrapper.find('input[name="payment-date"]').setValue("2026-02-01");
+    await wrapper.find("form.payments-form").trigger("submit");
+    await flushPromises();
+    await settle();
+
+    expect(wrapper.text()).toContain("12,50");
+    const stored = await db.getPayments(list.id);
+    expect(stored).toHaveLength(1);
+    expect(stored[0]).toMatchObject({
+      listId: list.id,
+      memberId: user.id,
+      amountInCents: 1250,
+      paidAt: expect.stringContaining("2026-02-01"),
+    });
+    expect((await db.pendingOutboxEntries()).map((e) => e.targetType)).toEqual(["payment"]);
+
+    // A fresh mount reads the same local Store — the Payment survived.
+    const remounted = await mountList();
+    await flushPromises();
+    await settle();
+    expect(remounted.text()).toContain("12,50");
+  });
+
+  it("rejects recording a Payment without a positive amount", async () => {
+    stubRoutes(() => new Response(null, { status: 503 }));
+
+    const wrapper = await mountList();
+    await flushPromises();
+    await wrapper.find('input[name="payment-amount"]').setValue("0");
+    await wrapper.find("form.payments-form").trigger("submit");
+    await flushPromises();
+    await settle();
+
+    expect(wrapper.text()).toContain("Give the payment a positive amount");
+    expect(await db.getPayments(list.id)).toHaveLength(0);
+  });
+
+  it("edits and deletes your own Payment but offers nothing on another Member's", async () => {
+    stubRoutes(() => new Response(null, { status: 503 }));
+    await db.putPayment({
+      id: "pay-mine",
+      listId: list.id,
+      memberId: user.id,
+      amountInCents: 1250,
+      paidAt: "2026-02-01T10:00:00.000Z",
+      createdAt: "2026-02-01T09:00:00.000Z",
+      updatedAt: "2026-02-01T10:00:00.000Z",
+    });
+    await db.putPayment({
+      id: "pay-theirs",
+      listId: list.id,
+      memberId: "user-2",
+      amountInCents: 700,
+      paidAt: "2026-02-02T10:00:00.000Z",
+      createdAt: "2026-02-02T09:00:00.000Z",
+      updatedAt: "2026-02-02T10:00:00.000Z",
+    });
+
+    const wrapper = await mountList();
+    await flushPromises();
+
+    const rowByAmount = (amount: string) =>
+      wrapper.findAll(".payments li").filter((row) => row.text().includes(amount))[0];
+    const mine = rowByAmount("12,50");
+    const theirs = rowByAmount("7,0");
+    expect(mine).toBeDefined();
+    expect(theirs).toBeDefined();
+
+    // My Payment offers edit and delete; theirs offers neither.
+    expect(mine!.find('button[name="edit-payment"]').exists()).toBe(true);
+    expect(mine!.find('button[name="delete-payment"]').exists()).toBe(true);
+    expect(theirs!.find('button[name="edit-payment"]').exists()).toBe(false);
+    expect(theirs!.find('button[name="delete-payment"]').exists()).toBe(false);
+
+    // Editing my Payment updates the amount and the date.
+    await mine!.find('button[name="edit-payment"]').trigger("click");
+    await flushPromises();
+    await wrapper.find('input[name="edit-amount"]').setValue("9.90");
+    await wrapper.find('input[name="edit-date"]').setValue("2026-02-03");
+    await wrapper.find("form.edit-payment-form").trigger("submit");
+    await flushPromises();
+    await settle();
+
+    const storedMine = (await db.getPayments(list.id)).find((p) => p.id === "pay-mine");
+    expect(storedMine).toMatchObject({
+      amountInCents: 990,
+      paidAt: expect.stringContaining("2026-02-03"),
+    });
+
+    // Deleting my Payment removes it; theirs remains.
+    await mine!.find('button[name="delete-payment"]').trigger("click");
+    await flushPromises();
+    await settle();
+
+    const remaining = await db.getPayments(list.id);
+    expect(remaining.map((p) => p.id)).toEqual(["pay-theirs"]);
   });
 });
