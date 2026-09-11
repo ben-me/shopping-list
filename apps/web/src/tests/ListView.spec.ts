@@ -206,7 +206,7 @@ describe("ListView", () => {
     await flushPromises();
     await settle();
 
-    expect(wrapper.text()).toContain("12.50");
+    expect(wrapper.text()).toContain("12,50");
     const stored = await db.getPayments(list.id);
     expect(stored).toHaveLength(1);
     expect(stored[0]).toMatchObject({
@@ -221,7 +221,7 @@ describe("ListView", () => {
     const remounted = await mountList();
     await flushPromises();
     await settle();
-    expect(remounted.text()).toContain("12.50");
+    expect(remounted.text()).toContain("12,50");
   });
 
   it("rejects recording a Payment without a positive amount", async () => {
@@ -264,8 +264,8 @@ describe("ListView", () => {
 
     const rowByAmount = (amount: string) =>
       wrapper.findAll(".payments li").filter((row) => row.text().includes(amount))[0];
-    const mine = rowByAmount("12.50");
-    const theirs = rowByAmount("7.00");
+    const mine = rowByAmount("12,50");
+    const theirs = rowByAmount("7,0");
     expect(mine).toBeDefined();
     expect(theirs).toBeDefined();
 
@@ -291,9 +291,7 @@ describe("ListView", () => {
     });
 
     // Deleting my Payment removes it; theirs remains.
-    await mine!.find('button[name="delete-payment"]').trigger(
-      "click",
-    );
+    await mine!.find('button[name="delete-payment"]').trigger("click");
     await flushPromises();
     await settle();
 

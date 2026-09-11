@@ -14,9 +14,9 @@ test("a member records a Payment and it survives reloads", async ({ page }) => {
   await input(page, "payment-date").fill("2026-02-01");
   await page.getByRole("button", { name: "Record a Payment" }).click();
 
-  await expect(paymentRow(page, "12.50")).toBeVisible();
+  await expect(paymentRow(page, "12,50")).toBeVisible();
 
   await page.reload();
 
-  await expect(paymentRow(page, "12.50")).toBeVisible();
+  await expect(paymentRow(page, "12,50")).toBeVisible();
 });
