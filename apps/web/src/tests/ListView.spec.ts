@@ -8,6 +8,7 @@ vi.mock(
 import { flushPromises, mount } from "@vue/test-utils";
 import { createMemoryHistory } from "vue-router";
 import type { List } from "@shopping-list/api/domain";
+import { runSyncPass } from "../connectivity";
 import App from "../App.vue";
 import { db } from "../db";
 import { createAppRouter } from "../router";
@@ -61,6 +62,7 @@ beforeEach(async () => {
   await db.lists.clear();
   await db.items.clear();
   await db.payments.clear();
+  await db.memberships.clear();
   await db.outbox.clear();
   await db.syncList(list);
   _resetSession();
@@ -297,5 +299,180 @@ describe("ListView", () => {
 
     const remaining = await db.getPayments(list.id);
     expect(remaining.map((p) => p.id)).toEqual(["pay-theirs"]);
+  });
+
+  it("shows the running total and each Member's share and Owed under the equal Split", async () => {
+    stubRoutes(() => new Response(null, { status: 503 }));
+    await db.syncMembership({
+      listId: list.id,
+      memberId: "user-2",
+      joinedAt: "2026-01-01T00:00:00.000Z",
+    });
+    await db.putPayment({
+      id: "pay-1",
+      listId: list.id,
+      memberId: user.id,
+      amountInCents: 300,
+      paidAt: "2026-01-01T10:00:00.000Z",
+      createdAt: "2026-01-01T09:00:00.000Z",
+      updatedAt: "2026-01-01T10:00:00.000Z",
+    });
+    await db.putPayment({
+      id: "pay-2",
+      listId: list.id,
+      memberId: "user-2",
+      amountInCents: 100,
+      paidAt: "2026-01-02T10:00:00.000Z",
+      createdAt: "2026-01-02T09:00:00.000Z",
+      updatedAt: "2026-01-02T10:00:00.000Z",
+    });
+
+    const wrapper = await mountList();
+    await flushPromises();
+
+    // Running total and the equal share, exactly as computeOwed figures them.
+    expect(wrapper.find(".total-paid").text()).toContain("Total paid: 4,00");
+    const rows = wrapper.findAll(".standing-member");
+    expect(rows).toHaveLength(2);
+
+    const you = rows[0]!;
+    expect(you.text()).toContain("You");
+    expect(you.text()).toContain("share 2,00");
+    expect(you.text()).toContain("is owed 1,00");
+    expect(you.classes()).toContain("owed"); // green: the group owes them
+
+    const other = rows[1]!;
+    expect(other.text()).toContain("user-2");
+    expect(other.text()).toContain("share 2,00");
+    expect(other.text()).toContain("owes 1,00");
+    expect(other.classes()).toContain("owes"); // red: they owe the group
+  });
+
+  it("shows only the running total on a lone-Member List — never a Share or an Owed figure", async () => {
+    stubRoutes(() => new Response(null, { status: 503 }));
+    await db.putPayment({
+      id: "pay-1",
+      listId: list.id,
+      memberId: user.id,
+      amountInCents: 1400,
+      paidAt: "2026-01-01T10:00:00.000Z",
+      createdAt: "2026-01-01T09:00:00.000Z",
+      updatedAt: "2026-01-01T10:00:00.000Z",
+    });
+
+    const wrapper = await mountList();
+    await flushPromises();
+
+    expect(wrapper.find(".total-paid").text()).toContain("Total paid: 14,00");
+    expect(wrapper.findAll(".standing-member")).toHaveLength(0);
+    const standing = wrapper.find(".standing").text();
+    expect(standing).not.toContain("share");
+    expect(standing).not.toContain("owes");
+    expect(standing).not.toContain("owed");
+  });
+
+  it("recomputes the standing live as a Payment is added, edited, and deleted", async () => {
+    stubRoutes(() => new Response(null, { status: 503 }));
+    await db.syncMembership({
+      listId: list.id,
+      memberId: "user-2",
+      joinedAt: "2026-01-01T00:00:00.000Z",
+    });
+
+    const wrapper = await mountList();
+    await flushPromises();
+
+    const rowText = (index: number) => wrapper.findAll(".standing-member")[index]!.text();
+
+    // Record a Payment: the header re-divides immediately.
+    await wrapper.find('input[name="payment-amount"]').setValue("12.50");
+    await wrapper.find('input[name="payment-date"]').setValue("2026-02-01");
+    await wrapper.find("form.payments-form").trigger("submit");
+    await flushPromises();
+    await settle();
+
+    expect(wrapper.find(".total-paid").text()).toContain("Total paid: 12,50");
+    expect(wrapper.findAll(".standing-member")).toHaveLength(2);
+    expect(rowText(0)).toContain("share 6,25");
+    expect(rowText(0)).toContain("is owed 6,25");
+    expect(rowText(1)).toContain("owes 6,25");
+
+    // Edit the Payment down: the figures follow the new amount.
+    await wrapper.find('button[name="edit-payment"]').trigger("click");
+    await flushPromises();
+    await wrapper.find('input[name="edit-amount"]').setValue("9.90");
+    await wrapper.find("form.edit-payment-form").trigger("submit");
+    await flushPromises();
+    await settle();
+
+    expect(wrapper.find(".total-paid").text()).toContain("Total paid: 9,90");
+    expect(rowText(0)).toContain("share 4,95");
+    expect(rowText(0)).toContain("is owed 4,95");
+    expect(rowText(1)).toContain("owes 4,95");
+
+    // Delete it: the two Members settle at zero.
+    await wrapper.find('button[name="delete-payment"]').trigger("click");
+    await flushPromises();
+    await settle();
+
+    expect(wrapper.find(".total-paid").text()).toContain("Total paid: 0,00");
+    expect(wrapper.findAll(".standing-member")).toHaveLength(2);
+    expect(rowText(0)).toContain("settled");
+    expect(rowText(1)).toContain("settled");
+  });
+
+  it("re-divides the standing when Membership changes arrive on Sync", async () => {
+    stubRoutes((url) => {
+      if (url === "/api/lists") {
+        return jsonResponse({ lists: [] });
+      }
+      if (url.endsWith("/items")) {
+        return jsonResponse({ items: [] });
+      }
+      if (url.endsWith("/payments")) {
+        return jsonResponse({ payments: [] });
+      }
+      throw new Error(`No stub for ${url}`);
+    });
+    await db.syncMembership({
+      listId: list.id,
+      memberId: "user-2",
+      joinedAt: "2026-01-01T00:00:00.000Z",
+    });
+    await db.syncPayment({
+      id: "pay-1",
+      listId: list.id,
+      memberId: user.id,
+      amountInCents: 1200,
+      paidAt: "2026-01-01T10:00:00.000Z",
+      createdAt: "2026-01-01T09:00:00.000Z",
+      updatedAt: "2026-01-01T10:00:00.000Z",
+    });
+
+    const wrapper = await mountList();
+    await flushPromises();
+    await settle();
+
+    // Two Members split the pot: You paid it all, the other Member owes half.
+    expect(wrapper.findAll(".standing-member")).toHaveLength(2);
+    expect(wrapper.find(".total-paid").text()).toContain("Total paid: 12,00");
+    expect(wrapper.findAll(".standing-member")[0]!.text()).toContain("is owed 6,00");
+    expect(wrapper.findAll(".standing-member")[1]!.text()).toContain("owes 6,00");
+
+    // A third Member joins; the next Sync pass re-divides the same pot.
+    await db.syncMembership({
+      listId: list.id,
+      memberId: "user-3",
+      joinedAt: "2026-01-02T00:00:00.000Z",
+    });
+    await runSyncPass(db);
+    await flushPromises();
+
+    const rows = wrapper.findAll(".standing-member");
+    expect(rows).toHaveLength(3);
+    expect(wrapper.find(".total-paid").text()).toContain("Total paid: 12,00");
+    expect(rows[0]!.text()).toContain("is owed 8,00");
+    expect(rows[1]!.text()).toContain("owes 4,00");
+    expect(rows[2]!.text()).toContain("owes 4,00");
   });
 });
