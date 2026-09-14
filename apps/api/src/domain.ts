@@ -34,6 +34,10 @@ export interface Membership {
 
 export type InvitationStatus = "pending" | "accepted" | "revoked";
 
+/**
+ * An in-app offer for an existing user to join a List (ADR 0003). Not yet a
+ * Member; delivered in-app — no email, no join link.
+ */
 export interface Invitation {
   id: string;
   listId: string;

@@ -25,8 +25,8 @@ A user who has been invited to (and joined) a ShoppingList and can edit its item
 _Avoid_: Invitee, contributor, editor, guest
 
 **Invitation**:
-A pending offer for a user to join a ShoppingList as a Member. Distinct from Membership — an Invitation is not yet a Member.
-_Avoid_: Invite, share link, request
+A pending offer for an **existing** user to join a ShoppingList as a Member. Delivered in-app — the invitee sees it when signed in and accepts or declines; no email is sent. Distinct from Membership — an Invitation is not yet a Member.
+_Avoid_: Invite, share link, join request
 
 **Payment**:
 A dated amount a Member records they paid for a ShoppingList. Not attached to any Item — it is a free amount standing alone. A Member can add and edit their own Payments, but cannot record on behalf of others or settle. Each Payment is a single row in the sqlite table keyed to the List.
@@ -36,9 +36,9 @@ _Avoid_: Balance entry, expense, transaction, receipt, amount (when meaning the 
 EUR is the only currency in the app. Amounts are stored in minor units (cents) to avoid float drift; there is no multi-currency, conversion, or per-list currency choice.
 _Avoid_: money, cash, conversion, default currency setting
 
-**Invitation (email)**:
-An Invitation is delivered by email. In the MVP the only outbound notification is the invite email; there are no push notifications.
-_Avoid_: push alert, digest email
+**Admin**:
+The account that provisions the app for the household. Created by a one-time bootstrap sign-up, available only while the user table is empty; once it exists, sign-up is closed for good and only the Admin can create further accounts, via better-auth so password hashing stays with better-auth. The Admin holds no special rights inside a List — on any List they are an ordinary Member.
+_Avoid_: superuser, root, deployer, moderator
 
 **Split**:
 The rule that divides a ShoppingList's total paid amount among its Members. Equal across Members is the only rule in the MVP; support for other rules is deferred but the design leaves room for them.

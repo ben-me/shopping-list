@@ -144,9 +144,14 @@ export const invitations = sqliteTable(
     listId: text("list_id")
       .notNull()
       .references(() => lists.id, { onDelete: "cascade" }),
+    /**
+     * The invitee's account email — invitations target existing users only
+     * (ADR 0003). Delivery is in-app; no email is ever sent.
+     */
     email: text("email").notNull(),
     invitedById: text("invited_by_id").notNull(),
     status: text("status").notNull().default("pending"),
+    /** Retained for a future email/join-link path; unused by the in-app flow. */
     token: text("token").notNull().unique(),
     createdAt: text("created_at").notNull(),
     updatedAt: text("updated_at").notNull(),
