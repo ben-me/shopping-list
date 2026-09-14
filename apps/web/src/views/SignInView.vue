@@ -1,8 +1,7 @@
 <script setup lang="ts">
 import { onMounted, ref } from "vue";
 import { useRouter } from "vue-router";
-import { isSignUpOpen } from "../invitations";
-import { signIn, signUp } from "../session";
+import { isSignUpOpen, signIn, signUp } from "../session";
 
 const router = useRouter();
 const mode = ref<"sign-in" | "sign-up">("sign-in");

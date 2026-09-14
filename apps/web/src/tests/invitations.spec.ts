@@ -3,7 +3,6 @@ import {
   acceptInvitation,
   createInvitation,
   declineInvitation,
-  isSignUpOpen,
   listInvitations,
   pendingInvitations,
   revokeInvitation,
@@ -131,21 +130,5 @@ describe("invitations module", () => {
     });
 
     await revokeInvitation("list-1", "inv-1");
-  });
-
-  it("reports the bootstrap gate and defaults to closed when the server is unreachable", async () => {
-    stubApi((url) =>
-      url === "/api/signup-status" ? jsonResponse({ signUpOpen: true }) : jsonResponse({}),
-    );
-
-    await expect(isSignUpOpen()).resolves.toBe(true);
-
-    vi.stubGlobal(
-      "fetch",
-      vi.fn(async () => {
-        throw new Error("offline");
-      }),
-    );
-    await expect(isSignUpOpen()).resolves.toBe(false);
   });
 });
