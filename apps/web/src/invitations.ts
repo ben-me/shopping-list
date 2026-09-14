@@ -9,23 +9,21 @@ import { apiFetch } from "./api";
  * outbox.
  */
 
-/** The invitee's in-app inbox: every pending Invitation for the signed-in user. */
+/** The invitee's in-app inbox. */
 export async function pendingInvitations(): Promise<PendingInvitation[]> {
   const body = await apiFetch<{ invitations?: PendingInvitation[] }>("/api/invitations");
   return body?.invitations ?? [];
 }
 
-/** Accept makes the invitee a Member of the List with equal edit rights. */
 export async function acceptInvitation(invitationId: string): Promise<void> {
   await apiFetch(`/api/invitations/${invitationId}/accept`, { method: "POST" });
 }
 
-/** Decline closes the Invitation (status `revoked`) so it leaves both pending lists. */
+/** Decline maps to `revoked` server-side, so the Invitation leaves both pending lists. */
 export async function declineInvitation(invitationId: string): Promise<void> {
   await apiFetch(`/api/invitations/${invitationId}/decline`, { method: "POST" });
 }
 
-/** The Invitations on one List, as its Members see them (any Member may view). */
 export async function listInvitations(listId: string): Promise<ListInvitation[]> {
   const body = await apiFetch<{ invitations?: ListInvitation[] }>(
     `/api/lists/${listId}/invitations`,
@@ -33,7 +31,6 @@ export async function listInvitations(listId: string): Promise<ListInvitation[]>
   return body?.invitations ?? [];
 }
 
-/** Only the Owner invites; the email must already belong to an account. */
 export async function createInvitation(listId: string, email: string): Promise<Invitation> {
   const body = await apiFetch<{ invitation?: Invitation }>(`/api/lists/${listId}/invitations`, {
     method: "POST",
@@ -45,7 +42,6 @@ export async function createInvitation(listId: string, email: string): Promise<I
   return body.invitation;
 }
 
-/** Only the Owner revokes (closes) a pending Invitation. */
 export async function revokeInvitation(listId: string, invitationId: string): Promise<void> {
   await apiFetch(`/api/lists/${listId}/invitations/${invitationId}`, { method: "DELETE" });
 }

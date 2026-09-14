@@ -84,7 +84,7 @@ async function signUpViaBootstrap(app: TestApp, env: AuthEnv, emailPrefix: strin
 
 /**
  * Provision a user through the admin route and sign them in — the same path a
- * deployer uses (`pnpm user:create`). The account is email-verified by
+ * deployer uses. The account is email-verified by
  * provisioning, so the new user can sign in immediately.
  */
 async function provisionAndSignIn(app: TestApp, env: AuthEnv, emailPrefix: string) {
