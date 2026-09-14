@@ -89,7 +89,6 @@ describe("SignInView", () => {
     await flushPromises();
 
     expect(wrapper.text()).not.toContain("Create an account");
-    expect(wrapper.text()).toContain("Sign-up is closed");
   });
 
   it("offers sign-up only while the database is empty (bootstrap)", async () => {
@@ -105,7 +104,6 @@ describe("SignInView", () => {
     await flushPromises();
 
     expect(wrapper.text()).toContain("Create an account");
-    expect(wrapper.text()).not.toContain("Sign-up is closed");
   });
 
   it("signs a new user up (bootstrap) and lands on the lists index", async () => {

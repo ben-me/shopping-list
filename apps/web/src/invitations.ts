@@ -47,16 +47,4 @@ export async function revokeInvitation(listId: string, invitationId: string): Pr
 }
 
 /**
- * Whether the one-time bootstrap sign-up is still open (ADR 0003). The sign-in
- * view shows the "Create an account" toggle only while this is true; when the
- * status cannot be reached it assumes sign-up is closed — provisioning is the
- * only door in, and that never happens through the sign-in view.
  */
-export async function isSignUpOpen(): Promise<boolean> {
-  try {
-    const body = await apiFetch<{ signUpOpen?: boolean }>("/api/signup-status");
-    return body?.signUpOpen === true;
-  } catch {
-    return false;
-  }
-}
