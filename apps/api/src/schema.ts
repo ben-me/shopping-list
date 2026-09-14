@@ -26,12 +26,6 @@ export const user = sqliteTable("user", {
   email: text("email").notNull().unique(),
   emailVerified: integer("email_verified", { mode: "boolean" }).default(false).notNull(),
   image: text("image"),
-  /**
-   * The admin plugin's fields (ADR 0003): `role` marks the bootstrap Admin
-   * (every account after the first is provisioned with the default `user`
-   * role). The ban fields are unused by the MVP but part of the plugin's
-   * schema, so the plugin's hooks never hit a missing column.
-   */
   role: text("role").default("user").notNull(),
   banned: integer("banned", { mode: "boolean" }).default(false).notNull(),
   banReason: text("ban_reason"),
