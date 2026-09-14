@@ -6,7 +6,6 @@ import { onSyncPass, runSyncPass } from "../connectivity";
 import { db } from "../db";
 import { acceptInvitation, declineInvitation, pendingInvitations } from "../invitations";
 import { createList } from "../lists";
-import { provisionUser } from "../provision";
 import { session, signOut } from "../session";
 import { ignoreRejection, logRejection } from "../utils/fireAndForget";
 
@@ -18,14 +17,6 @@ const name = ref("");
 const error = ref<string | null>(null);
 const creating = ref(false);
 const isAdmin = computed(() => session.user?.role === "admin");
-const provision = ref({
-  name: "",
-  email: "",
-  password: "",
-  error: null as string | null,
-  submitting: false,
-  createdName: null as string | null,
-});
 
 async function loadLists() {
   lists.value = await db.getLists();
@@ -33,24 +24,6 @@ async function loadLists() {
 
 async function loadInvitations() {
   invitations.value = await pendingInvitations();
-}
-
-/** Only the Admin sees the form; the route itself rejects anyone else (403). */
-async function onProvision() {
-  provision.value.error = null;
-  provision.value.submitting = true;
-  try {
-    await provisionUser(provision.value.name, provision.value.email, provision.value.password);
-  } catch (err) {
-    provision.value.error = err instanceof Error ? err.message : "Could not create the account";
-    return;
-  } finally {
-    provision.value.submitting = false;
-  }
-  provision.value.createdName = provision.value.name;
-  provision.value.name = "";
-  provision.value.email = "";
-  provision.value.password = "";
 }
 
 /**
@@ -128,6 +101,7 @@ onUnmounted(() => {
   <h1>Shopping Lists</h1>
   <div v-if="session.user">
     <p>Signed in as {{ session.user.name }}</p>
+    <RouterLink v-if="isAdmin" :to="{ name: 'settings' }">Settings</RouterLink>
     <button type="button" @click="onSignOut">Sign out</button>
   </div>
   <section v-if="invitations.length > 0" class="invitations" aria-label="Invitations for you">
@@ -157,29 +131,4 @@ onUnmounted(() => {
     <button type="submit" :disabled="creating || !session.user">Create a List</button>
   </form>
   <p v-if="error">{{ error }}</p>
-  <section v-if="isAdmin" class="provision" aria-label="Add a user">
-    <h2>Add a user</h2>
-    <form class="provision-form" @submit.prevent="onProvision">
-      <label>
-        Name
-        <input v-model="provision.name" name="provision-name" />
-      </label>
-      <label>
-        Email
-        <input v-model="provision.email" name="provision-email" type="email" />
-      </label>
-      <label>
-        Password
-        <input
-          v-model="provision.password"
-          name="provision-password"
-          type="password"
-          autocomplete="new-password"
-        />
-      </label>
-      <button type="submit" :disabled="provision.submitting">Create account</button>
-    </form>
-    <p v-if="provision.error">{{ provision.error }}</p>
-    <p v-if="provision.createdName">{{ provision.createdName }} can now sign in.</p>
-  </section>
 </template>
