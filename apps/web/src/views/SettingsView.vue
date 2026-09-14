@@ -1,11 +1,10 @@
 <script setup lang="ts">
-import { computed, ref } from "vue";
+import { ref } from "vue";
 import { useRouter } from "vue-router";
 import { apiFetch } from "../api";
 import { session, signOut } from "../session";
 
 const router = useRouter();
-const isAdmin = computed(() => session.user?.role === "admin");
 const form = ref({
   name: "",
   email: "",
@@ -16,8 +15,8 @@ const form = ref({
 });
 
 /**
- * Only the Admin creates accounts (ADR 0003): the route rejects anyone else
- * with a 403, and the form here is hidden for Members.
+ * Only the Admin creates accounts (ADR 0003): this route is admin-only, and
+ * the API route still rejects anyone else with a 403.
  */
 async function addUser() {
   form.value.error = null;
@@ -58,7 +57,7 @@ async function onSignOut() {
     <RouterLink :to="{ name: 'lists' }">Back to lists</RouterLink>
     <button type="button" @click="onSignOut">Sign out</button>
   </div>
-  <section v-if="isAdmin" class="add-user" aria-label="Add a user">
+  <section class="add-user" aria-label="Add a user">
     <h2>Add a user</h2>
     <p>Give a new household member their name, email, and password.</p>
     <form class="add-user-form" @submit.prevent="addUser">
@@ -84,5 +83,4 @@ async function onSignOut() {
     <p v-if="form.error">{{ form.error }}</p>
     <p v-if="form.createdName">{{ form.createdName }} can now sign in.</p>
   </section>
-  <p v-if="!isAdmin">Only the Admin can manage users.</p>
 </template>
