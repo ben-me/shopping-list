@@ -8,7 +8,7 @@ Today there is no app for this: the household default is separate notes, group c
 
 ## Solution
 
-A progressive web app a household signs into. Each member can create **Lists** of **Items** they intend to buy, invite other members by email, and check items off. Any member can record a **Payment** — a free dated amount in EUR, not tied to any item. The app divides the total paid evenly across members and shows each person their **Owed** figure: how much they owe the group (red) or are owed by it (green). Everything works offline and syncs when back online; a single shared server is the source of truth.
+A progressive web app a household signs into. Each member can create **Lists** of **Items** they intend to buy, invite other members who already have an account, and check items off. Any member can record a **Payment** — a free dated amount in EUR, not tied to any item. The app divides the total paid evenly across members and shows each person their **Owed** figure: how much they owe the group (red) or are owed by it (green). Everything works offline and syncs when back online; a single shared server is the source of truth.
 
 ## User Stories
 
@@ -22,8 +22,8 @@ A progressive web app a household signs into. Each member can create **Lists** o
 7. As a user, I want the list to work with no connection using last-synced data, so that shopping in a signal-free store is never blocked.
 
 **Membership & invitations**
-8. As the owner of a list, I want to invite another user by email, so that my household can edit the same list.
-9. As a user, I want to receive a join request by email, so that I know I've been invited and can accept.
+8. As the owner of a list, I want to invite another user who already has an account, so that my household can edit the same list.
+9. As a user, I want to see pending invitations in the app and accept or decline them, so that I know I've been invited without any email.
 10. As the owner of a list, I want to remove a member, so that I can stop someone editing.
 11. As a member, I want every member (including the owner) to have equal edit rights, so that no one needs special permission to do the obvious thing.
 12. As a user, when a member leaves, I want their recorded payments to be left untouched, so that past spending history is preserved and the remaining members' split simply re-divides.
@@ -45,7 +45,7 @@ A progressive web app a household signs into. Each member can create **Lists** o
 
 ## Implementation Decisions
 
-This spec synthesises `CONTEXT.md` and ADRs `0001` and `0002`.
+This spec synthesises `CONTEXT.md` and ADRs `0001`, `0002`, and `0003`.
 
 - **Architecture.** Vue 3 (vite, router) client. `hono` exposes the HTTP API. `better-auth` handles authentication against a `sqlite` store. `dexie.js` is the local-first IndexedDB layer on the device. The client and server are separated; the device holds a working copy, the server is the source of truth (ADR `0001`).
 - **Local-first, offline-priority sync.** The app reads from dexie and works fully with zero network, using last-synced data. Local writes queue on the device; on reconnect the client uploads its pending patch and the server responds with the accumulated remote state. Editing offline is never blocked.
@@ -53,7 +53,8 @@ This spec synthesises `CONTEXT.md` and ADRs `0001` and `0002`.
 - **Schema.** The server keeps sqlite tables for Users, Lists, Memberships, Invitations, Items, and Payments. A Payment is a row with an amount (in EUR minor units), a date, the paying member, and the list it belongs to — nothing more. There is no per-item pricing, no currency column, no conversion tables.
 - **Split.** Equal is the only rule and is hardcoded in the Owed calculation; the List carries no `splitRule` field (ADR `0002`).
 - **Owed calculation.** For each member, `Owed = (total paid ÷ member count) − (member's contributed total)`. Positive means they owe the group (red); negative means the group owes them (green). It is a single pooled pot, never a pairwise graph. With no co-members, the app shows only the running total and no Owed figure.
-- **Membership.** The Owner is also a Member and has no privileged edit rights beyond creating the list and managing membership. Invitations are delivered by email only — the sole outbound notification in the MVP; there is no push, no digest, no SMS.
+- **Membership.** The Owner is also a Member and has no privileged edit rights beyond creating the list and managing membership. Invitations are delivered in-app only: the invitee sees pending Invitations when signed in and accepts or declines. The app sends no outbound notification of any kind — no email, no push, no digest, no SMS.
+- **Auth & accounts.** better-auth handles sign-in against sqlite (ADR `0003`). Accounts are provisioned rather than self-created: a one-time bootstrap sign-up, available only while the user table is empty, creates the Admin; afterwards sign-up is closed server-side (`disableSignUp`) and only the Admin can create further accounts through an admin-only route — password hashing stays with better-auth, never raw SQL. There is no email verification step: provisioning counts as verification.
 - **Money handling.** EUR only. Amounts are stored in minor units (cents) to avoid float drift. No multi-currency, no conversion, no per-list currency setting.
 - **PWA.** The app is installable and offline-capable; the offline path is what guarantees the store scenario keeps working with no wifi.
 - **Out-of-scope guardrails.** No per-item cost, no scanning, no recipes/nutrition, no permission tiers, no settlement flow (members only add and edit their own payments), no multiple pots per list, no list templates, no push.
@@ -73,11 +74,11 @@ This spec synthesises `CONTEXT.md` and ADRs `0001` and `0002`.
 - Per-item pricing and item-level expense attribution — payments are pot-level only.
 - Multiple currencies, conversion, or a currency setting — EUR only.
 - Scanning products, nutrition, recipes, unit/spend history per item.
-- Permission tiers or roles beyond Owner vs Member — all members edit everything equally.
+- Permission tiers or roles beyond Owner vs Member within a List (the Admin provisions accounts but holds no special List rights).
 - A settlement flow — members can only add and edit their own payments for the MVP.
 - Multiple balance pots or separate money sources per list — exactly one pot.
 - Recurring lists or list templates.
-- Push notifications, digests, or any outbound notification other than the invite email.
+- Any outbound notification — email, push, digests, SMS. The app never contacts a user outside the app.
 - Device-authoritative sync or any conflict-resolution UI — sync is server-authoritative with no merge/dedupe.
 
 ## Further Notes
