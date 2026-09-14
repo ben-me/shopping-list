@@ -1,5 +1,7 @@
 import { reactive } from "vue";
 import { authClient } from "./auth-client";
+import { db } from "./db";
+import { ensureStoreForUser } from "./store-owner";
 
 const SESSION_CACHE_KEY = "shopping-list:session-user";
 
@@ -47,11 +49,24 @@ async function fetchSession() {
   try {
     const { data } = await authClient.getSession();
     session.user = data?.user ?? null;
-    cacheUser(session.user);
   } catch {
     // Server unreachable (offline): fall back to the cached user so the app
     // still opens on last-synced data rather than forcing a sign-in.
     session.user = cachedUser();
+  }
+  await adoptUser(session.user);
+}
+
+/** Scope the Store to the session user; best-effort so the session always opens. */
+async function adoptUser(user: SessionUser | null) {
+  cacheUser(user);
+  if (!user) {
+    return;
+  }
+  try {
+    await ensureStoreForUser(db, user.id);
+  } catch {
+    // Best-effort: never block the session.
   }
 }
 
@@ -61,7 +76,7 @@ export async function signIn(email: string, password: string) {
     throw new Error(error.message ?? "Sign-in failed");
   }
   session.user = data?.user as SessionUser;
-  cacheUser(session.user);
+  await adoptUser(session.user);
 }
 
 export async function signUp(name: string, email: string, password: string) {
@@ -70,7 +85,7 @@ export async function signUp(name: string, email: string, password: string) {
     throw new Error(error.message ?? "Sign-up failed");
   }
   session.user = data?.user;
-  cacheUser(session.user);
+  await adoptUser(session.user);
 }
 
 export async function signOut() {
@@ -80,6 +95,15 @@ export async function signOut() {
     // The session is dead client-side even if the request failed.
     session.user = null;
     cacheUser(null);
+    await clearLocalStore();
+  }
+}
+
+async function clearLocalStore() {
+  try {
+    await db.clearAll();
+  } catch {
+    // Best-effort: the session must clear even if the Store fails.
   }
 }
 

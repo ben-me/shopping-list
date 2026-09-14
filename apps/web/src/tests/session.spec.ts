@@ -1,3 +1,7 @@
+import "fake-indexeddb/auto";
+
+import { db } from "../db";
+import * as storeOwner from "../store-owner";
 import {
   _resetSession,
   session,
@@ -174,23 +178,61 @@ describe("session", () => {
     expect(session.user).toBeNull();
   });
 
-  it("signs out clears the session and the cached user", async () => {
+  it("signs out clears the session, the cached user, and every row in the local Store", async () => {
     fetchImpl = stubFetch(jsonResponse({ session: { token: "tok" }, user }));
     await restoreSession();
+    await db.syncList({
+      id: "list-1",
+      ownerId: user.id,
+      name: "Mine",
+      createdAt: "2026-01-01T00:00:00.000Z",
+      updatedAt: "2026-01-01T00:00:00.000Z",
+    });
+    expect(await db.getLists()).toHaveLength(1);
     fetchImpl = stubFetch(jsonResponse({ success: true }));
     await signOut();
 
     expect(callsTo("/api/auth/sign-out")).toHaveLength(1);
     expect(session.user).toBeNull();
     expect(localStorage.getItem("shopping-list:session-user")).toBeNull();
+    expect(await db.getLists()).toEqual([]);
   });
 
-  it("signs out even when the server is unreachable", async () => {
+  it("wipes the previous user's local data when a different user signs in", async () => {
+    const secondUser: SessionUser = { id: "user-2", name: "Second User", email: "[EMAIL]" };
+    fetchImpl = stubFetch(jsonResponse({ session: { token: "tok" }, user }));
+    await restoreSession();
+    await db.syncList({
+      id: "list-1",
+      ownerId: user.id,
+      name: "Mine",
+      createdAt: "2026-01-01T00:00:00.000Z",
+      updatedAt: "2026-01-01T00:00:00.000Z",
+    });
+    expect(await db.getLists()).toHaveLength(1);
+
+    // A different user signs in: wiped before any view could paint it.
+    fetchImpl.mockImplementation(async () => jsonResponse({ token: "tok", user: secondUser }));
+    await signIn("[EMAIL]", "password123");
+
+    expect(session.user).toEqual(secondUser);
+    expect(await db.getLists()).toEqual([]);
+  });
+
+  it("signs out even when the server is unreachable — and still wipes the Store", async () => {
     session.user = user;
+    await db.syncList({
+      id: "list-1",
+      ownerId: user.id,
+      name: "Mine",
+      createdAt: "2026-01-01T00:00:00.000Z",
+      updatedAt: "2026-01-01T00:00:00.000Z",
+    });
     fetchImpl = stubFetch(jsonResponse({ message: "unavailable" }, 503));
     await signOut();
 
     expect(session.user).toBeNull();
+    expect(await db.getLists()).toEqual([]);
   });
 
   it("shares one in-flight restore between concurrent callers", async () => {
@@ -199,6 +241,18 @@ describe("session", () => {
 
     expect(callsTo("/api/auth/get-session")).toHaveLength(1);
     expect(session.user).toEqual(user);
+  });
+
+  it("still restores the session when scoping the Store fails", async () => {
+    const spy = vi
+      .spyOn(storeOwner, "ensureStoreForUser")
+      .mockRejectedValue(new Error("IndexedDB unavailable"));
+    fetchImpl = stubFetch(jsonResponse({ session: { token: "tok" }, user }));
+
+    await expect(restoreSession()).resolves.toBeUndefined();
+
+    expect(session.user).toEqual(user);
+    spy.mockRestore();
   });
 
   it("allows a later restore to re-fetch after the first completed", async () => {

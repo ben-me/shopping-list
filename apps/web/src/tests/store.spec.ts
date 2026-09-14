@@ -67,6 +67,22 @@ describe("ShoppingDb", () => {
     expect(await db.getMemberships(list.id)).toEqual([membership]);
   });
 
+  it("removeList drops the List and everything that belongs to it, including queued writes", async () => {
+    await db.putList(list);
+    await db.putItem(milk);
+    await db.putPayment(pay1);
+    await db.syncMembership({ listId: list.id, memberId: "user-2", joinedAt: now() });
+    expect(await db.pendingOutboxEntries()).toHaveLength(3); // list + item + payment writes
+
+    await db.removeList(list.id);
+
+    expect(await db.getLists()).toEqual([]);
+    expect(await db.getItems(list.id)).toEqual([]);
+    expect(await db.getPayments(list.id)).toEqual([]);
+    expect(await db.getMemberships(list.id)).toEqual([]);
+    expect(await db.pendingOutboxEntries()).toEqual([]);
+  });
+
   it("syncs a List into the local Store without queuing an outbox write", async () => {
     await db.syncList(list);
 
