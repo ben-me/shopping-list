@@ -86,11 +86,13 @@ test("an empty database bootstraps the Admin, then sign-up closes for good", asy
     await signInAsUser(page, ADMIN_EMAIL, ADMIN_PASSWORD);
     await expect(page.getByText("Signed in as Bootstrap Admin")).toBeVisible();
 
-    // Only the Admin sees the Add-a-user form on the home screen.
-    await input(page, "provision-name").fill("UI Provisioned");
-    await input(page, "provision-email").fill("uiprovisioned@e2e.test");
-    await input(page, "provision-password").fill("ui-provisioned-password");
-    await page.getByRole("button", { name: "Create account" }).click();
+    // Only the Admin sees a Settings link, whose Add-a-user form provisions.
+    await page.getByRole("link", { name: "Settings" }).click();
+    await expect(page.getByRole("heading", { name: "Add a user" })).toBeVisible();
+    await input(page, "add-user-name").fill("UI Provisioned");
+    await input(page, "add-user-email").fill("uiprovisioned@e2e.test");
+    await input(page, "add-user-password").fill("ui-provisioned-password");
+    await page.getByRole("button", { name: "Add user" }).click();
     await expect(page.getByText("UI Provisioned can now sign in.")).toBeVisible();
 
     // The provisioned account signs in like any other.
