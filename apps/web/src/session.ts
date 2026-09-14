@@ -11,6 +11,8 @@ export interface SessionUser {
   email: string;
   emailVerified?: boolean;
   image?: string | null;
+  /** "admin" only for the bootstrap account (ADR 0003); absent on older caches. */
+  role?: string;
 }
 
 /**

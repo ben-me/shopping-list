@@ -25,27 +25,11 @@ pnpm db:reset       # wipe the local (dev) D1 — e.g. before a fresh e2e run
 Sign-up is the **one-time bootstrap**: it succeeds only while the user table is
 empty, and the first account becomes the **Admin**. Afterwards sign-up is
 closed for good (server rejects, the UI hides it), and every further account is
-provisioned by the Admin through better-auth's admin route — so password
-hashing stays with better-auth, never raw SQL. A provisioned account is
-email-verified and can sign in immediately.
-
-Provisioning is two raw `curl` calls to better-auth's routes (there is no
-wrapper script):
-
-```sh
-curl -c /tmp/admin.cookies \
-  -X POST http://localhost:8787/api/auth/sign-in/email \
-  -H 'content-type: application/json' \
-  -d '{"email":"admin@example.com","password":"change-me"}'
-
-curl -b /tmp/admin.cookies \
-  -X POST http://localhost:8787/api/auth/admin/create-user \
-  -H 'content-type: application/json' \
-  -d '{"name":"Alice","email":"alice@example.com","password":"change-me","role":"user","data":{"emailVerified":true}}'
-```
-
-The `emailVerified: true` is what makes provisioning count as verification.
-The Admin's credentials are a deployer-side secret, never an app setting.
+provisioned by the Admin from the app: sign in as the Admin and the home screen
+shows an **Add a user** form (name, email, password). The account is created
+through better-auth's admin route — so password hashing stays with better-auth,
+never raw SQL — and is email-verified, so it can sign in immediately. Only the
+Admin sees the form; the route itself rejects anyone without the `admin` role.
 
 ## Authentication (better-auth)
 

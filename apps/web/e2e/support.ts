@@ -82,10 +82,10 @@ export async function provisionUser(
 }
 
 /** Sign an existing account in through the real sign-in form. */
-export async function signInAsUser(page: Page, email: string) {
+export async function signInAsUser(page: Page, email: string, password: string = PASSWORD) {
   await page.goto("/");
   await input(page, "email").fill(email);
-  await input(page, "password").fill(PASSWORD);
+  await input(page, "password").fill(password);
   await page.getByRole("button", { name: "Sign in" }).click();
 }
 
