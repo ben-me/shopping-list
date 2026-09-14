@@ -188,10 +188,10 @@ export class ShoppingDb extends Dexie {
   }
 
   /**
-   * The inbound half of a Sync for a List's Membership set. Memberships only
-   * change through the online invite flow, so the server's set is truth: rows
-   * this device holds for the List but the server no longer returns are
-   * dropped, and every server row is stored.
+   * Replace the local Membership set for a List with the given rows, in one
+   * transaction. This is the one write that skips the outbox: Memberships are
+   * never edited offline — every change is a server-side invite/accept — so
+   * there is nothing to queue (`writeWithOutbox` does not apply).
    */
   async replaceMemberships(listId: string, memberships: Membership[]): Promise<void> {
     await this.transaction("rw", this.memberships, async () => {
