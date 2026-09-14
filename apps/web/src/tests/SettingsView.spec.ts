@@ -106,7 +106,7 @@ describe("SettingsView", () => {
     expect(wrapper.text()).toContain("Partner can now sign in.");
   });
 
-  it("hides the Add-a-user form from Members", async () => {
+  it("redirects a Member away from the admin-only Settings route", async () => {
     stubSignedIn("user");
     const router = createAppRouter(createMemoryHistory());
     await router.push("/settings");
@@ -114,9 +114,9 @@ describe("SettingsView", () => {
 
     const wrapper = mount(App, { global: { plugins: [router] } });
     await flushPromises();
+    await settle();
 
+    expect(router.currentRoute.value.name).toBe("lists");
     expect(wrapper.find("section.add-user").exists()).toBe(false);
-    expect(wrapper.find('input[name="add-user-email"]').exists()).toBe(false);
-    expect(wrapper.text()).toContain("Only the Admin can manage users.");
   });
 });
