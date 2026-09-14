@@ -23,6 +23,8 @@
     "db:generate": "drizzle-kit generate",
     "db:migrate": "wrangler d1 migrations apply dev-db-shopping-list --local",
     "db:migrate:remote": "wrangler d1 migrations apply dev-db-shopping-list --remote",
+    "db:reset": "node scripts/db-reset.mjs",
+    "user:create": "node scripts/provision-user.mjs",
     "test:unit": "vitest run",
     "type-check": "tsc --noEmit",
     "fmt": "oxfmt",

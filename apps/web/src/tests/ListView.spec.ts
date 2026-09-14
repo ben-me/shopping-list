@@ -7,7 +7,7 @@ vi.mock(
 
 import { flushPromises, mount } from "@vue/test-utils";
 import { createMemoryHistory } from "vue-router";
-import type { List } from "@shopping-list/api/domain";
+import type { List, ListInvitation } from "@shopping-list/api/domain";
 import { runSyncPass } from "../connectivity";
 import App from "../App.vue";
 import { db } from "../db";
@@ -476,5 +476,110 @@ describe("ListView", () => {
     expect(rows[0]!.text()).toContain("is owed 8,00");
     expect(rows[1]!.text()).toContain("owes 4,00");
     expect(rows[2]!.text()).toContain("owes 4,00");
+  });
+
+  it("lets the Owner invite by email and revoke a pending invitation", async () => {
+    let invitations: ListInvitation[] = [];
+    stubRoutes((url, init) => {
+      if (url === `/api/lists/${list.id}/invitations`) {
+        if (init?.method === "POST" && init?.body) {
+          const { email } = JSON.parse(init.body as string) as { email: string };
+          invitations = [
+            {
+              id: "inv-1",
+              listId: list.id,
+              email,
+              invitedById: user.id,
+              invitedByName: "Test User",
+              status: "pending",
+              createdAt: new Date().toISOString(),
+            },
+          ];
+          return jsonResponse(
+            {
+              invitation: {
+                id: "inv-1",
+                listId: list.id,
+                email,
+                invitedById: user.id,
+                status: "pending",
+                token: "tok",
+                createdAt: new Date().toISOString(),
+                updatedAt: new Date().toISOString(),
+              },
+            },
+            201,
+          );
+        }
+        return jsonResponse({ invitations });
+      }
+      if (url === `/api/lists/${list.id}/invitations/inv-1` && init?.method === "DELETE") {
+        invitations = invitations.map((inv) =>
+          inv.id === "inv-1" ? { ...inv, status: "revoked" } : inv,
+        );
+        return jsonResponse({ ok: true });
+      }
+      if (url.endsWith("/items")) {
+        return jsonResponse({ items: [] });
+      }
+      if (url.endsWith("/payments")) {
+        return jsonResponse({ payments: [] });
+      }
+      return new Response(null, { status: 503 });
+    });
+
+    const wrapper = await mountList();
+    await flushPromises();
+    await settle();
+
+    // A fresh List has no invitations, and the Owner sees the invite form.
+    expect(wrapper.text()).toContain("Nobody invited yet.");
+
+    await wrapper.find('input[name="invite-email"]').setValue("[EMAIL]");
+    await wrapper.find("form.invite-form").trigger("submit");
+    await flushPromises();
+    await settle();
+
+    expect(wrapper.text()).toContain("[EMAIL]");
+    expect(wrapper.text()).toContain("invited");
+
+    // Revoking closes the invitation; a Member does not get the controls.
+    await wrapper.find('button[name="revoke-invitation"]').trigger("click");
+    await flushPromises();
+    await settle();
+
+    expect(wrapper.text()).toContain("closed");
+    expect(wrapper.findAll('button[name="revoke-invitation"]')).toHaveLength(0);
+  });
+
+  it("shows invitations to a Member without the Owner-only controls", async () => {
+    // The signed-in user is a Member; someone else owns the List.
+    await db.lists.put({ ...list, ownerId: "user-2" });
+    stubRoutes((url) => {
+      if (url === `/api/lists/${list.id}/invitations`) {
+        return jsonResponse({
+          invitations: [
+            {
+              id: "inv-2",
+              listId: list.id,
+              email: "[EMAIL]",
+              invitedById: "user-2",
+              invitedByName: "Other Owner",
+              status: "accepted",
+              createdAt: new Date().toISOString(),
+            },
+          ],
+        });
+      }
+      return new Response(null, { status: 503 });
+    });
+
+    const wrapper = await mountList();
+    await flushPromises();
+    await settle();
+
+    expect(wrapper.text()).toContain("Other Owner");
+    expect(wrapper.find('input[name="invite-email"]').exists()).toBe(false);
+    expect(wrapper.findAll('button[name="revoke-invitation"]')).toHaveLength(0);
   });
 });

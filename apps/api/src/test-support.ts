@@ -30,20 +30,96 @@ export function uniq(prefix: string) {
   return `${prefix}-${crypto.randomUUID()}`;
 }
 
+export const TEST_PASSWORD = "password123";
+
 let signupCounter = 0;
 export function uniqueEmail(prefix: string) {
   signupCounter += 1;
   return `${prefix}${signupCounter}@example.com`;
 }
 
+/**
+ * The Admin of the current miniflare DB, captured the first time the bootstrap
+ * sign-up runs (ADR 0003: an empty user table creates the Admin, then sign-up
+ * closes). Every later account in tests is provisioned through the admin
+ * route, exactly as the deployer would.
+ */
+let admin: { cookie: string; email: string } | null = null;
+
+/**
+ * A fresh account for a test. On an empty DB this is the one-time bootstrap:
+ * sign-up succeeds and the account becomes the Admin. Once any account
+ * exists, sign-up is closed server-side, so further accounts go through the
+ * admin provisioning route instead and sign in immediately.
+ */
 export async function signUp(app: TestApp, env: AuthEnv, emailPrefix: string) {
+  const statusRes = await app.request("/api/signup-status", {}, env);
+  const statusBody = (await statusRes.json()) as {
+    signUpOpen: boolean;
+  };
+  if (statusBody.signUpOpen) {
+    // A fresh DB: the very first account is this DB's Admin (ADR 0003). Even
+    // if an earlier test file's Admin is cached in this process, the new
+    // bootstrap replaces it — provisioning must use the current DB's session.
+    admin = await signUpViaBootstrap(app, env, emailPrefix);
+    return admin;
+  }
+  return provisionAndSignIn(app, env, emailPrefix);
+}
+
+async function signUpViaBootstrap(app: TestApp, env: AuthEnv, emailPrefix: string) {
   const email = uniqueEmail(emailPrefix);
   const res = await app.request(
     "/api/auth/sign-up/email",
     {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ name: "Test User", email, password: "password123" }),
+      body: JSON.stringify({ name: "Test User", email, password: TEST_PASSWORD }),
+    },
+    env,
+  );
+  expect(res.status).toBe(200);
+  return { cookie: res.headers.getSetCookie().join("; "), email };
+}
+
+/**
+ * Provision a user through the admin route and sign them in — the same path a
+ * deployer uses (`pnpm user:create`). The account is email-verified by
+ * provisioning, so the new user can sign in immediately.
+ */
+async function provisionAndSignIn(app: TestApp, env: AuthEnv, emailPrefix: string) {
+  if (!admin) {
+    throw new Error(
+      "No admin session: bootstrap the Admin (first signUp) before provisioning users",
+    );
+  }
+  const email = uniqueEmail(emailPrefix);
+  const res = await app.request(
+    "/api/auth/admin/create-user",
+    {
+      method: "POST",
+      headers: { "content-type": "application/json", cookie: admin.cookie },
+      body: JSON.stringify({
+        name: "Test User",
+        email,
+        password: TEST_PASSWORD,
+        role: "user",
+        data: { emailVerified: true },
+      }),
+    },
+    env,
+  );
+  expect(res.status).toBe(200);
+  return signIn(app, env, email);
+}
+
+export async function signIn(app: TestApp, env: AuthEnv, email: string) {
+  const res = await app.request(
+    "/api/auth/sign-in/email",
+    {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ email, password: TEST_PASSWORD }),
     },
     env,
   );

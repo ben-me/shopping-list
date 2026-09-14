@@ -4,24 +4,35 @@ import { cors } from "hono/cors";
 import type { ContentfulStatusCode } from "hono/utils/http-status";
 import { createAuth, getTrustedOrigins, type AuthEnv } from "./auth";
 import { createD1Connection, ping, type Db } from "./db";
+import type { InvitationStatus, List } from "./domain";
 import { BadRequestError, ForbiddenError, NotFoundError, toErrorEnvelope } from "./errors";
 import { requireMember, requireUser, type AppVariables } from "./guards";
 import {
+  createInvitation,
   createList,
   createItem,
+  createMembership,
   createPayment,
   deleteItem,
   deletePayment,
+  getInvitation,
+  getInvitationsByListWithContext,
   getItem,
   getList,
   getItemsByList,
   getListsForMember,
   getPayment,
   getPaymentsByList,
+  getPendingInvitationsForEmail,
+  getUserByEmail,
+  hasPendingInvitationForListAndEmail,
   isMember,
+  normalizeEmail,
+  updateInvitation,
   updateList,
   updateItem,
   updatePayment,
+  usersExist,
 } from "./queries";
 
 /**
@@ -68,7 +79,10 @@ export function createApp() {
    * The D1 binding is only available inside the request, so the auth instance
    * is built per request from `c.env`.
    */
-  app.all("/api/auth/*", (c) => createAuth(c.env).handler(c.req.raw));
+  app.all("/api/auth/*", async (c) => {
+    const auth = await createAuth(c.env);
+    return auth.handler(c.req.raw);
+  });
 
   app.onError((error, c) => {
     const { status, envelope } = toErrorEnvelope(error);
@@ -82,6 +96,108 @@ export function createApp() {
   });
 
   app.get("/api/me", requireUser, (c) => c.json({ user: c.get("user") }));
+
+  /**
+   * The bootstrap gate the sign-in view renders against (ADR 0003): sign-up
+   * is offered only while the user table is empty; the Admin provisions every
+   * account after that.
+   */
+  app.get("/api/signup-status", async (c) => {
+    const db = createD1Connection(c.env.devDb);
+    const hasUsers = await usersExist(db);
+    return c.json({ signUpOpen: !hasUsers });
+  });
+
+  /**
+   * The invitee's in-app inbox (ADR 0003): every pending Invitation sent to
+   * the signed-in user, with the inviting Owner's name and the List name.
+   * Accepting or declining happens by invitation id.
+   */
+  app.get("/api/invitations", requireUser, async (c) => {
+    const { db } = getRequestContext(c);
+    const invitations = await getPendingInvitationsForEmail(db, c.get("user").email);
+    return c.json({ invitations });
+  });
+
+  /** Make the invitee a Member of the List the Invitation targets. */
+  app.post("/api/invitations/:invitationId/accept", requireUser, async (c) => {
+    const { db, invitationId } = getRequestContext(c);
+    const invitation = await getInvitationForInvitee(db, invitationId, c.get("user").email);
+    if (invitation.status !== "pending") {
+      throw new BadRequestError("This invitation is no longer pending");
+    }
+    if (!(await isMember(db, invitation.list, c.get("user").id))) {
+      await createMembership(db, { listId: invitation.list.id, memberId: c.get("user").id });
+    }
+    await updateInvitation(db, invitation.id, { status: "accepted" });
+    return c.json({ ok: true });
+  });
+
+  /** Decline maps to `revoked` so the Invitation leaves both pending lists (ADR 0003). */
+  app.post("/api/invitations/:invitationId/decline", requireUser, async (c) => {
+    const { db, invitationId } = getRequestContext(c);
+    const invitation = await getInvitationForInvitee(db, invitationId, c.get("user").email);
+    if (invitation.status !== "pending") {
+      throw new BadRequestError("This invitation is no longer pending");
+    }
+    await updateInvitation(db, invitation.id, { status: "revoked" });
+    return c.json({ ok: true });
+  });
+
+  /** Invitations on a List, for its Members — the Owner manages them from the List. */
+  app.get("/api/lists/:listId/invitations", requireUser, requireMember, async (c) => {
+    const { db, listId } = getRequestContext(c);
+    const invitations = await getInvitationsByListWithContext(db, listId);
+    return c.json({ invitations });
+  });
+
+  /** Only the Owner invites (existing users, by email) — never a non-Owner. */
+  app.post("/api/lists/:listId/invitations", requireUser, requireMember, async (c) => {
+    const { db, listId } = getRequestContext(c);
+    const list = c.get("list");
+    if (c.get("user").id !== list.ownerId) {
+      throw new ForbiddenError("Only the Owner can invite");
+    }
+    const email = readInviteEmailFromBody(await readJsonBody(c));
+    const invitee = await getUserByEmail(db, email);
+    if (!invitee) {
+      throw new BadRequestError(
+        "There's no account for that email — accounts are provisioned for this household",
+      );
+    }
+    if (await isMember(db, list, invitee.id)) {
+      throw new BadRequestError("That user is already a member of this list");
+    }
+    if (await hasPendingInvitationForListAndEmail(db, listId, email)) {
+      throw new BadRequestError("That user has already been invited");
+    }
+    const invitation = await createInvitation(db, {
+      listId,
+      email: normalizeEmail(email),
+      invitedById: c.get("user").id,
+      token: crypto.randomUUID(),
+    });
+    return c.json({ invitation }, 201);
+  });
+
+  /** Only the Owner revokes (closes) a pending Invitation; already-closed ones stay idempotent. */
+  app.delete(
+    "/api/lists/:listId/invitations/:invitationId",
+    requireUser,
+    requireMember,
+    async (c) => {
+      const { db, listId, invitationId } = getRequestContext(c);
+      const list = c.get("list");
+      if (c.get("user").id !== list.ownerId) {
+        throw new ForbiddenError("Only the Owner can revoke invitations");
+      }
+      const invitation = await getInvitationBelongingToList(db, listId, invitationId);
+      if (invitation && invitation.status === "pending") {
+        await updateInvitation(db, invitation.id, { status: "revoked" });
+      }
+      return c.json({ ok: true });
+    },
+  );
 
   app.get("/api/lists/:listId", requireUser, requireMember, (c) => c.json({ list: c.get("list") }));
 
@@ -211,131 +327,186 @@ export function createApp() {
   return app;
 }
 
-  function getRequestContext(c: AppContext) {
-    return {
-      db: createD1Connection(c.env.devDb),
-      listId: c.req.param("listId") ?? "",
-      itemId: c.req.param("itemId") ?? "",
-      paymentId: c.req.param("paymentId") ?? "",
-    };
-  }
+function getRequestContext(c: AppContext) {
+  return {
+    db: createD1Connection(c.env.devDb),
+    listId: c.req.param("listId") ?? "",
+    itemId: c.req.param("itemId") ?? "",
+    paymentId: c.req.param("paymentId") ?? "",
+    invitationId: c.req.param("invitationId") ?? "",
+  };
+}
 
-  /**
-   * A Payment that exists on a different List is a 404, so endpoints built on
-   * this helper can never read or write across Lists.
-   */
-  async function getPaymentBelongingToList(db: Db, listId: string, paymentId: string) {
-    const existingPayment = await getPayment(db, paymentId);
-    if (existingPayment && existingPayment.listId !== listId) {
-      throw new NotFoundError("Payment not found");
-    }
-    return existingPayment;
-  }
+interface InvitationForInvitee {
+  id: string;
+  list: List;
+  status: InvitationStatus;
+}
 
-  function isPaymentUpdateBody(
-    value: unknown,
-  ): value is { amountInCents?: number; paidAt?: string } {
-    if (typeof value !== "object" || value === null) {
-      return false;
-    }
-    const { amountInCents, paidAt } = value as Record<string, unknown>;
-    if (
-      amountInCents !== undefined &&
-      (typeof amountInCents !== "number" || !Number.isInteger(amountInCents) || amountInCents <= 0)
-    ) {
-      return false;
-    }
-    if (paidAt !== undefined && (typeof paidAt !== "string" || paidAt.trim() === "")) {
-      return false;
-    }
-    return amountInCents !== undefined || paidAt !== undefined;
+/**
+ * The Invitation an invitee may act on: it must exist, target the caller's
+ * email (only the invitee accepts or declines), and its List must resolve.
+ */
+async function getInvitationForInvitee(
+  db: Db,
+  invitationId: string,
+  inviteeEmail: string,
+): Promise<InvitationForInvitee> {
+  const invitation = await getInvitation(db, invitationId);
+  if (!invitation) {
+    throw new NotFoundError("Invitation not found");
   }
+  if (invitation.email !== normalizeEmail(inviteeEmail)) {
+    throw new ForbiddenError("This invitation was not sent to you");
+  }
+  const list = await getList(db, invitation.listId);
+  if (!list) {
+    throw new NotFoundError("Invitation not found");
+  }
+  return { id: invitation.id, list, status: invitation.status };
+}
 
-  function readPaymentUpdateFromBody(body: unknown) {
-    if (!isPaymentUpdateBody(body)) {
-      throw new BadRequestError("A Payment needs an amount in cents and a date");
-    }
-    const update: { amountInCents?: number; paidAt?: string } = {};
-    if (body.amountInCents !== undefined) {
-      update.amountInCents = body.amountInCents;
-    }
-    if (body.paidAt !== undefined) {
-      update.paidAt = body.paidAt.trim();
-    }
-    return update;
+/**
+ * An Invitation that belongs to a specific List; one on a different List is
+ * a 404, so the revoke endpoint can never touch another List's invitation.
+ */
+async function getInvitationBelongingToList(db: Db, listId: string, invitationId: string) {
+  const invitation = await getInvitation(db, invitationId);
+  if (invitation && invitation.listId !== listId) {
+    throw new NotFoundError("Invitation not found");
   }
+  return invitation;
+}
 
-  /**
-   * An Item that exists on a different List is a 404, so endpoints built on
-   * this helper can never read or write across Lists.
-   */
-  async function getItemBelongingToList(db: Db, listId: string, itemId: string) {
-    const existingItem = await getItem(db, itemId);
-    if (existingItem && existingItem.listId !== listId) {
-      throw new NotFoundError("Item not found");
-    }
-    return existingItem;
+function isInviteEmailBody(value: unknown): value is { email: string } {
+  if (typeof value !== "object" || value === null) {
+    return false;
   }
+  const { email } = value as Record<string, unknown>;
+  return typeof email === "string" && email.trim() !== "";
+}
 
-  function isItemUpdateBody(value: unknown): value is ItemUpdate {
-    if (typeof value !== "object" || value === null) {
-      return false;
-    }
-    const { name, checked, checkedAt } = value as Record<string, unknown>;
-    if (name !== undefined && (typeof name !== "string" || name.trim() === "")) {
-      return false;
-    }
-    if (checked !== undefined && typeof checked !== "boolean") {
-      return false;
-    }
-    if (checkedAt !== undefined && typeof checkedAt !== "string") {
-      return false;
-    }
-    return true;
+function readInviteEmailFromBody(body: unknown) {
+  if (!isInviteEmailBody(body)) {
+    throw new BadRequestError("An email is required");
   }
+  return body.email.trim();
+}
 
-  function readItemUpdateFromBody(body: unknown) {
-    if (!isItemUpdateBody(body)) {
-      throw new BadRequestError("Invalid item update");
-    }
-    if (body.name === undefined) {
-      return { name: undefined, checked: body.checked, checkedAt: body.checkedAt };
-    }
-    return {
-      name: body.name.trim(),
-      checked: body.checked,
-      checkedAt: body.checkedAt,
-    };
+/**
+ * A Payment that exists on a different List is a 404, so endpoints built on
+ * this helper can never read or write across Lists.
+ */
+async function getPaymentBelongingToList(db: Db, listId: string, paymentId: string) {
+  const existingPayment = await getPayment(db, paymentId);
+  if (existingPayment && existingPayment.listId !== listId) {
+    throw new NotFoundError("Payment not found");
   }
+  return existingPayment;
+}
 
-  interface ItemUpdate {
-    name?: string;
-    checked?: boolean;
-    checkedAt?: string;
+function isPaymentUpdateBody(value: unknown): value is { amountInCents?: number; paidAt?: string } {
+  if (typeof value !== "object" || value === null) {
+    return false;
   }
+  const { amountInCents, paidAt } = value as Record<string, unknown>;
+  if (
+    amountInCents !== undefined &&
+    (typeof amountInCents !== "number" || !Number.isInteger(amountInCents) || amountInCents <= 0)
+  ) {
+    return false;
+  }
+  if (paidAt !== undefined && (typeof paidAt !== "string" || paidAt.trim() === "")) {
+    return false;
+  }
+  return amountInCents !== undefined || paidAt !== undefined;
+}
 
-  function isListNameBody(value: unknown): value is { name: string } {
-    if (typeof value !== "object" || value === null) {
-      return false;
-    }
-    const { name } = value as Record<string, unknown>;
-    return typeof name === "string" && name.trim() !== "";
+function readPaymentUpdateFromBody(body: unknown) {
+  if (!isPaymentUpdateBody(body)) {
+    throw new BadRequestError("A Payment needs an amount in cents and a date");
   }
+  const update: { amountInCents?: number; paidAt?: string } = {};
+  if (body.amountInCents !== undefined) {
+    update.amountInCents = body.amountInCents;
+  }
+  if (body.paidAt !== undefined) {
+    update.paidAt = body.paidAt.trim();
+  }
+  return update;
+}
 
-  function readListNameFromBody(body: unknown) {
-    if (!isListNameBody(body)) {
-      throw new BadRequestError("List name is required");
-    }
-    return body.name.trim();
+/**
+ * An Item that exists on a different List is a 404, so endpoints built on
+ * this helper can never read or write across Lists.
+ */
+async function getItemBelongingToList(db: Db, listId: string, itemId: string) {
+  const existingItem = await getItem(db, itemId);
+  if (existingItem && existingItem.listId !== listId) {
+    throw new NotFoundError("Item not found");
   }
+  return existingItem;
+}
 
-  async function readJsonBody(c: AppContext) {
-    try {
-      return await c.req.json();
-    } catch {
-      throw new BadRequestError("A JSON body is required");
-    }
+function isItemUpdateBody(value: unknown): value is ItemUpdate {
+  if (typeof value !== "object" || value === null) {
+    return false;
   }
+  const { name, checked, checkedAt } = value as Record<string, unknown>;
+  if (name !== undefined && (typeof name !== "string" || name.trim() === "")) {
+    return false;
+  }
+  if (checked !== undefined && typeof checked !== "boolean") {
+    return false;
+  }
+  if (checkedAt !== undefined && typeof checkedAt !== "string") {
+    return false;
+  }
+  return true;
+}
+
+function readItemUpdateFromBody(body: unknown) {
+  if (!isItemUpdateBody(body)) {
+    throw new BadRequestError("Invalid item update");
+  }
+  if (body.name === undefined) {
+    return { name: undefined, checked: body.checked, checkedAt: body.checkedAt };
+  }
+  return {
+    name: body.name.trim(),
+    checked: body.checked,
+    checkedAt: body.checkedAt,
+  };
+}
+
+interface ItemUpdate {
+  name?: string;
+  checked?: boolean;
+  checkedAt?: string;
+}
+
+function isListNameBody(value: unknown): value is { name: string } {
+  if (typeof value !== "object" || value === null) {
+    return false;
+  }
+  const { name } = value as Record<string, unknown>;
+  return typeof name === "string" && name.trim() !== "";
+}
+
+function readListNameFromBody(body: unknown) {
+  if (!isListNameBody(body)) {
+    throw new BadRequestError("List name is required");
+  }
+  return body.name.trim();
+}
+
+async function readJsonBody(c: AppContext) {
+  try {
+    return await c.req.json();
+  } catch {
+    throw new BadRequestError("A JSON body is required");
+  }
+}
 
 const app = createApp();
 

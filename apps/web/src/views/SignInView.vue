@@ -1,6 +1,7 @@
 <script setup lang="ts">
-import { ref } from "vue";
+import { onMounted, ref } from "vue";
 import { useRouter } from "vue-router";
+import { isSignUpOpen } from "../invitations";
 import { signIn, signUp } from "../session";
 
 const router = useRouter();
@@ -10,6 +11,17 @@ const email = ref("");
 const password = ref("");
 const error = ref<string | null>(null);
 const submitting = ref(false);
+/**
+ * Sign-up is the one-time bootstrap (ADR 0003): open only while the user
+ * table is empty, then closed for good. The toggle renders only while it is
+ * open; the default (unknown/unreachable) is closed, because accounts are
+ * provisioned by the household Admin, never self-created.
+ */
+const signUpOpen = ref(false);
+
+onMounted(async () => {
+  signUpOpen.value = await isSignUpOpen();
+});
 
 async function onSubmit() {
   error.value = null;
@@ -56,7 +68,8 @@ function toggleMode() {
     </button>
   </form>
   <p v-if="error">{{ error }}</p>
-  <button type="button" @click="toggleMode">
+  <button v-if="signUpOpen" type="button" @click="toggleMode">
     {{ mode === "sign-in" ? "Create an account" : "Have an account?" }}
   </button>
+  <p v-if="!signUpOpen">Sign-up is closed — accounts are provisioned for this household.</p>
 </template>

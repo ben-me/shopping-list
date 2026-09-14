@@ -6,8 +6,8 @@ import { createList, input, paymentRow, signUp } from "./support";
  * then reload — proving the Payment is durably on the List (the server is
  * the source of truth).
  */
-test("a member records a Payment and it survives reloads", async ({ page }) => {
-  await signUp(page, "E2E Payments");
+test("a member records a Payment and it survives reloads", async ({ page, request }) => {
+  await signUp(page, "E2E Payments", request);
   await createList(page, "Groceries");
 
   await input(page, "payment-amount").fill("12.50");

@@ -14,6 +14,7 @@ const serviceWorkerReady = `(async () => {
  */
 test("after a first visit, a cold start with no network opens the app on last-synced data", async ({
   page,
+  request,
 }) => {
   await test.step("first visit: the service worker becomes active and the shell cache warms", async () => {
     await page.goto("/");
@@ -25,7 +26,7 @@ test("after a first visit, a cold start with no network opens the app on last-sy
     await expect.poll(() => page.evaluate(serviceWorkerReady)).toBe(true);
   });
 
-  await signUp(page, "E2E PWA");
+  await signUp(page, "E2E PWA", request);
   await createList(page, "Pantry");
   await addItem(page, "Rice");
 

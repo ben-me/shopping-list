@@ -19,7 +19,7 @@ export interface AppVariables {
 type AppContext = Context<{ Bindings: AuthEnv; Variables: AppVariables }>;
 
 export async function requireUser(c: AppContext, next: Next) {
-  const auth = createAuth(c.env);
+  const auth = await createAuth(c.env);
   const session = await auth.api.getSession({ headers: c.req.raw.headers });
   if (!session) {
     throw new UnauthorizedError();

@@ -30,18 +30,29 @@ export function onSyncPass(viewSync: ViewSync): () => void {
  * keeps the queued writes for the next attempt.
  */
 let syncPassInFlight = false;
+/**
+ * A call arrived while a pass was running. The pass is allowed to finish, then
+ * runs once more so a user-triggered action is never lost to the collapse
+ * guard — the classic "accept an invitation just as the mount sync starts"
+ * race. Bounded: any number of in-flight collapsers queue at most one rerun.
+ */
+let rerunRequested = false;
 export async function runSyncPass(db: ShoppingDb): Promise<void> {
   if (syncPassInFlight) {
+    rerunRequested = true;
     return;
   }
   syncPassInFlight = true;
   try {
-    await syncOutbox(db);
-    await ignoreRejection(db.pruneSyncedOutbox());
-    await syncFromServer(db);
-    for (const viewSync of viewSyncs) {
-      await ignoreRejection(viewSync(db));
-    }
+    do {
+      rerunRequested = false;
+      await syncOutbox(db);
+      await ignoreRejection(db.pruneSyncedOutbox());
+      await syncFromServer(db);
+      for (const viewSync of viewSyncs) {
+        await ignoreRejection(viewSync(db));
+      }
+    } while (rerunRequested);
   } finally {
     syncPassInFlight = false;
   }
