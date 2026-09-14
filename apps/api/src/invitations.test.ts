@@ -182,6 +182,40 @@ describe("invitations (in-app, existing users only — ADR 0003)", () => {
     expect(invitations[0]?.listId).toBe(listId);
   });
 
+  it("serves the List's Memberships so every device can mirror them", async () => {
+    const owner = await newUser("owner");
+    const invitee = await newUser("invitee");
+    const listId = await createListFor(owner.cookie);
+    const inviteRes = await invite(owner.cookie, listId, invitee.email);
+    const { invitation } = (await inviteRes.json()) as { invitation: Invitation };
+    await app.request(
+      `/api/invitations/${invitation.id}/accept`,
+      { method: "POST", headers: { cookie: invitee.cookie } },
+      env,
+    );
+
+    // The Owner's device can pull the membership the accept created.
+    const res = await app.request(
+      `/api/lists/${listId}/members`,
+      { headers: { cookie: owner.cookie } },
+      env,
+    );
+    expect(res.status).toBe(200);
+    const { memberships } = (await res.json()) as {
+      memberships: { listId: string; memberId: string }[];
+    };
+    expect(memberships.map((m) => m.memberId)).toContain(invitee.id);
+
+    // An outsider is refused.
+    const outsider = await newUser("outsider");
+    const outsiderRes = await app.request(
+      `/api/lists/${listId}/members`,
+      { headers: { cookie: outsider.cookie } },
+      env,
+    );
+    expect(outsiderRes.status).toBe(403);
+  });
+
   it("lets the invitee accept and become a Member with equal rights", async () => {
     const owner = await newUser("owner");
     const invitee = await newUser("invitee");

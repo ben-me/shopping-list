@@ -52,6 +52,10 @@ test("the Owner invites a user who accepts in-app and gets equal edit rights", a
     await page.getByRole("link", { name: "Weekend shop" }).click();
     await expect(page.getByRole("heading", { name: "Weekend shop" })).toBeVisible();
     await addItem(page, "Olive oil");
+
+    // The invitee is a Member with equal edit rights, and every device now
+    // knows both Members — the standing re-divides for the real group.
+    await expect(page.locator(".standing-member")).toHaveCount(2);
   });
 });
 

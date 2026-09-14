@@ -21,6 +21,7 @@ import {
   getList,
   getItemsByList,
   getListsForMember,
+  getMembershipsByList,
   getPayment,
   getPaymentsByList,
   getPendingInvitationsForEmail,
@@ -120,29 +121,10 @@ export function createApp() {
   });
 
   /** Make the invitee a Member of the List the Invitation targets. */
-  app.post("/api/invitations/:invitationId/accept", requireUser, async (c) => {
-    const { db, invitationId } = getRequestContext(c);
-    const invitation = await getInvitationForInvitee(db, invitationId, c.get("user").email);
-    if (invitation.status !== "pending") {
-      throw new BadRequestError("This invitation is no longer pending");
-    }
-    if (!(await isMember(db, invitation.list, c.get("user").id))) {
-      await createMembership(db, { listId: invitation.list.id, memberId: c.get("user").id });
-    }
-    await updateInvitation(db, invitation.id, { status: "accepted" });
-    return c.json({ ok: true });
-  });
+  app.post("/api/invitations/:invitationId/accept", requireUser, inviteDecision("accepted"));
 
   /** Decline maps to `revoked` so the Invitation leaves both pending lists (ADR 0003). */
-  app.post("/api/invitations/:invitationId/decline", requireUser, async (c) => {
-    const { db, invitationId } = getRequestContext(c);
-    const invitation = await getInvitationForInvitee(db, invitationId, c.get("user").email);
-    if (invitation.status !== "pending") {
-      throw new BadRequestError("This invitation is no longer pending");
-    }
-    await updateInvitation(db, invitation.id, { status: "revoked" });
-    return c.json({ ok: true });
-  });
+  app.post("/api/invitations/:invitationId/decline", requireUser, inviteDecision("revoked"));
 
   /** Invitations on a List, for its Members — the Owner manages them from the List. */
   app.get("/api/lists/:listId/invitations", requireUser, requireMember, async (c) => {
@@ -151,13 +133,22 @@ export function createApp() {
     return c.json({ invitations });
   });
 
+  /**
+   * The List's Membership rows, so every device can mirror who belongs to the
+   * List (the Owner is a Member with or without a row; the client unions the
+   * Owner in). Memberships can only change through the online invite flow, so
+   * the server list is the source of truth.
+   */
+  app.get("/api/lists/:listId/members", requireUser, requireMember, async (c) => {
+    const { db, listId } = getRequestContext(c);
+    const memberships = await getMembershipsByList(db, listId);
+    return c.json({ memberships });
+  });
+
   /** Only the Owner invites (existing users, by email) — never a non-Owner. */
   app.post("/api/lists/:listId/invitations", requireUser, requireMember, async (c) => {
     const { db, listId } = getRequestContext(c);
-    const list = c.get("list");
-    if (c.get("user").id !== list.ownerId) {
-      throw new ForbiddenError("Only the Owner can invite");
-    }
+    assertOwner(c, "invite");
     const email = readInviteEmailFromBody(await readJsonBody(c));
     const invitee = await getUserByEmail(db, email);
     if (!invitee) {
@@ -165,7 +156,7 @@ export function createApp() {
         "There's no account for that email — accounts are provisioned for this household",
       );
     }
-    if (await isMember(db, list, invitee.id)) {
+    if (await isMember(db, c.get("list"), invitee.id)) {
       throw new BadRequestError("That user is already a member of this list");
     }
     if (await hasPendingInvitationForListAndEmail(db, listId, email)) {
@@ -187,10 +178,7 @@ export function createApp() {
     requireMember,
     async (c) => {
       const { db, listId, invitationId } = getRequestContext(c);
-      const list = c.get("list");
-      if (c.get("user").id !== list.ownerId) {
-        throw new ForbiddenError("Only the Owner can revoke invitations");
-      }
+      assertOwner(c, "revoke invitations");
       const invitation = await getInvitationBelongingToList(db, listId, invitationId);
       if (invitation && invitation.status === "pending") {
         await updateInvitation(db, invitation.id, { status: "revoked" });
@@ -341,6 +329,33 @@ interface InvitationForInvitee {
   id: string;
   list: List;
   status: InvitationStatus;
+}
+
+/**
+ * Both invitee decisions (accept, decline) share one shape: the Invitation
+ * must exist, target the caller, and still be pending. Accept additionally
+ * makes the caller a Member when they are not one already.
+ */
+function inviteDecision(status: "accepted" | "revoked") {
+  return async (c: AppContext) => {
+    const { db, invitationId } = getRequestContext(c);
+    const invitation = await getInvitationForInvitee(db, invitationId, c.get("user").email);
+    if (invitation.status !== "pending") {
+      throw new BadRequestError("This invitation is no longer pending");
+    }
+    if (status === "accepted" && !(await isMember(db, invitation.list, c.get("user").id))) {
+      await createMembership(db, { listId: invitation.list.id, memberId: c.get("user").id });
+    }
+    await updateInvitation(db, invitation.id, { status });
+    return c.json({ ok: true });
+  };
+}
+
+/** The Owner-only gate shared by the invite and revoke routes. */
+function assertOwner(c: AppContext, what: string) {
+  if (c.get("user").id !== c.get("list").ownerId) {
+    throw new ForbiddenError(`Only the Owner can ${what}`);
+  }
 }
 
 /**

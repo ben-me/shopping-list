@@ -6,7 +6,7 @@ import { onSyncPass, runSyncPass } from "../connectivity";
 import { db } from "../db";
 import { createInvitation, listInvitations, revokeInvitation } from "../invitations";
 import { addItem, removeItem, setItemChecked, syncItemsFromServer } from "../items";
-import { memberIdsOf } from "../members";
+import { memberIdsOf, syncMembershipsFromServer } from "../members";
 import { addPayment, removePayment, syncPaymentsFromServer, updatePayment } from "../payments";
 import { syncOutbox } from "../lists";
 import { session } from "../session";
@@ -219,6 +219,9 @@ onMounted(() => {
   stopSyncPass = onSyncPass(async (db) => {
     await ignoreRejection(syncItemsFromServer(db, listId.value));
     await ignoreRejection(syncPaymentsFromServer(db, listId.value));
+    // Members change only through the online invite flow; pull the server
+    // truth so an accepted Invitation redivides the standing on every device.
+    await ignoreRejection(syncMembershipsFromServer(db, listId.value));
     await logRejection(loadMembers(), "Loading the members");
     await logRejection(loadItems(), "Loading the items");
     await logRejection(loadPayments(), "Loading the payments");

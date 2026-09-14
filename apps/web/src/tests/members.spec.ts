@@ -1,7 +1,7 @@
 import "fake-indexeddb/auto";
 
 import type { List } from "@shopping-list/api/domain";
-import { memberIdsOf } from "../members";
+import { memberIdsOf, syncMembershipsFromServer } from "../members";
 import { ShoppingDb } from "../store";
 import now from "@/utils/now";
 
@@ -45,5 +45,59 @@ describe("memberIdsOf", () => {
     await db.memberships.where("memberId").equals("user-2").delete();
 
     expect(await memberIdsOf(db, list)).toEqual(["user-1", "user-3"]);
+  });
+});
+
+function jsonResponse(body: unknown, status = 200): Response {
+  return new Response(JSON.stringify(body), {
+    status,
+    headers: { "Content-Type": "application/json" },
+  });
+}
+
+describe("syncMembershipsFromServer", () => {
+  it("replaces the local Membership set with the server's truth", async () => {
+    await joined("user-2", "2026-01-01T00:00:00.000Z"); // stale local row
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () =>
+        jsonResponse({
+          memberships: [
+            { listId: list.id, memberId: "user-2", joinedAt: "2026-01-01T00:00:00.000Z" },
+            { listId: list.id, memberId: "user-3", joinedAt: "2026-01-02T00:00:00.000Z" },
+          ],
+        }),
+      ),
+    );
+
+    await syncMembershipsFromServer(db, list.id);
+
+    expect(await memberIdsOf(db, list)).toEqual(["user-1", "user-2", "user-3"]);
+
+    // The server dropping a Member removes their local Membership row.
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () =>
+        jsonResponse({
+          memberships: [
+            { listId: list.id, memberId: "user-3", joinedAt: "2026-01-02T00:00:00.000Z" },
+          ],
+        }),
+      ),
+    );
+    await syncMembershipsFromServer(db, list.id);
+    expect(await memberIdsOf(db, list)).toEqual(["user-1", "user-3"]);
+  });
+
+  it("leaves the local set untouched when the server response is unexpected", async () => {
+    await joined("user-2", "2026-01-01T00:00:00.000Z");
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => jsonResponse({})),
+    );
+
+    await syncMembershipsFromServer(db, list.id);
+
+    expect(await memberIdsOf(db, list)).toEqual(["user-1", "user-2"]);
   });
 });

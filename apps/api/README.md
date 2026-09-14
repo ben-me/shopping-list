@@ -17,7 +17,29 @@ pnpm fmt            # format (oxfmt)
 pnpm cf-typegen     # regenerate CloudflareBindings types from wrangler config
 pnpm db:generate    # generate a versioned D1 migration from src/schema.ts
 pnpm db:migrate     # apply pending migrations to the local (dev) D1
+pnpm db:reset       # wipe the local (dev) D1 — e.g. before a fresh e2e run
+pnpm user:create    # provision an account as the Admin (see “Provisioning”)
 ```
+
+## Provisioning accounts (ADR 0003)
+
+Sign-up is the **one-time bootstrap**: it succeeds only while the user table is
+empty, and the first account becomes the **Admin**. Afterwards sign-up is
+closed for good (server rejects, the UI hides it), and every further account is
+provisioned by the Admin through better-auth's admin route — so password
+hashing stays with better-auth, never raw SQL. A provisioned account is
+email-verified and can sign in immediately.
+
+```sh
+ADMIN_EMAIL=admin@example.com ADMIN_PASSWORD='...' \
+  pnpm user:create -- --name "Alice" --email alice@example.com
+```
+
+The Admin's credentials come from `ADMIN_EMAIL`/`ADMIN_PASSWORD` (or
+`--admin-email`/`--admin-password`); the API base URL from `API_BASE_URL` or
+`--api` (default `http://localhost:8787`). Without `--password` a random
+password is generated and printed once. `ADMIN_EMAIL`/`ADMIN_PASSWORD` are a
+deployer-side secret, never an app setting.
 
 ## Authentication (better-auth)
 
