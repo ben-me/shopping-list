@@ -187,6 +187,21 @@ export class ShoppingDb extends Dexie {
     await this.memberships.put(membership);
   }
 
+  /**
+   * The inbound half of a Sync for a List's Membership set. Memberships only
+   * change through the online invite flow, so the server's set is truth: rows
+   * this device holds for the List but the server no longer returns are
+   * dropped, and every server row is stored.
+   */
+  async replaceMemberships(listId: string, memberships: Membership[]): Promise<void> {
+    await this.transaction("rw", this.memberships, async () => {
+      await this.memberships.where("listId").equals(listId).delete();
+      for (const membership of memberships) {
+        await this.memberships.put(membership);
+      }
+    });
+  }
+
   async syncList(list: List): Promise<void> {
     await this.lists.put(list);
   }

@@ -200,7 +200,7 @@ describe("startSyncWatcher", () => {
     expect(puts[0]?.url).toBe(`/api/lists/${list.id}/items/${item.id}`);
   });
 
-  it("skips a pass requested while another is in flight", async () => {
+  it("queues a pass requested while another is in flight and awaits the combined run", async () => {
     // A gated server keeps the first pass in flight until the test releases it.
     let release: (() => void) | undefined;
     const gate = new Promise<void>((resolve) => (release = resolve));
@@ -213,14 +213,24 @@ describe("startSyncWatcher", () => {
 
     window.dispatchEvent(new Event("online")); // pass A: stuck on its first request
     await new Promise((resolve) => setTimeout(resolve, 10));
-    await expect(runSyncPass(db)).resolves.toBeUndefined(); // collapsed into pass A
+
+    // A user-triggered pass while A is running queues a rerun and waits for
+    // the combined run — it is never silently dropped.
+    let resolved = false;
+    const awaiting = runSyncPass(db).then(() => {
+      resolved = true;
+    });
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    expect(resolved).toBe(false); // still held by pass A
+
     release?.();
+    await awaiting;
 
     await vi.waitFor(async () => {
       await expect(await db.pendingOutboxEntries()).toHaveLength(0);
     });
-    // Exactly one drain happened: without the guard, pass B would PUT the
-    // same entry again.
+    // The outbox drained exactly once across the pair — the queued rerun
+    // finds nothing left to send.
     expect(requests.filter((r) => r.init?.method === "PUT")).toHaveLength(1);
   });
 });
