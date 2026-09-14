@@ -10,12 +10,6 @@ const email = ref("");
 const password = ref("");
 const error = ref<string | null>(null);
 const submitting = ref(false);
-/**
- * Sign-up is the one-time bootstrap (ADR 0003): open only while the user
- * table is empty, then closed for good. The toggle renders only while it is
- * open; the default (unknown/unreachable) is closed, because accounts are
- * provisioned by the household Admin, never self-created.
- */
 const signUpOpen = ref(false);
 
 onMounted(async () => {
