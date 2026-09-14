@@ -9,7 +9,6 @@ import { apiFetch } from "./api";
  * outbox.
  */
 
-/** The invitee's in-app inbox. */
 export async function pendingInvitations(): Promise<PendingInvitation[]> {
   const body = await apiFetch<{ invitations?: PendingInvitation[] }>("/api/invitations");
   return body?.invitations ?? [];
@@ -19,7 +18,6 @@ export async function acceptInvitation(invitationId: string): Promise<void> {
   await apiFetch(`/api/invitations/${invitationId}/accept`, { method: "POST" });
 }
 
-/** Decline maps to `revoked` server-side, so the Invitation leaves both pending lists. */
 export async function declineInvitation(invitationId: string): Promise<void> {
   await apiFetch(`/api/invitations/${invitationId}/decline`, { method: "POST" });
 }
@@ -45,6 +43,3 @@ export async function createInvitation(listId: string, email: string): Promise<I
 export async function revokeInvitation(listId: string, invitationId: string): Promise<void> {
   await apiFetch(`/api/lists/${listId}/invitations/${invitationId}`, { method: "DELETE" });
 }
-
-/**
- */
