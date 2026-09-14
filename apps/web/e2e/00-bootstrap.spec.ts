@@ -1,5 +1,5 @@
 import { expect, test } from "@playwright/test";
-import { ADMIN_EMAIL, ADMIN_PASSWORD, input } from "./support";
+import { ADMIN_EMAIL, ADMIN_PASSWORD, input, signInAsUser } from "./support";
 
 /**
  * The one-time bootstrap (ADR 0003): on an empty database, the very first
@@ -80,5 +80,23 @@ test("an empty database bootstraps the Admin, then sign-up closes for good", asy
     expect(created).toBeOK();
     const { user } = (await created.json()) as { user: { email: string; role: string } };
     expect(user.role).toBe("user");
+  });
+
+  await test.step("the Admin provisions an account through the app UI", async () => {
+    await signInAsUser(page, ADMIN_EMAIL, ADMIN_PASSWORD);
+    await expect(page.getByText("Signed in as Bootstrap Admin")).toBeVisible();
+
+    // Only the Admin sees the Add-a-user form on the home screen.
+    await input(page, "provision-name").fill("UI Provisioned");
+    await input(page, "provision-email").fill("uiprovisioned@e2e.test");
+    await input(page, "provision-password").fill("ui-provisioned-password");
+    await page.getByRole("button", { name: "Create account" }).click();
+    await expect(page.getByText("UI Provisioned can now sign in.")).toBeVisible();
+
+    // The provisioned account signs in like any other.
+    await page.getByRole("button", { name: "Sign out" }).click();
+    await expect(page.getByRole("heading", { name: "Sign in" })).toBeVisible();
+    await signInAsUser(page, "uiprovisioned@e2e.test", "ui-provisioned-password");
+    await expect(page.getByText("Signed in as UI Provisioned")).toBeVisible();
   });
 });

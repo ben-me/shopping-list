@@ -229,4 +229,66 @@ describe("ListsView", () => {
     expect(apiCalls).toContain("POST /api/invitations/inv-2/decline");
     expect(wrapper.text()).not.toContain("Ada invited you");
   });
+
+  it("hides the Admin provisioning form from ordinary Members", async () => {
+    stubSignedIn();
+    const router = createAppRouter(createMemoryHistory());
+    await router.push("/");
+    await router.isReady();
+
+    const wrapper = mount(App, { global: { plugins: [router] } });
+    await flushPromises();
+
+    expect(wrapper.find("section.provision").exists()).toBe(false);
+    expect(wrapper.find('input[name="provision-email"]').exists()).toBe(false);
+  });
+
+  it("lets the Admin provision an account from the home screen", async () => {
+    const adminUser: SessionUser = { ...user, role: "admin" };
+    let created: { method?: string; body?: string } | null = null;
+    stubRoutes((url, init) => {
+      if (url === "/api/auth/get-session") {
+        return jsonResponse({ session: { token: "tok" }, user: adminUser });
+      }
+      if (url === "/api/lists" && !init?.method) {
+        return jsonResponse({ lists: [] });
+      }
+      if (url === "/api/invitations" && !init?.method) {
+        return jsonResponse({ invitations: [] });
+      }
+      if (url === "/api/auth/admin/create-user") {
+        created = { method: init?.method, body: init?.body as string };
+        return jsonResponse({ user: { id: "user-provisioned" } });
+      }
+      throw new Error(`No stub for ${url}`);
+    });
+    const router = createAppRouter(createMemoryHistory());
+    await router.push("/");
+    await router.isReady();
+
+    const wrapper = mount(App, { global: { plugins: [router] } });
+    await flushPromises();
+    await settle();
+
+    expect(wrapper.find("section.provision").exists()).toBe(true);
+
+    await wrapper.find('input[name="provision-name"]').setValue("Partner");
+    await wrapper.find('input[name="provision-email"]').setValue("partner@example.com");
+    await wrapper.find('input[name="provision-password"]').setValue("password-123");
+    await wrapper.find("form.provision-form").trigger("submit");
+    await flushPromises();
+    await settle();
+
+    expect(created).toEqual({
+      method: "POST",
+      body: JSON.stringify({
+        name: "Partner",
+        email: "partner@example.com",
+        password: "password-123",
+        role: "user",
+        data: { emailVerified: true },
+      }),
+    });
+    expect(wrapper.text()).toContain("Partner can now sign in.");
+  });
 });
