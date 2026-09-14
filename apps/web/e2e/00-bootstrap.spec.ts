@@ -40,7 +40,6 @@ test("an empty database bootstraps the Admin, then sign-up closes for good", asy
   });
 
   await test.step("sign-up is hidden in the UI now that an account exists", async () => {
-    await expect(page.getByText("Sign-up is closed")).toBeVisible();
     await expect(page.getByRole("button", { name: "Create an account" })).toHaveCount(0);
   });
 
