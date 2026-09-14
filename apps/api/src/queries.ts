@@ -208,11 +208,6 @@ export function normalizeEmail(email: string) {
   return email.trim().toLowerCase();
 }
 
-export async function getUser(db: Db, id: string): Promise<UserRow | undefined> {
-  const row = await db.select().from(schema.user).where(eq(schema.user.id, id)).get();
-  return row ? toUserRow(row) : undefined;
-}
-
 export async function getUserByEmail(db: Db, email: string): Promise<UserRow | undefined> {
   const row = await db
     .select()

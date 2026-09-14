@@ -18,7 +18,6 @@ pnpm cf-typegen     # regenerate CloudflareBindings types from wrangler config
 pnpm db:generate    # generate a versioned D1 migration from src/schema.ts
 pnpm db:migrate     # apply pending migrations to the local (dev) D1
 pnpm db:reset       # wipe the local (dev) D1 — e.g. before a fresh e2e run
-pnpm user:create    # provision an account as the Admin (see “Provisioning”)
 ```
 
 ## Provisioning accounts (ADR 0003)
@@ -30,16 +29,23 @@ provisioned by the Admin through better-auth's admin route — so password
 hashing stays with better-auth, never raw SQL. A provisioned account is
 email-verified and can sign in immediately.
 
+Provisioning is two raw `curl` calls to better-auth's routes (there is no
+wrapper script):
+
 ```sh
-ADMIN_EMAIL=admin@example.com ADMIN_PASSWORD='...' \
-  pnpm user:create -- --name "Alice" --email alice@example.com
+curl -c /tmp/admin.cookies \
+  -X POST http://localhost:8787/api/auth/sign-in/email \
+  -H 'content-type: application/json' \
+  -d '{"email":"admin@example.com","password":"change-me"}'
+
+curl -b /tmp/admin.cookies \
+  -X POST http://localhost:8787/api/auth/admin/create-user \
+  -H 'content-type: application/json' \
+  -d '{"name":"Alice","email":"alice@example.com","password":"change-me","role":"user","data":{"emailVerified":true}}'
 ```
 
-The Admin's credentials come from `ADMIN_EMAIL`/`ADMIN_PASSWORD` (or
-`--admin-email`/`--admin-password`); the API base URL from `API_BASE_URL` or
-`--api` (default `http://localhost:8787`). Without `--password` a random
-password is generated and printed once. `ADMIN_EMAIL`/`ADMIN_PASSWORD` are a
-deployer-side secret, never an app setting.
+The `emailVerified: true` is what makes provisioning count as verification.
+The Admin's credentials are a deployer-side secret, never an app setting.
 
 ## Authentication (better-auth)
 

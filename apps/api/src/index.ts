@@ -120,13 +120,12 @@ export function createApp() {
     return c.json({ invitations });
   });
 
-  /** Make the invitee a Member of the List the Invitation targets. */
   app.post("/api/invitations/:invitationId/accept", requireUser, inviteDecision("accepted"));
 
   /** Decline maps to `revoked` so the Invitation leaves both pending lists (ADR 0003). */
   app.post("/api/invitations/:invitationId/decline", requireUser, inviteDecision("revoked"));
 
-  /** Invitations on a List, for its Members — the Owner manages them from the List. */
+  /** The List's Invitations, for its Members; only the Owner manages them. */
   app.get("/api/lists/:listId/invitations", requireUser, requireMember, async (c) => {
     const { db, listId } = getRequestContext(c);
     const invitations = await getInvitationsByListWithContext(db, listId);
@@ -134,10 +133,8 @@ export function createApp() {
   });
 
   /**
-   * The List's Membership rows, so every device can mirror who belongs to the
-   * List (the Owner is a Member with or without a row; the client unions the
-   * Owner in). Memberships can only change through the online invite flow, so
-   * the server list is the source of truth.
+   * The List's Membership rows (the client unions the Owner in), so every
+   * device can mirror who the Members are after an Invitation is accepted.
    */
   app.get("/api/lists/:listId/members", requireUser, requireMember, async (c) => {
     const { db, listId } = getRequestContext(c);
@@ -351,7 +348,6 @@ function inviteDecision(status: "accepted" | "revoked") {
   };
 }
 
-/** The Owner-only gate shared by the invite and revoke routes. */
 function assertOwner(c: AppContext, what: string) {
   if (c.get("user").id !== c.get("list").ownerId) {
     throw new ForbiddenError(`Only the Owner can ${what}`);
