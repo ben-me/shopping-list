@@ -8,8 +8,9 @@ import { addItem, createList, input, itemRow, itemSettled, signUp } from "./supp
  */
 test("a member can add, tick, un-tick, and remove Items, and the List survives reloads", async ({
   page,
+  request,
 }) => {
-  await signUp(page, "E2E Tester");
+  await signUp(page, "E2E Tester", request);
   await createList(page, "Groceries");
 
   await test.step("add two Items", async () => {
@@ -44,8 +45,9 @@ test("a member can add, tick, un-tick, and remove Items, and the List survives r
 
 test("an offline write is queued locally and syncs when the connection returns", async ({
   page,
+  request,
 }) => {
-  await signUp(page, "E2E Offline");
+  await signUp(page, "E2E Offline", request);
   await createList(page, "Camping");
   await addItem(page, "Torch");
 

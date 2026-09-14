@@ -1,34 +1,12 @@
 import type { Miniflare } from "miniflare";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { createApp } from "./index";
-import { createD1Connection, type Db } from "./db";
+import type { Db } from "./db";
+import { signUp, startTestApp, type TestApp } from "./test-support";
 import { createList, createMembership } from "./queries";
-import { runMigrations, startMiniflare, testEnvFor } from "./test-support";
 import type { AuthEnv } from "./auth";
 import type { ApiErrorEnvelope } from "./errors";
 
-let signupCounter = 0;
-function uniqueEmail() {
-  signupCounter += 1;
-  return `user${signupCounter}@example.com`;
-}
-
-async function signUp(app: ReturnType<typeof createApp>, env: AuthEnv) {
-  const email = uniqueEmail();
-  const res = await app.request(
-    "/api/auth/sign-up/email",
-    {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ name: "Test User", email, password: "password123" }),
-    },
-    env,
-  );
-  expect(res.status).toBe(200);
-  return { cookie: res.headers.getSetCookie().join("; "), email };
-}
-
-async function getAuthedUser(app: ReturnType<typeof createApp>, env: AuthEnv, cookie: string) {
+async function getAuthedUser(app: TestApp, env: AuthEnv, cookie: string) {
   const res = await app.request("/api/me", { headers: { cookie } }, env);
   const body = (await res.json()) as { user: { id: string; email: string } };
   expect(res.status).toBe(200);
@@ -38,21 +16,25 @@ async function getAuthedUser(app: ReturnType<typeof createApp>, env: AuthEnv, co
 describe("requireUser/requireMember over HTTP", () => {
   let mf: Miniflare;
   let env: AuthEnv;
-  let app: ReturnType<typeof createApp>;
+  let app: TestApp;
   let db: Db;
 
   beforeAll(async () => {
-    mf = await startMiniflare("local-d1-guards-db");
-    const binding = await mf.getD1Database("devDb");
-    await runMigrations(binding);
-    env = testEnvFor(binding);
-    app = createApp();
-    db = createD1Connection(binding);
+    ({ mf, env, app, db } = await startTestApp("local-d1-guards-db"));
   });
 
   afterAll(async () => {
     await mf.dispose();
   });
+
+  function newUser(prefix: string) {
+    return signUp(app, env, prefix);
+  }
+
+  async function authedUser(prefix: string) {
+    const { cookie } = await newUser(prefix);
+    return { cookie, user: await getAuthedUser(app, env, cookie) };
+  }
 
   it("rejects a request without a valid session", async () => {
     const res = await app.request("/api/me", {}, env);
@@ -65,7 +47,7 @@ describe("requireUser/requireMember over HTTP", () => {
   });
 
   it("resolves the signed-in user from the session cookie", async () => {
-    const { cookie, email } = await signUp(app, env);
+    const { cookie, email } = await newUser("guard");
 
     const user = await getAuthedUser(app, env, cookie);
 
@@ -74,8 +56,7 @@ describe("requireUser/requireMember over HTTP", () => {
   });
 
   it("admits the Owner of a List through requireMember", async () => {
-    const { cookie } = await signUp(app, env);
-    const user = await getAuthedUser(app, env, cookie);
+    const { cookie, user } = await authedUser("guard");
     const list = await createList(db, { ownerId: user.id, name: "Weekend shop" });
 
     const res = await app.request(`/api/lists/${list.id}`, { headers: { cookie } }, env);
@@ -86,18 +67,18 @@ describe("requireUser/requireMember over HTTP", () => {
   });
 
   it("admits a Member (the Owner invited them), not an outsider", async () => {
-    const { cookie: ownerCookie } = await signUp(app, env);
-    const { cookie: memberCookie } = await signUp(app, env);
-    const { cookie: outsiderCookie } = await signUp(app, env);
-    const owner = await getAuthedUser(app, env, ownerCookie);
-    const member = await getAuthedUser(app, env, memberCookie);
-    const list = await createList(db, { ownerId: owner.id, name: "Weekend shop" });
-    await createMembership(db, { listId: list.id, memberId: member.id });
+    const owner = await authedUser("guard");
+    const member = await authedUser("guard");
+    const { cookie: outsiderCookie } = await newUser("guard");
+    const ownerUser = owner.user;
+    const memberUser = member.user;
+    const list = await createList(db, { ownerId: ownerUser.id, name: "Weekend shop" });
+    await createMembership(db, { listId: list.id, memberId: memberUser.id });
 
     const memberRes = await app.request(
       `/api/lists/${list.id}`,
       {
-        headers: { cookie: memberCookie },
+        headers: { cookie: member.cookie },
       },
       env,
     );
@@ -123,7 +104,7 @@ describe("requireUser/requireMember over HTTP", () => {
   });
 
   it("rejects an unknown List id", async () => {
-    const { cookie } = await signUp(app, env);
+    const { cookie } = await newUser("guard");
 
     const res = await app.request("/api/lists/missing-list", { headers: { cookie } }, env);
     const body = (await res.json()) as ApiErrorEnvelope;

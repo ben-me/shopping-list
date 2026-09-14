@@ -1,29 +1,108 @@
 import { randomUUID } from "node:crypto";
-import { expect, type Page } from "@playwright/test";
+import { expect, type APIRequestContext, type Page } from "@playwright/test";
 
 /**
- * Shared helpers for the e2e specs: the real user flow against the dev
- * stack — sign up, create a List, add, tick, and remove Items.
+ * Shared helpers for the e2e specs: the real provisioned flow against the dev
+ * stack — provision a user through the admin route, sign them in, create a
+ * List, add, tick, and remove Items.
  *
- * Every run signs up a fresh user with a unique email, so reruns against a
- * persistent local dev database never collide.
+ * Accounts are provisioned, not self-created (ADR 0003): the `00-bootstrap`
+ * spec signs up once on the empty database — that first account becomes the
+ * Admin — and every later account in this file is created through the admin
+ * route with a unique email, so reruns never collide.
  */
 
 export const PASSWORD = "e2e-secret-123";
+
+/** The one account the bootstrap spec creates; provisioning uses its session. */
+/** The dev origin the browser talks to; better-auth CSRF-checks cookie POSTs against it. */
+const TRUSTED_ORIGIN = "http://localhost:5173";
+
+export const ADMIN_EMAIL = "admin@example.com";
+export const ADMIN_PASSWORD = "admin-e2e-password-123";
 
 export function input(page: Page, formName: string) {
   return page.locator(`input[name="${formName}"]`);
 }
 
-export async function signUp(page: Page, name: string) {
+/**
+ * Sign the Admin in over the API and return the session cookie.
+ *
+ * A fresh APIRequestContext per call: an inherited session cookie would make
+ * better-auth answer the sign-in with the existing session and no new
+ * cookie, so provisioning must never depend on cross-test cookie state.
+ */
+export async function adminCookie(request: APIRequestContext): Promise<string> {
+  // The `request` fixture may carry an earlier test's session cookie, and a
+  // sign-in with a live session answers with the existing session and no new
+  // cookie. Sign the stale session out first so the fresh sign-in always
+  // mints (and sets) a new one.
+  await request.post("/api/auth/sign-out", {
+    headers: { origin: TRUSTED_ORIGIN },
+    data: {},
+  });
+  const res = await request.post("/api/auth/sign-in/email", {
+    // The dev browser origin: better-auth CSRF-checks cookie-bearing POSTs
+    // against trusted origins; sending it up front makes the check a no-op.
+    headers: { origin: TRUSTED_ORIGIN },
+    data: { email: ADMIN_EMAIL, password: ADMIN_PASSWORD },
+  });
+  const body = await res.text();
+  if (!res.ok()) {
+    throw new Error(`The Admin sign-in failed (${res.status()}): ${body}`);
+  }
+  const cookie = res
+    .headersArray()
+    .filter((header: { name: string; value: string }) => header.name.toLowerCase() === "set-cookie")
+    .map((header: { name: string; value: string }) => header.value)
+    .join("; ");
+  if (!cookie) {
+    throw new Error(`The Admin sign-in set no session cookie (${res.status()}): ${body}`);
+  }
+  return cookie;
+}
+
+/**
+ * Create an account through the admin route (email-verified by provisioning)
+ * and return its credentials. The account exists on the server; this helper
+ * does not touch the browser.
+ */
+export async function provisionUser(
+  request: APIRequestContext,
+  name: string,
+): Promise<{ email: string; password: string }> {
   const email = `e2e-${randomUUID()}@example.com`;
+  const password = PASSWORD;
+  const created = await request.post("/api/auth/admin/create-user", {
+    headers: { cookie: await adminCookie(request), origin: TRUSTED_ORIGIN },
+    data: { name, email, password, role: "user", data: { emailVerified: true } },
+  });
+  expect(created, "provisioning via the admin route must succeed").toBeOK();
+  return { email, password };
+}
+
+/** Sign an existing account in through the real sign-in form. */
+export async function signInAsUser(page: Page, email: string) {
   await page.goto("/");
-  await page.getByRole("button", { name: "Create an account" }).click();
-  await input(page, "name").fill(name);
   await input(page, "email").fill(email);
   await input(page, "password").fill(PASSWORD);
-  await page.getByRole("button", { name: "Sign up" }).click();
+  await page.getByRole("button", { name: "Sign in" }).click();
+}
+
+/**
+ * Provision an account and sign it in through the real sign-in form, landing
+ * on the signed-in lists view. Sign-up itself happens only in the bootstrap
+ * spec — every other account is provisioned by the Admin.
+ */
+export async function signUp(page: Page, name: string, request: APIRequestContext) {
+  const { email } = await provisionUser(request, name);
+  await signInAsUser(page, email);
   await expect(page.getByText("Signed in as")).toContainText(name);
+}
+
+export async function signOut(page: Page) {
+  await page.getByRole("button", { name: "Sign out" }).click();
+  await expect(page.getByRole("heading", { name: "Sign in" })).toBeVisible();
 }
 
 export async function createList(page: Page, name: string) {

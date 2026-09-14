@@ -58,6 +58,7 @@ describe("SignInView", () => {
         signedIn = true;
         return jsonResponse({ token: "tok", user });
       },
+      "/api/signup-status": () => jsonResponse({ signUpOpen: false }),
     });
     const router = createAppRouter(createMemoryHistory());
     await router.push("/sign-in");
@@ -75,7 +76,39 @@ describe("SignInView", () => {
     expect(wrapper.text()).toContain("Your lists will appear here.");
   });
 
-  it("signs a new user up and lands on the lists index", async () => {
+  it("does not offer sign-up once the bootstrap Admin exists", async () => {
+    stubApi({
+      "/api/auth/get-session": () => jsonResponse({}),
+      "/api/signup-status": () => jsonResponse({ signUpOpen: false }),
+    });
+    const router = createAppRouter(createMemoryHistory());
+    await router.push("/sign-in");
+    await router.isReady();
+
+    const wrapper = mount(App, { global: { plugins: [router] } });
+    await flushPromises();
+
+    expect(wrapper.text()).not.toContain("Create an account");
+    expect(wrapper.text()).toContain("Sign-up is closed");
+  });
+
+  it("offers sign-up only while the database is empty (bootstrap)", async () => {
+    stubApi({
+      "/api/auth/get-session": () => jsonResponse({}),
+      "/api/signup-status": () => jsonResponse({ signUpOpen: true }),
+    });
+    const router = createAppRouter(createMemoryHistory());
+    await router.push("/sign-in");
+    await router.isReady();
+
+    const wrapper = mount(App, { global: { plugins: [router] } });
+    await flushPromises();
+
+    expect(wrapper.text()).toContain("Create an account");
+    expect(wrapper.text()).not.toContain("Sign-up is closed");
+  });
+
+  it("signs a new user up (bootstrap) and lands on the lists index", async () => {
     let signedIn = false;
     stubApi({
       "/api/auth/get-session": () =>
@@ -84,12 +117,14 @@ describe("SignInView", () => {
         signedIn = true;
         return jsonResponse({ token: "tok", user });
       },
+      "/api/signup-status": () => jsonResponse({ signUpOpen: true }),
     });
     const router = createAppRouter(createMemoryHistory());
     await router.push("/sign-in");
     await router.isReady();
 
     const wrapper = mount(App, { global: { plugins: [router] } });
+    await flushPromises();
     await wrapper.find("button[type=button]").trigger("click");
     await wrapper.find('input[name="name"]').setValue("Test User");
     await wrapper.find('input[name="email"]').setValue("[EMAIL]");
