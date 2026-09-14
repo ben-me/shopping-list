@@ -71,5 +71,4 @@ function toggleMode() {
   <button v-if="signUpOpen" type="button" @click="toggleMode">
     {{ mode === "sign-in" ? "Create an account" : "Have an account?" }}
   </button>
-  <p v-if="!signUpOpen">Sign-up is closed — accounts are provisioned for this household.</p>
 </template>
