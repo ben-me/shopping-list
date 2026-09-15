@@ -49,6 +49,35 @@ export interface Invitation {
   updatedAt: string;
 }
 
+/**
+ * An Invitation as it appears on a List to its Members: the invitee's email,
+ * who sent it, and its status. The `token` stays server-side — the in-app
+ * flow never needs it (ADR 0003).
+ */
+export interface ListInvitation {
+  id: string;
+  listId: string;
+  email: string;
+  invitedById: string;
+  invitedByName: string;
+  status: InvitationStatus;
+  createdAt: string;
+}
+
+/**
+ * A pending Invitation as it appears in the invitee's inbox: which List and
+ * which Owner invited them, with accept/decline handled by id. The invited
+ * email is the invitee's own, so it is not repeated here.
+ */
+export interface PendingInvitation {
+  id: string;
+  listId: string;
+  listName: string;
+  invitedById: string;
+  invitedByName: string;
+  createdAt: string;
+}
+
 export interface Owed {
   memberId: string;
   amountInCents: number;

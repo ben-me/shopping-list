@@ -187,6 +187,21 @@ export class ShoppingDb extends Dexie {
     await this.memberships.put(membership);
   }
 
+  /**
+   * Replace the local Membership set for a List with the given rows, in one
+   * transaction. This is the one write that skips the outbox: Memberships are
+   * never edited offline — every change is a server-side invite/accept — so
+   * there is nothing to queue (`writeWithOutbox` does not apply).
+   */
+  async replaceMemberships(listId: string, memberships: Membership[]): Promise<void> {
+    await this.transaction("rw", this.memberships, async () => {
+      await this.memberships.where("listId").equals(listId).delete();
+      for (const membership of memberships) {
+        await this.memberships.put(membership);
+      }
+    });
+  }
+
   async syncList(list: List): Promise<void> {
     await this.lists.put(list);
   }

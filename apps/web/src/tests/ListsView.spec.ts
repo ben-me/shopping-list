@@ -7,7 +7,7 @@ vi.mock(
 
 import { mount, flushPromises } from "@vue/test-utils";
 import { createMemoryHistory } from "vue-router";
-import type { List } from "@shopping-list/api/domain";
+import type { List, PendingInvitation } from "@shopping-list/api/domain";
 import App from "../App.vue";
 import { db } from "../db";
 import { createAppRouter } from "../router";
@@ -132,5 +132,101 @@ describe("ListsView", () => {
     await settle(); // the Store wipe in the sign-out path settles a tick later
     expect(router.currentRoute.value.name).toBe("sign-in");
     expect(wrapper.text()).toContain("Sign in");
+  });
+
+  it("lets the invitee accept a pending invitation and clears the inbox", async () => {
+    const invitation: PendingInvitation = {
+      id: "inv-1",
+      listId: "list-9",
+      listName: "Weekend shop",
+      invitedById: "user-9",
+      invitedByName: "Ada",
+      createdAt: new Date().toISOString(),
+    };
+    let pending: PendingInvitation[] = [invitation];
+    const apiCalls: string[] = [];
+    stubRoutes((url, init) => {
+      apiCalls.push(`${init?.method ?? "GET"} ${url}`);
+      if (url === "/api/auth/get-session") {
+        return jsonResponse({ user });
+      }
+      if (url === "/api/invitations" && !init?.method) {
+        return jsonResponse({ invitations: pending });
+      }
+      if (url === "/api/invitations/inv-1/accept") {
+        pending = [];
+        return jsonResponse({ ok: true });
+      }
+      if (url === "/api/lists" && !init?.method) {
+        return jsonResponse({ lists: [] });
+      }
+      throw new Error(`No stub for ${url}`);
+    });
+    const router = createAppRouter(createMemoryHistory());
+    await router.push("/");
+    await router.isReady();
+
+    const wrapper = mount(App, { global: { plugins: [router] } });
+    await flushPromises();
+    await settle();
+
+    // The inbox shows the inviting Owner's name, the List name, and both controls.
+    expect(wrapper.text()).toContain("Ada invited you to Weekend shop");
+    expect(wrapper.find('button[name="accept-invitation"]').exists()).toBe(true);
+    expect(wrapper.find('button[name="decline-invitation"]').exists()).toBe(true);
+
+    // Accepting clears the inbox and pulls the List in through Sync.
+    await wrapper.find('button[name="accept-invitation"]').trigger("click");
+    await flushPromises();
+    await settle();
+
+    expect(apiCalls).toContain("POST /api/invitations/inv-1/accept");
+    expect(wrapper.text()).not.toContain("Ada invited you");
+  });
+
+  it("lets the invitee decline a pending invitation", async () => {
+    const invitation: PendingInvitation = {
+      id: "inv-2",
+      listId: "list-9",
+      listName: "Holiday shop",
+      invitedById: "user-9",
+      invitedByName: "Ada",
+      createdAt: new Date().toISOString(),
+    };
+    const apiCalls: string[] = [];
+    let invitations: PendingInvitation[] = [invitation];
+    stubRoutes((url, init) => {
+      apiCalls.push(`${init?.method ?? "GET"} ${url}`);
+      if (url === "/api/auth/get-session") {
+        return jsonResponse({ user });
+      }
+      if (url === "/api/invitations" && !init?.method) {
+        return jsonResponse({ invitations });
+      }
+      if (url === "/api/invitations/inv-2/decline") {
+        invitations = [];
+        return jsonResponse({ ok: true });
+      }
+      if (url === "/api/lists" && !init?.method) {
+        return jsonResponse({ lists: [] });
+      }
+      throw new Error(`No stub for ${url}`);
+    });
+    const router = createAppRouter(createMemoryHistory());
+    await router.push("/");
+    await router.isReady();
+
+    const wrapper = mount(App, { global: { plugins: [router] } });
+    await flushPromises();
+    await settle();
+
+    expect(wrapper.text()).toContain("Ada invited you to Holiday shop");
+
+    await wrapper.find('button[name="decline-invitation"]').trigger("click");
+    await flushPromises();
+    await settle();
+
+    expect(apiCalls).toContain("POST /api/invitations/inv-2/decline");
+    expect(wrapper.text()).not.toContain("Ada invited you");
   });
 });

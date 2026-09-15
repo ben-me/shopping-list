@@ -1,4 +1,5 @@
-import type { List } from "@shopping-list/api/domain";
+import type { List, Membership } from "@shopping-list/api/domain";
+import { apiFetch } from "./api";
 import type { ShoppingDb } from "./store";
 
 /**
@@ -16,4 +17,20 @@ import type { ShoppingDb } from "./store";
 export async function memberIdsOf(db: ShoppingDb, list: List): Promise<string[]> {
   const memberships = await db.getMemberships(list.id);
   return [...new Set([list.ownerId, ...memberships.map((membership) => membership.memberId)])];
+}
+
+/**
+ * Pull a List's Membership rows from the server and mirror them locally,
+ * replacing the List's whole Membership set: rows the server no longer
+ * returns are dropped, and every server row is stored. After an Invitation is
+ * accepted server-side, this is how every device learns who the Members are
+ * — both the invitee's and the Owner's — so the Split/standing re-divides for
+ * the real group.
+ */
+export async function syncMembershipsFromServer(db: ShoppingDb, listId: string): Promise<void> {
+  const body = await apiFetch<{ memberships?: Membership[] }>(`/api/lists/${listId}/members`);
+  if (!body?.memberships) {
+    return;
+  }
+  await db.replaceMemberships(listId, body.memberships);
 }

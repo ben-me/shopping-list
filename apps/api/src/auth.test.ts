@@ -26,7 +26,7 @@ describe("better-auth wired to D1", () => {
   });
 
   it("signs up a user and persists the session and user to D1", async () => {
-    const auth = createAuth(env);
+    const auth = await createAuth(env);
 
     const { token, user } = await auth.api.signUpEmail({
       body: { name: "Test User", email, password },
@@ -44,7 +44,7 @@ describe("better-auth wired to D1", () => {
   });
 
   it("signs an existing user in and returns a session token", async () => {
-    const auth = createAuth(env);
+    const auth = await createAuth(env);
 
     await auth.api.signUpEmail({ body: { name: "Test User", email, password } });
     const { token } = await auth.api.signInEmail({ body: { email, password } });
@@ -52,7 +52,7 @@ describe("better-auth wired to D1", () => {
   });
 
   it("reads the session back through the HTTP /get-session endpoint", async () => {
-    const auth = createAuth(env);
+    const auth = await createAuth(env);
     const origin = env.BETTER_AUTH_URL;
 
     const signUp = await auth.handler(
