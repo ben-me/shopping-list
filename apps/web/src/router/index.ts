@@ -1,5 +1,5 @@
 import { createRouter, createWebHistory, type RouterHistory } from "vue-router";
-import { session, restoreSession } from "../session";
+import { restoreSession, session, signingOut } from "../session";
 import ListsView from "../views/ListsView.vue";
 import ListView from "../views/ListView.vue";
 import SignInView from "../views/SignInView.vue";
@@ -28,7 +28,7 @@ export function createAppRouter(
     if (to.meta.requiresAuth && !session.user) {
       return { name: "sign-in" };
     }
-    if (to.meta.guestOnly && session.user) {
+    if (to.meta.guestOnly && session.user && !signingOut) {
       return { name: "lists" };
     }
   });

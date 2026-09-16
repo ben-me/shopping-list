@@ -5,7 +5,7 @@ import type { List } from "@shopping-list/api/domain";
 import { onSyncPass, runSyncPass } from "../connectivity";
 import { db } from "../db";
 import { createList } from "../lists";
-import { session, signOut } from "../session";
+import { session, signOutAndRedirect } from "../session";
 import { ignoreRejection, logRejection } from "../utils/fireAndForget";
 
 const router = useRouter();
@@ -37,8 +37,7 @@ async function onCreate() {
 }
 
 async function onSignOut() {
-  await router.push({ name: "sign-in" });
-  await signOut();
+  await signOutAndRedirect(router);
 }
 
 let stopSyncPass: (() => void) | null = null;

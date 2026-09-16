@@ -7,7 +7,7 @@ import { onSyncPass, runSyncPass } from "../connectivity";
 import { db } from "../db";
 import { acceptInvitation, declineInvitation, pendingInvitations } from "../invitations";
 import { leaveList } from "../members";
-import { session, signOut } from "../session";
+import { session, signOutAndRedirect } from "../session";
 import { ignoreRejection, logRejection } from "../utils/fireAndForget";
 
 const router = useRouter();
@@ -125,8 +125,7 @@ async function addUser() {
 }
 
 async function onSignOut() {
-  await signOut();
-  await router.push({ name: "sign-in" });
+  await signOutAndRedirect(router);
 }
 
 let stopSyncPass: (() => void) | null = null;
