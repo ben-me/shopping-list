@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { onMounted, onUnmounted, ref } from "vue";
-import type { ListInvitation, MemberSummary } from "@shopping-list/api/domain";
+import type { ListInvitation, MemberDetails } from "@shopping-list/api/domain";
 import { onSyncPass } from "../connectivity";
 import { createInvitation, listInvitations, revokeInvitation } from "../invitations";
 import { listMembers } from "../members";
@@ -9,7 +9,7 @@ import { ignoreRejection, logRejection } from "../utils/fireAndForget";
 
 const props = defineProps<{ listId: string }>();
 
-const members = ref<MemberSummary[]>([]);
+const members = ref<MemberDetails[]>([]);
 const invitations = ref<ListInvitation[]>([]);
 const error = ref<string | null>(null);
 const inviteForm = ref({

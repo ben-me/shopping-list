@@ -37,7 +37,7 @@ export interface Membership {
  * name the client shows in "who has access". The Owner always comes first,
  * with the List's creation time as their joinedAt.
  */
-export interface MemberSummary {
+export interface MemberDetails {
   memberId: string;
   name: string;
   joinedAt: string;

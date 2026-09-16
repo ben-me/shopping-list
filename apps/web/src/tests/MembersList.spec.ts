@@ -1,14 +1,14 @@
 import "fake-indexeddb/auto";
 
 import { flushPromises, mount } from "@vue/test-utils";
-import type { ListInvitation, MemberSummary } from "@shopping-list/api/domain";
+import type { ListInvitation, MemberDetails } from "@shopping-list/api/domain";
 import MembersList from "../components/MembersList.vue";
 import { _resetSession, session, type SessionUser } from "../session";
 
 const user: SessionUser = { id: "user-1", name: "Test User", email: "[EMAIL]" };
 const listId = "list-1";
 
-const members: MemberSummary[] = [
+const members: MemberDetails[] = [
   { memberId: user.id, name: "Test User", joinedAt: "2026-01-01T00:00:00.000Z" },
   { memberId: "user-2", name: "Ada", joinedAt: "2026-01-02T00:00:00.000Z" },
 ];

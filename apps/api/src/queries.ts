@@ -7,7 +7,7 @@ import type {
   Item,
   List,
   ListInvitation,
-  MemberSummary,
+  MemberDetails,
   Membership,
   Payment,
   PendingInvitation,
@@ -380,7 +380,7 @@ export async function getMembershipsByList(db: Db, listId: string): Promise<Memb
  * joinedAt), then joined Members in joined order — the same order
  * `memberIdsOf` reproduces client-side from stored Memberships.
  */
-export async function getMembersWithNames(db: Db, list: List): Promise<MemberSummary[]> {
+export async function getMembersWithNames(db: Db, list: List): Promise<MemberDetails[]> {
   const ownerRow = await db
     .select()
     .from(schema.user)

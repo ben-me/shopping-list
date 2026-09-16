@@ -1,4 +1,4 @@
-import type { List, MemberSummary } from "@shopping-list/api/domain";
+import type { List, MemberDetails } from "@shopping-list/api/domain";
 import { apiFetch } from "./api";
 import type { ShoppingDb } from "./store";
 
@@ -24,8 +24,8 @@ export async function memberIdsOf(db: ShoppingDb, list: List): Promise<string[]>
  * the Invitation flow it belongs to: names never reach the offline Store —
  * the UI reads them on demand and the Store keeps Membership rows only.
  */
-export async function listMembers(listId: string): Promise<MemberSummary[]> {
-  const body = await apiFetch<{ members?: MemberSummary[] }>(`/api/lists/${listId}/members`);
+export async function listMembers(listId: string): Promise<MemberDetails[]> {
+  const body = await apiFetch<{ members?: MemberDetails[] }>(`/api/lists/${listId}/members`);
   return body?.members ?? [];
 }
 
@@ -40,7 +40,7 @@ export async function listMembers(listId: string): Promise<MemberSummary[]> {
  */
 export async function syncMembershipsFromServer(db: ShoppingDb, listId: string): Promise<void> {
   const [body, list] = await Promise.all([
-    apiFetch<{ members?: MemberSummary[] }>(`/api/lists/${listId}/members`),
+    apiFetch<{ members?: MemberDetails[] }>(`/api/lists/${listId}/members`),
     db.getList(listId),
   ]);
   if (!body?.members || !list) {
