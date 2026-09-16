@@ -1,9 +1,9 @@
 import type { Miniflare } from "miniflare";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { getUserId, putList, signUp, startTestApp, type TestApp } from "./test-support";
-import type { AuthEnv } from "./auth";
-import type { ApiErrorEnvelope } from "./errors";
-import type { Invitation } from "./domain";
+import { getUserId, putList, signUp, startTestApp, type TestApp } from "../test-support";
+import type { AuthEnv } from "../auth";
+import type { ApiErrorEnvelope } from "../errors";
+import type { Invitation } from "../domain";
 
 function asError(body: unknown) {
   return body as ApiErrorEnvelope;

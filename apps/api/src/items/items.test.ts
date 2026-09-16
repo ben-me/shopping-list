@@ -1,8 +1,9 @@
 import type { Miniflare } from "miniflare";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { createApp } from "./index";
-import type { Db } from "./db";
-import { createMembership, createPayment } from "./queries";
+import { createApp } from "../index";
+import type { Db } from "../db";
+import { createMembership } from "../members/queries";
+import { createPayment } from "../payments/queries";
 import {
   getUserId as getUserIdViaApi,
   putList as putListViaApi,
@@ -10,11 +11,11 @@ import {
   startTestApp,
   uniq,
   wipeDomainTables,
-} from "./test-support";
-import type { AuthEnv } from "./auth";
-import type { ApiErrorEnvelope } from "./errors";
-import type { Item } from "./domain";
-import * as schema from "./schema";
+} from "../test-support";
+import type { AuthEnv } from "../auth";
+import type { ApiErrorEnvelope } from "../errors";
+import type { Item } from "../domain";
+import * as schema from "../schema";
 
 describe("item endpoints", () => {
   let mf: Miniflare;

@@ -13,6 +13,17 @@ export function createD1Connection(dbBinding: D1Database): Db {
   return drizzle(dbBinding, { schema });
 }
 
+/** ISO timestamp for persisted rows. */
+export const now = () => new Date().toISOString();
+
+/** Server-generated id for rows the client did not create offline-first. */
+export const newId = () => crypto.randomUUID();
+
+/** Apply an update patch and bump `updatedAt`. */
+export function touch<T extends object>(patch: T): T & { updatedAt: string } {
+  return { ...patch, updatedAt: now() };
+}
+
 /**
  * Prove the connection resolves by running a trivial query against the bound
  * D1 database. Returns the first row so callers (health routes, dry-runs, and

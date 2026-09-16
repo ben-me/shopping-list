@@ -1,17 +1,17 @@
 import type { Miniflare } from "miniflare";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { createApp } from "./index";
-import type { Db } from "./db";
-import { createMembership } from "./queries";
+import { createApp } from "../index";
+import type { Db } from "../db";
+import { createMembership } from "../members/queries";
 import {
   getUserId as getUserIdViaApi,
   putList as putListViaApi,
   signUp as signUpViaApi,
   startTestApp,
-} from "./test-support";
-import type { AuthEnv } from "./auth";
-import type { List } from "./domain";
-import type { ApiErrorEnvelope } from "./errors";
+} from "../test-support";
+import type { AuthEnv } from "../auth";
+import type { List } from "../domain";
+import type { ApiErrorEnvelope } from "../errors";
 
 describe("lists endpoints", () => {
   let mf: Miniflare;
