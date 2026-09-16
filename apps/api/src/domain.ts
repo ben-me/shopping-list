@@ -93,3 +93,8 @@ export interface Owed {
   memberId: string;
   amountInCents: number;
 }
+
+/** Sync upsert fields (ADR 0001): per-field reconcile; id from the URL, timestamps server-stamped. */
+export type ItemUpdate = Partial<Pick<Item, "name" | "checked" | "checkedAt">>;
+
+export type PaymentUpdate = Partial<Pick<Payment, "amountInCents" | "paidAt">>;

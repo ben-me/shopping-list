@@ -4,7 +4,7 @@ import { cors } from "hono/cors";
 import type { ContentfulStatusCode } from "hono/utils/http-status";
 import { createAuth, getTrustedOrigins, type AuthEnv } from "./auth";
 import { createD1Connection, ping, type Db } from "./db";
-import type { InvitationStatus, List } from "./domain";
+import type { InvitationStatus, ItemUpdate, List, PaymentUpdate } from "./domain";
 import { BadRequestError, ForbiddenError, NotFoundError, toErrorEnvelope } from "./errors";
 import { requireMember, requireUser, type AppVariables } from "./guards";
 import {
@@ -375,7 +375,7 @@ async function getPaymentBelongingToList(db: Db, listId: string, paymentId: stri
   return existingPayment;
 }
 
-function isPaymentUpdateBody(value: unknown): value is { amountInCents?: number; paidAt?: string } {
+function isPaymentUpdateBody(value: unknown): value is PaymentUpdate {
   if (typeof value !== "object" || value === null) {
     return false;
   }
@@ -396,7 +396,7 @@ function readPaymentUpdateFromBody(body: unknown) {
   if (!isPaymentUpdateBody(body)) {
     throw new BadRequestError("A Payment needs an amount in cents and a date");
   }
-  const update: { amountInCents?: number; paidAt?: string } = {};
+  const update: PaymentUpdate = {};
   if (body.amountInCents !== undefined) {
     update.amountInCents = body.amountInCents;
   }
@@ -444,12 +444,6 @@ function readItemUpdateFromBody(body: unknown) {
     checked: body.checked,
     checkedAt: body.checkedAt,
   };
-}
-
-interface ItemUpdate {
-  name?: string;
-  checked?: boolean;
-  checkedAt?: string;
 }
 
 function isListNameBody(value: unknown): value is { name: string } {
