@@ -38,18 +38,9 @@ import {
 } from "./queries";
 
 /**
- * The Shopping List API. Runs as a Cloudflare Worker and is the source of truth
- * for the domain (Lists, Items, Payments). The same wrangler target serves both
- * local dev and deployment. `createApp` builds a fresh Hono app so tests can
- * mount it with their own environment and requireUser/requireMember behaviour is
- * exercised over real HTTP as well as through middleware unit tests.
- *
- * The shared domain **data** contract (List, Item, Payment, Owed) lives in
- * `./domain` and is exposed to the web app through the
- * `@shopping-list/api/domain` subpath export, so the web app imports only the
- * data shapes and never pulls in this Worker entry (which drags in
- * `D1Database` types the browser does not have). Only the data shapes are part
- * of that contract — auth types stay in the `api`.
+ * Domain data shapes are re-exported so the web app can import them through
+ * the `@shopping-list/api/domain` subpath without pulling in this Worker
+ * entry (which drags in `D1Database` types the browser does not have).
  */
 export * from "./domain";
 
@@ -60,10 +51,6 @@ type AppContext = Context<{ Bindings: Bindings; Variables: AppVariables }>;
 export function createApp() {
   const app = new Hono<{ Bindings: Bindings; Variables: AppVariables }>();
 
-  /**
-   * The web app runs on a separate origin, and CORS with `credentials` requires
-   * an explicit origin — echo the request origin back only when it is trusted.
-   */
   app.use(
     "*",
     cors({
@@ -77,10 +64,7 @@ export function createApp() {
     }),
   );
 
-  /**
-   * The D1 binding is only available inside the request, so the auth instance
-   * is built per request from `c.env`.
-   */
+  // The D1 binding only exists inside the request, so auth is built per request.
   app.all("/api/auth/*", async (c) => {
     const auth = await createAuth(c.env);
     return auth.handler(c.req.raw);
@@ -99,22 +83,13 @@ export function createApp() {
 
   app.get("/api/me", requireUser, (c) => c.json({ user: c.get("user") }));
 
-  /**
-   * The bootstrap gate the sign-in view renders against (ADR 0003): sign-up
-   * is offered only while the user table is empty; the Admin provisions every
-   * account after that.
-   */
+  // Sign-up is open only while no users exist; afterwards the Admin provisions accounts (ADR 0003).
   app.get("/api/signup-status", async (c) => {
     const db = createD1Connection(c.env.devDb);
     const hasUsers = await usersExist(db);
     return c.json({ signUpOpen: !hasUsers });
   });
 
-  /**
-   * The invitee's in-app inbox (ADR 0003): every pending Invitation sent to
-   * the signed-in user, with the inviting Owner's name and the List name.
-   * Accepting or declining happens by invitation id.
-   */
   app.get("/api/invitations", requireUser, async (c) => {
     const { db } = getRequestContext(c);
     const invitations = await getPendingInvitationsForEmail(db, c.get("user").email);
@@ -123,32 +98,22 @@ export function createApp() {
 
   app.post("/api/invitations/:invitationId/accept", requireUser, inviteDecision("accepted"));
 
-  /** Decline maps to `revoked` so the Invitation leaves both pending lists (ADR 0003). */
+  // Decline reuses `revoked` so it leaves both pending lists (ADR 0003).
   app.post("/api/invitations/:invitationId/decline", requireUser, inviteDecision("revoked"));
 
-  /** The List's Invitations, for its Members; only the Owner manages them. */
   app.get("/api/lists/:listId/invitations", requireUser, requireMember, async (c) => {
     const { db, listId } = getRequestContext(c);
     const invitations = await getInvitationsByListWithContext(db, listId);
     return c.json({ invitations });
   });
 
-  /**
-   * Everyone with access to a List, Owner first, with names — the client's
-   * "who has access" list. Names never reach the offline Store; they are read
-   * online, like the Invitation flow they belong to.
-   */
+  // Names are read online only; they never reach the offline Store.
   app.get("/api/lists/:listId/members", requireUser, requireMember, async (c) => {
     const { db } = getRequestContext(c);
     const members = await getMembersWithNames(db, c.get("list"));
     return c.json({ members });
   });
 
-  /**
-   * A Member leaves a List they joined: their Membership row is removed and
-   * the List stops appearing for them. The Owner cannot leave — a List always
-   * keeps the person who created it.
-   */
   app.delete("/api/lists/:listId/membership", requireUser, requireMember, async (c) => {
     const { db, listId } = getRequestContext(c);
     if (c.get("list").ownerId === c.get("user").id) {
@@ -161,7 +126,6 @@ export function createApp() {
     return c.json({ ok: true });
   });
 
-  /** Only the Owner invites (existing users, by email) — never a non-Owner. */
   app.post("/api/lists/:listId/invitations", requireUser, requireMember, async (c) => {
     const { db, listId } = getRequestContext(c);
     assertOwner(c, "invite");
@@ -187,7 +151,6 @@ export function createApp() {
     return c.json({ invitation }, 201);
   });
 
-  /** Only the Owner revokes (closes) a pending Invitation; already-closed ones stay idempotent. */
   app.delete(
     "/api/lists/:listId/invitations/:invitationId",
     requireUser,
@@ -217,10 +180,7 @@ export function createApp() {
     return c.json({ items });
   });
 
-  /**
-   * Sync upsert (offline-first): the device generates the id and sends the
-   * Item's current state; the server is the source of truth.
-   */
+  // Sync upsert: the device generates the id, the server is the source of truth.
   app.put("/api/lists/:listId/items/:itemId", requireUser, requireMember, async (c) => {
     const { db, listId, itemId } = getRequestContext(c);
     const itemUpdate = readItemUpdateFromBody(await readJsonBody(c));
@@ -245,7 +205,7 @@ export function createApp() {
     return c.json({ item }, 201);
   });
 
-  /** Idempotent so an offline delete can be replayed safely. */
+  // Idempotent: an offline delete can be replayed.
   app.delete("/api/lists/:listId/items/:itemId", requireUser, requireMember, async (c) => {
     const { db, listId, itemId } = getRequestContext(c);
     await getItemBelongingToList(db, listId, itemId);
@@ -259,11 +219,7 @@ export function createApp() {
     return c.json({ payments });
   });
 
-  /**
-   * Sync upsert (offline-first). Only the fields the device sent are written,
-   * so concurrent edits of one Payment reconcile per field (ADR 0001); a
-   * Member never records or edits on behalf of someone else.
-   */
+  // Partial update so concurrent edits of one Payment reconcile per field (ADR 0001).
   app.put("/api/lists/:listId/payments/:paymentId", requireUser, requireMember, async (c) => {
     const { db, listId, paymentId } = getRequestContext(c);
     const paymentUpdate = readPaymentUpdateFromBody(await readJsonBody(c));
@@ -291,7 +247,7 @@ export function createApp() {
     return c.json({ payment }, 201);
   });
 
-  /** Idempotent so an offline delete can be replayed safely. */
+  // Idempotent: an offline delete can be replayed.
   app.delete("/api/lists/:listId/payments/:paymentId", requireUser, requireMember, async (c) => {
     const { db, listId, paymentId } = getRequestContext(c);
     const existingPayment = await getPaymentBelongingToList(db, listId, paymentId);
@@ -302,7 +258,6 @@ export function createApp() {
     return c.json({ ok: true });
   });
 
-  /** Sync upsert (offline-first): an unknown id creates a List owned by the caller. */
   app.put("/api/lists/:listId", requireUser, async (c) => {
     const { db, listId } = getRequestContext(c);
     const newListName = readListNameFromBody(await readJsonBody(c));
@@ -347,11 +302,6 @@ interface InvitationForInvitee {
   status: InvitationStatus;
 }
 
-/**
- * Both invitee decisions (accept, decline) share one shape: the Invitation
- * must exist, target the caller, and still be pending. Accept additionally
- * makes the caller a Member when they are not one already.
- */
 function inviteDecision(status: "accepted" | "revoked") {
   return async (c: AppContext) => {
     const { db, invitationId } = getRequestContext(c);
@@ -373,10 +323,6 @@ function assertOwner(c: AppContext, what: string) {
   }
 }
 
-/**
- * The Invitation an invitee may act on: it must exist, target the caller's
- * email (only the invitee accepts or declines), and its List must resolve.
- */
 async function getInvitationForInvitee(
   db: Db,
   invitationId: string,
@@ -396,10 +342,7 @@ async function getInvitationForInvitee(
   return { id: invitation.id, list, status: invitation.status };
 }
 
-/**
- * An Invitation that belongs to a specific List; one on a different List is
- * a 404, so the revoke endpoint can never touch another List's invitation.
- */
+// A cross-List id is a 404, never a cross-List read.
 async function getInvitationBelongingToList(db: Db, listId: string, invitationId: string) {
   const invitation = await getInvitation(db, invitationId);
   if (invitation && invitation.listId !== listId) {
@@ -423,10 +366,7 @@ function readInviteEmailFromBody(body: unknown) {
   return body.email.trim();
 }
 
-/**
- * A Payment that exists on a different List is a 404, so endpoints built on
- * this helper can never read or write across Lists.
- */
+// A cross-List id is a 404, never a cross-List read.
 async function getPaymentBelongingToList(db: Db, listId: string, paymentId: string) {
   const existingPayment = await getPayment(db, paymentId);
   if (existingPayment && existingPayment.listId !== listId) {
@@ -466,10 +406,7 @@ function readPaymentUpdateFromBody(body: unknown) {
   return update;
 }
 
-/**
- * An Item that exists on a different List is a 404, so endpoints built on
- * this helper can never read or write across Lists.
- */
+// A cross-List id is a 404, never a cross-List read.
 async function getItemBelongingToList(db: Db, listId: string, itemId: string) {
   const existingItem = await getItem(db, itemId);
   if (existingItem && existingItem.listId !== listId) {
