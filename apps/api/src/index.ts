@@ -14,6 +14,7 @@ import {
   createMembership,
   createPayment,
   deleteItem,
+  deleteMembership,
   deletePayment,
   getInvitation,
   getInvitationsByListWithContext,
@@ -21,7 +22,7 @@ import {
   getList,
   getItemsByList,
   getListsForMember,
-  getMembershipsByList,
+  getMembersWithNames,
   getPayment,
   getPaymentsByList,
   getPendingInvitationsForEmail,
@@ -133,13 +134,31 @@ export function createApp() {
   });
 
   /**
-   * The List's Membership rows (the client unions the Owner in), so every
-   * device can mirror who the Members are after an Invitation is accepted.
+   * Everyone with access to a List, Owner first, with names — the client's
+   * "who has access" list. Names never reach the offline Store; they are read
+   * online, like the Invitation flow they belong to.
    */
   app.get("/api/lists/:listId/members", requireUser, requireMember, async (c) => {
+    const { db } = getRequestContext(c);
+    const members = await getMembersWithNames(db, c.get("list"));
+    return c.json({ members });
+  });
+
+  /**
+   * A Member leaves a List they joined: their Membership row is removed and
+   * the List stops appearing for them. The Owner cannot leave — a List always
+   * keeps the person who created it.
+   */
+  app.delete("/api/lists/:listId/membership", requireUser, requireMember, async (c) => {
     const { db, listId } = getRequestContext(c);
-    const memberships = await getMembershipsByList(db, listId);
-    return c.json({ memberships });
+    if (c.get("list").ownerId === c.get("user").id) {
+      throw new ForbiddenError("The Owner cannot leave their own List");
+    }
+    const removed = await deleteMembership(db, { listId, memberId: c.get("user").id });
+    if (!removed) {
+      throw new NotFoundError("Membership not found");
+    }
+    return c.json({ ok: true });
   });
 
   /** Only the Owner invites (existing users, by email) — never a non-Owner. */

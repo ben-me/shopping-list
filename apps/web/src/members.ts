@@ -1,4 +1,4 @@
-import type { List, Membership } from "@shopping-list/api/domain";
+import type { List, MemberSummary } from "@shopping-list/api/domain";
 import { apiFetch } from "./api";
 import type { ShoppingDb } from "./store";
 
@@ -20,17 +20,48 @@ export async function memberIdsOf(db: ShoppingDb, list: List): Promise<string[]>
 }
 
 /**
- * Pull a List's Membership rows from the server and mirror them locally,
- * replacing the List's whole Membership set: rows the server no longer
- * returns are dropped, and every server row is stored. After an Invitation is
- * accepted server-side, this is how every device learns who the Members are
- * — both the invitee's and the Owner's — so the Split/standing re-divides for
- * the real group.
+ * Everyone with access to a List, Owner first, with names. Online-only, like
+ * the Invitation flow it belongs to: names never reach the offline Store —
+ * the UI reads them on demand and the Store keeps Membership rows only.
+ */
+export async function listMembers(listId: string): Promise<MemberSummary[]> {
+  const body = await apiFetch<{ members?: MemberSummary[] }>(`/api/lists/${listId}/members`);
+  return body?.members ?? [];
+}
+
+/**
+ * Pull the server's Member set for a List and mirror the Membership rows
+ * locally, replacing the List's whole local set: rows the server no longer
+ * returns are dropped, and every server row is stored (the Owner is implied,
+ * so their pseudo-row is filtered out). After an Invitation is accepted
+ * server-side, this is how every device learns who the Members are — both
+ * the invitee's and the Owner's — so the Split/standing re-divides for the
+ * real group.
  */
 export async function syncMembershipsFromServer(db: ShoppingDb, listId: string): Promise<void> {
-  const body = await apiFetch<{ memberships?: Membership[] }>(`/api/lists/${listId}/members`);
-  if (!body?.memberships) {
+  const [body, list] = await Promise.all([
+    apiFetch<{ members?: MemberSummary[] }>(`/api/lists/${listId}/members`),
+    db.getList(listId),
+  ]);
+  if (!body?.members || !list) {
     return;
   }
-  await db.replaceMemberships(listId, body.memberships);
+  await db.replaceMemberships(
+    listId,
+    body.members
+      .filter((member) => member.memberId !== list.ownerId)
+      .map((member) => ({ listId, memberId: member.memberId, joinedAt: member.joinedAt })),
+  );
+}
+
+/**
+ * A Member leaves a List they joined (ADR 0003). Online-only like the rest of
+ * the membership flow — it mediates access between accounts, so it never
+ * queues in the offline outbox. The server drops the Membership first; only
+ * then does the local List (with its Items, Payments and queued writes) go,
+ * so a failed leave never leaves the device with a half-removed List.
+ */
+export async function leaveList(db: ShoppingDb, listId: string): Promise<void> {
+  await apiFetch(`/api/lists/${listId}/membership`, { method: "DELETE" });
+  await db.removeList(listId);
 }

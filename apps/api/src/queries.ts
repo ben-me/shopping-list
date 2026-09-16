@@ -7,6 +7,7 @@ import type {
   Item,
   List,
   ListInvitation,
+  MemberSummary,
   Membership,
   Payment,
   PendingInvitation,
@@ -372,6 +373,33 @@ export async function getMembershipsByList(db: Db, listId: string): Promise<Memb
     .where(eq(schema.memberships.listId, listId))
     .orderBy(asc(schema.memberships.joinedAt));
   return rows.map(toMembership);
+}
+
+/**
+ * Everyone with access to a List, named: the Owner first (creation time as
+ * joinedAt), then joined Members in joined order — the same order
+ * `memberIdsOf` reproduces client-side from stored Memberships.
+ */
+export async function getMembersWithNames(db: Db, list: List): Promise<MemberSummary[]> {
+  const ownerRow = await db
+    .select()
+    .from(schema.user)
+    .where(eq(schema.user.id, list.ownerId))
+    .get();
+  const memberRows = await db
+    .select({
+      memberId: schema.memberships.memberId,
+      name: schema.user.name,
+      joinedAt: schema.memberships.joinedAt,
+    })
+    .from(schema.memberships)
+    .innerJoin(schema.user, eq(schema.memberships.memberId, schema.user.id))
+    .where(eq(schema.memberships.listId, list.id))
+    .orderBy(asc(schema.memberships.joinedAt));
+  const owner = ownerRow
+    ? { memberId: list.ownerId, name: ownerRow.name, joinedAt: list.createdAt }
+    : undefined;
+  return owner ? [owner, ...memberRows] : memberRows;
 }
 
 export async function createMembership(db: Db, key: MembershipKey): Promise<Membership> {

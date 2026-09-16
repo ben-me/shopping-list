@@ -17,7 +17,7 @@ export function createAppRouter(
         path: "/settings",
         name: "settings",
         component: SettingsView,
-        meta: { requiresAuth: true, adminOnly: true },
+        meta: { requiresAuth: true },
       },
       { path: "/list/:listId", name: "list", component: ListView, meta: { requiresAuth: true } },
     ],
@@ -29,9 +29,6 @@ export function createAppRouter(
       return { name: "sign-in" };
     }
     if (to.meta.guestOnly && session.user) {
-      return { name: "lists" };
-    }
-    if (to.meta.adminOnly && session.user?.role !== "admin") {
       return { name: "lists" };
     }
   });

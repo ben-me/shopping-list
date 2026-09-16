@@ -1,10 +1,10 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref } from "vue";
 import { useRoute } from "vue-router";
-import type { Item, List, ListInvitation, Payment } from "@shopping-list/api/domain";
+import type { Item, List, Payment } from "@shopping-list/api/domain";
+import MembersList from "../components/MembersList.vue";
 import { onSyncPass, runSyncPass } from "../connectivity";
 import { db } from "../db";
-import { createInvitation, listInvitations, revokeInvitation } from "../invitations";
 import { addItem, removeItem, setItemChecked, syncItemsFromServer } from "../items";
 import { memberIdsOf, syncMembershipsFromServer } from "../members";
 import { addPayment, removePayment, syncPaymentsFromServer, updatePayment } from "../payments";
@@ -19,13 +19,6 @@ const list = ref<List | null>(null);
 const members = ref<string[]>([]);
 const items = ref<Item[]>([]);
 const payments = ref<Payment[]>([]);
-const invitations = ref<ListInvitation[]>([]);
-const inviteForm = ref({
-  email: "",
-  error: null as string | null,
-  submitting: false,
-});
-const isOwner = computed(() => list.value?.ownerId === session.user?.id);
 const itemForm = ref({
   name: "",
   error: null as string | null,
@@ -54,9 +47,6 @@ const isOwn = (payment: Payment) => payment.memberId === session.user?.id;
 const standing = computed(() => computeOwed(members.value, payments.value));
 
 const memberLabel = (memberId: string) => (memberId === session.user?.id ? "You" : memberId);
-
-const statusLabel = (status: ListInvitation["status"]) =>
-  status === "pending" ? "invited" : status === "accepted" ? "joined" : "closed";
 
 /** The Owed wording and colour for one Member: red owes the group, green the group owes. */
 const owedPresentation = (amountInCents: number) =>
@@ -99,30 +89,6 @@ async function loadItems() {
 
 async function loadPayments() {
   payments.value = (await db.getPayments(listId.value)).slice().reverse();
-}
-
-async function loadInvitations() {
-  invitations.value = await listInvitations(listId.value);
-}
-
-async function onInvite() {
-  inviteForm.value.error = null;
-  inviteForm.value.submitting = true;
-  try {
-    await createInvitation(listId.value, inviteForm.value.email);
-    await logRejection(loadInvitations(), "Loading the invitations");
-  } catch (err) {
-    inviteForm.value.error = err instanceof Error ? err.message : "Could not send the invitation";
-    return;
-  } finally {
-    inviteForm.value.submitting = false;
-  }
-  inviteForm.value.email = "";
-}
-
-async function onRevoke(invitation: ListInvitation) {
-  await logRejection(revokeInvitation(listId.value, invitation.id), "Revoking the invitation");
-  await logRejection(loadInvitations(), "Loading the invitations");
 }
 
 async function onAdd() {
@@ -215,7 +181,6 @@ onMounted(() => {
   logRejection(loadList(), "Loading the list");
   logRejection(loadItems(), "Loading the items");
   logRejection(loadPayments(), "Loading the payments");
-  ignoreRejection(loadInvitations());
   stopSyncPass = onSyncPass(async (db) => {
     await ignoreRejection(syncItemsFromServer(db, listId.value));
     await ignoreRejection(syncPaymentsFromServer(db, listId.value));
@@ -225,7 +190,6 @@ onMounted(() => {
     await logRejection(loadMembers(), "Loading the members");
     await logRejection(loadItems(), "Loading the items");
     await logRejection(loadPayments(), "Loading the payments");
-    await ignoreRejection(loadInvitations());
   });
   void ignoreRejection(runSyncPass(db));
 });
@@ -253,33 +217,7 @@ onUnmounted(() => {
       </li>
     </ul>
   </section>
-  <section class="invitations" aria-label="Invitations">
-    <h2>Invitations</h2>
-    <p v-if="invitations.length === 0">Nobody invited yet.</p>
-    <ul>
-      <li v-for="invitation in invitations" :key="invitation.id">
-        {{ invitation.email }} — invited by {{ invitation.invitedByName }}
-        <span class="invitation-status">{{ statusLabel(invitation.status) }}</span>
-        <button
-          v-if="isOwner && invitation.status === 'pending'"
-          type="button"
-          name="revoke-invitation"
-          :aria-label="`Revoke invitation for ${invitation.email}`"
-          @click="onRevoke(invitation)"
-        >
-          Revoke
-        </button>
-      </li>
-    </ul>
-    <form v-if="isOwner" class="invite-form" @submit.prevent="onInvite">
-      <label>
-        Email
-        <input v-model="inviteForm.email" name="invite-email" type="email" />
-      </label>
-      <button type="submit" :disabled="inviteForm.submitting">Invite a member</button>
-    </form>
-    <p v-if="inviteForm.error">{{ inviteForm.error }}</p>
-  </section>
+  <MembersList :list-id="listId" />
 
   <p v-if="items.length === 0">Nothing on this list yet.</p>
   <ul>

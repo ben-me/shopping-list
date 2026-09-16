@@ -32,6 +32,17 @@ export interface Membership {
   joinedAt: string;
 }
 
+/**
+ * One person with access to a List — the Owner or a joined Member — with the
+ * name the client shows in "who has access". The Owner always comes first,
+ * with the List's creation time as their joinedAt.
+ */
+export interface MemberSummary {
+  memberId: string;
+  name: string;
+  joinedAt: string;
+}
+
 export type InvitationStatus = "pending" | "accepted" | "revoked";
 
 /**

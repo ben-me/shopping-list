@@ -481,6 +481,11 @@ describe("ListView", () => {
   it("lets the Owner invite by email and revoke a pending invitation", async () => {
     let invitations: ListInvitation[] = [];
     stubRoutes((url, init) => {
+      if (url === `/api/lists/${list.id}/members`) {
+        return jsonResponse({
+          members: [{ memberId: user.id, name: "Test User", joinedAt: list.createdAt }],
+        });
+      }
       if (url === `/api/lists/${list.id}/invitations`) {
         if (init?.method === "POST" && init?.body) {
           const { email } = JSON.parse(init.body as string) as { email: string };
@@ -556,6 +561,14 @@ describe("ListView", () => {
     // The signed-in user is a Member; someone else owns the List.
     await db.lists.put({ ...list, ownerId: "user-2" });
     stubRoutes((url) => {
+      if (url === `/api/lists/${list.id}/members`) {
+        return jsonResponse({
+          members: [
+            { memberId: "user-2", name: "Other Owner", joinedAt: list.createdAt },
+            { memberId: user.id, name: "Test User", joinedAt: list.createdAt },
+          ],
+        });
+      }
       if (url === `/api/lists/${list.id}/invitations`) {
         return jsonResponse({
           invitations: [

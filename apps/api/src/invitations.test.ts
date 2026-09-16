@@ -182,7 +182,7 @@ describe("invitations (in-app, existing users only — ADR 0003)", () => {
     expect(invitations[0]?.listId).toBe(listId);
   });
 
-  it("serves the List's Memberships so every device can mirror them", async () => {
+  it("serves the List's Members with names so every device can mirror them", async () => {
     const owner = await newUser("owner");
     const invitee = await newUser("invitee");
     const listId = await createListFor(owner.cookie);
@@ -194,17 +194,17 @@ describe("invitations (in-app, existing users only — ADR 0003)", () => {
       env,
     );
 
-    // The Owner's device can pull the membership the accept created.
+    // The Owner's device can pull the members the accept created, named.
     const res = await app.request(
       `/api/lists/${listId}/members`,
       { headers: { cookie: owner.cookie } },
       env,
     );
     expect(res.status).toBe(200);
-    const { memberships } = (await res.json()) as {
-      memberships: { listId: string; memberId: string }[];
-    };
-    expect(memberships.map((m) => m.memberId)).toContain(invitee.id);
+    const { members } = (await res.json()) as { members: { memberId: string; name: string }[] };
+    expect(members.map((m) => m.memberId)).toContain(invitee.id);
+    expect(members.find((m) => m.memberId === owner.id)?.name).toBe("Test User");
+    expect(members[0]?.memberId).toBe(owner.id);
 
     // An outsider is refused.
     const outsider = await newUser("outsider");
