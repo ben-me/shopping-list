@@ -32,14 +32,6 @@ export const session = reactive<{ user: SessionUser | null }>({
 /** Set while a sign-out navigation is in flight; lets the route guard admit the guest-only sign-in route. */
 export let signingOut = false;
 
-function beginSignOut() {
-  signingOut = true;
-}
-
-function endSignOut() {
-  signingOut = false;
-}
-
 let activeRestore: Promise<void> | null = null;
 
 /**
@@ -131,11 +123,11 @@ export async function signOut() {
 
 /** Navigate to sign-in before tearing down, so the current view never re-renders signed out. */
 export async function signOutAndRedirect(router: Router) {
-  beginSignOut();
+  signingOut = true;
   try {
     await router.push({ name: "sign-in" });
   } finally {
-    endSignOut();
+    signingOut = false;
   }
   await signOut();
 }
