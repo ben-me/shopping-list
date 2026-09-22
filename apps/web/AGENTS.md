@@ -1,7 +1,15 @@
 # Shopping List Web App
 
-The web app is a progressive web app and part of a monorepo. It should allow mobile users to install the app and use if without wifi.
+This is a progressive web app written in Vue.js as a single page application. It uses Dexie to focus on a local/offline first approach.
 
-- Don't litter code with commments. Variable and function names should be explainatory
-- Prioritise it working offline
-- Full docs for the whole projects can be founds two directories above this one.
+## Vue Conventions
+
+Reference https://vuejs.org/llms.txt for detailed Vue conventions.
+
+## CSS Conventions
+
+Reference `docs/css-conventions.md` for detailed CSS conventions.
+
+## HTML Conventions
+
+Reference `docs/html-conventions.md` for detailed HTML conventions.

@@ -149,9 +149,9 @@ onUnmounted(() => {
   width: max-content;
   max-width: min(24rem, calc(100vw - 2rem));
   padding: 0.5rem;
-  border: 1px solid #d1d5db;
+  border: 1px solid var(--color-border);
   border-radius: 0.5rem;
-  box-shadow: 0 4px 16px rgb(0 0 0 / 0.15);
+  box-shadow: 0 4px 16px var(--color-shadow);
 }
 
 .members-dialog:focus {

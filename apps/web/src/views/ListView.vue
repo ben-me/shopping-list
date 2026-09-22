@@ -329,14 +329,14 @@ onUnmounted(() => {
 
 /* Red: this Member owes the group. Green: the group owes them. */
 .standing-member.owes {
-  color: #dc2626;
+  color: var(--color-danger);
 }
 
 .standing-member.owed {
-  color: #16a34a;
+  color: var(--color-success);
 }
 
 .standing-member.settled {
-  color: #6b7280;
+  color: var(--color-neutral);
 }
 </style>
