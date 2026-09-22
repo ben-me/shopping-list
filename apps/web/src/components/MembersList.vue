@@ -16,7 +16,6 @@ const inviteForm = ref({
   email: "",
   submitting: false,
 });
-const dialogRef = ref<HTMLDialogElement | null>(null);
 
 /** The server always lists the Owner first, so the first row names them. */
 const isOwner = () => members.value[0]?.memberId === session.user?.id;
@@ -52,16 +51,6 @@ async function onRevoke(invitation: ListInvitation) {
   await logRejection(loadInvitations(), "Loading the invitations");
 }
 
-function openDialog() {
-  // `show()` would do the same in browsers; the `open` attribute is the
-  // non-modal dialog's own switch, and it works wherever `<dialog>` renders.
-  dialogRef.value?.setAttribute("open", "");
-}
-
-function closeDialog() {
-  dialogRef.value?.removeAttribute("open");
-}
-
 let stopSyncPass: (() => void) | null = null;
 
 onMounted(() => {
@@ -79,17 +68,30 @@ onMounted(() => {
 onUnmounted(() => {
   stopSyncPass?.();
   stopSyncPass = null;
-  dialogRef.value?.removeAttribute("open");
 });
 </script>
 
 <template>
   <div class="members-list">
-    <button type="button" class="members-toggle" @click="openDialog">Members</button>
-    <dialog ref="dialogRef" class="members-dialog" aria-label="List members">
+    <button
+      type="button"
+      class="members-toggle"
+      aria-haspopup="dialog"
+      popovertarget="members-panel"
+    >
+      Members
+    </button>
+    <dialog id="members-panel" popover class="members-dialog" aria-labelledby="members-heading">
       <div class="members-panel">
-        <button type="button" class="members-close" @click="closeDialog">Close</button>
-        <h2>Members</h2>
+        <button
+          type="button"
+          class="members-close"
+          popovertarget="members-panel"
+          popovertargetaction="close"
+        >
+          Close
+        </button>
+        <h2 id="members-heading">Members</h2>
         <ul class="member-names">
           <li v-for="member in members" :key="member.memberId">
             {{ member.memberId === session.user?.id ? `${member.name} (you)` : member.name }}
@@ -99,9 +101,12 @@ onUnmounted(() => {
           <h3>Invitations</h3>
           <p v-if="invitations.length === 0">Nobody invited yet.</p>
           <ul>
-            <li v-for="invitation in invitations" :key="invitation.id">
-              {{ invitation.email }} — invited by {{ invitation.invitedByName }}
-              <span class="invitation-status">{{ statusLabel(invitation.status) }}</span>
+            <li
+              v-for="invitation in invitations.filter((invite) => invite.status !== 'accepted')"
+              :key="invitation.id"
+            >
+              {{ invitation.email }}
+              <span class="invitation-status">({{ statusLabel(invitation.status) }})</span>
               <button
                 v-if="invitation.status === 'pending'"
                 type="button"
@@ -128,51 +133,35 @@ onUnmounted(() => {
 </template>
 
 <style scoped>
-.members-dialog {
-  border: none;
-  padding: 0;
-  background: transparent;
-  color: inherit;
+.members-toggle {
+  anchor-name: --members;
 }
 
-/* Mobile: a card the toggle button reveals in the top layer (non-modal). */
-.members-toggle {
-  margin-bottom: 0.5rem;
+/* Popovers render in the top layer, so they position against the viewport, not
+   the DOM parent. Anchor the panel to the button to drop it just below. */
+.members-dialog {
+  position: fixed;
+  position-anchor: --members;
+  inset: auto;
+  top: anchor(--members bottom);
+  left: anchor(--members left);
+  margin: 0.25rem 0 0;
+  width: max-content;
+  max-width: min(24rem, calc(100vw - 2rem));
+  padding: 0.5rem;
+  border: 1px solid #d1d5db;
+  border-radius: 0.5rem;
+  box-shadow: 0 4px 16px rgb(0 0 0 / 0.15);
+}
+
+.members-dialog:focus {
+  outline: none;
 }
 
 .members-close {
-  display: block;
-  margin: 0 0 0.5rem auto;
-}
-
-.members-dialog:not([open]) {
-  display: none;
-}
-
-/* Tablet and up: the panel renders inline, no dialog chrome. */
-@media (min-width: 768px) {
-  .members-toggle,
-  .members-close {
-    display: none;
-  }
-
-  .members-dialog:not([open]),
-  .members-dialog[open] {
-    display: block;
-    position: static;
-    inset: auto;
-    width: auto;
-    max-width: none;
-    height: auto;
-    margin: 0;
-    padding: 0;
-    border: none;
-    background: transparent;
-  }
-
-  .members-dialog::backdrop {
-    display: none;
-  }
+  position: absolute;
+  top: 0.5rem;
+  right: 0.5rem;
 }
 
 .member-names {

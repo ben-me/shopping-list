@@ -154,17 +154,20 @@ describe("MembersList", () => {
     expect(wrapper.find("form.invite-form").exists()).toBe(false);
   });
 
-  it("opens the panel as a non-modal dialog on mobile and lets it close", async () => {
+  it("exposes the members panel as a popover the toggle opens", async () => {
     memberStub();
     const wrapper = await mountList();
 
-    const dialog = wrapper.find("dialog");
-    expect(dialog.element.open).toBe(false);
+    const toggle = wrapper.find("button.members-toggle");
+    expect(toggle.attributes("popovertarget")).toBe("members-panel");
+    expect(toggle.attributes("aria-haspopup")).toBe("dialog");
 
-    await wrapper.find("button.members-toggle").trigger("click");
-    expect(dialog.element.open).toBe(true);
+    const panel = wrapper.find("#members-panel");
+    expect(panel.exists()).toBe(true);
+    expect(panel.element.hasAttribute("popover")).toBe(true);
 
-    await wrapper.find("button.members-close").trigger("click");
-    expect(dialog.element.open).toBe(false);
+    expect(wrapper.find("button.members-close").attributes("popovertarget")).toBe(
+      "members-panel",
+    );
   });
 });
