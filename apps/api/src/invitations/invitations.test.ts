@@ -1,12 +1,12 @@
 import type { Miniflare } from "miniflare";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { eq } from "drizzle-orm";
-import type { Db } from "./db";
-import { getUserId, putList, signUp, startTestApp, type TestApp } from "./test-support";
-import type { AuthEnv } from "./auth";
-import * as schema from "./schema";
-import type { ApiErrorEnvelope } from "./errors";
-import type { Invitation, ListInvitation, PendingInvitation } from "./domain";
+import type { Db } from "../db";
+import { getUserId, putList, signUp, startTestApp, type TestApp } from "../test-support";
+import type { AuthEnv } from "../auth";
+import * as schema from "../schema";
+import type { ApiErrorEnvelope } from "../errors";
+import type { Invitation, ListInvitation, PendingInvitation } from "../domain";
 
 function asError(body: unknown) {
   return body as ApiErrorEnvelope;

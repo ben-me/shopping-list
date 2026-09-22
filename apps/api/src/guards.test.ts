@@ -2,7 +2,8 @@ import type { Miniflare } from "miniflare";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import type { Db } from "./db";
 import { signUp, startTestApp, type TestApp } from "./test-support";
-import { createList, createMembership } from "./queries";
+import { createList } from "./lists/queries";
+import { createMembership } from "./members/queries";
 import type { AuthEnv } from "./auth";
 import type { ApiErrorEnvelope } from "./errors";
 

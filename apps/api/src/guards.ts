@@ -1,8 +1,10 @@
 import type { Context, Next } from "hono";
 import type { User } from "better-auth";
-import { createAuth, type AuthEnv } from "./auth";
+import type { AuthEnv } from "./auth";
+import { createAuth } from "./auth";
 import { createD1Connection } from "./db";
-import { getList, isMember } from "./queries";
+import { getList } from "./lists/queries";
+import { isMember } from "./members/queries";
 import type { List } from "./domain";
 import { ForbiddenError, NotFoundError, UnauthorizedError } from "./errors";
 
@@ -16,7 +18,7 @@ export interface AppVariables {
   list: List;
 }
 
-type AppContext = Context<{ Bindings: AuthEnv; Variables: AppVariables }>;
+export type AppContext = Context<{ Bindings: AuthEnv; Variables: AppVariables }>;
 
 export async function requireUser(c: AppContext, next: Next) {
   const auth = await createAuth(c.env);
