@@ -17,7 +17,19 @@ pnpm fmt            # format (oxfmt)
 pnpm cf-typegen     # regenerate CloudflareBindings types from wrangler config
 pnpm db:generate    # generate a versioned D1 migration from src/schema.ts
 pnpm db:migrate     # apply pending migrations to the local (dev) D1
+pnpm db:reset       # wipe the local (dev) D1 — e.g. before a fresh e2e run
 ```
+
+## Provisioning accounts (ADR 0003)
+
+Sign-up is the **one-time bootstrap**: it succeeds only while the user table is
+empty, and the first account becomes the **Admin**. Afterwards sign-up is
+closed for good (server rejects, the UI hides it), and every further account is
+provisioned by the Admin from the app: sign in as the Admin and the **Settings**
+page shows an **Add a user** form (name, email, password). The account is created
+through better-auth's admin route — so password hashing stays with better-auth,
+never raw SQL — and is email-verified, so it can sign in immediately. Only the
+Admin sees the form; the route itself rejects anyone without the `admin` role.
 
 ## Authentication (better-auth)
 

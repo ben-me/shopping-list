@@ -1,7 +1,17 @@
 import { and, asc, desc, eq, inArray, or } from "drizzle-orm";
 import type { Db } from "./db";
 import * as schema from "./schema";
-import type { Invitation, InvitationStatus, Item, List, Membership, Payment } from "./domain";
+import type {
+  Invitation,
+  InvitationStatus,
+  Item,
+  List,
+  ListInvitation,
+  MemberDetails,
+  Membership,
+  Payment,
+  PendingInvitation,
+} from "./domain";
 
 /**
  * Typed query helpers over the domain tables. Endpoint handlers never touch raw
@@ -192,6 +202,28 @@ export async function deletePayment(db: Db, id: string): Promise<boolean> {
   return rows.length > 0;
 }
 
+// ─── Users ────────────────────────────────────────────────────────────────
+
+/** Better-auth stores emails lowercased; it is also the comparison invariant for invitations. */
+export function normalizeEmail(email: string) {
+  return email.trim().toLowerCase();
+}
+
+export async function getUserByEmail(db: Db, email: string): Promise<UserRow | undefined> {
+  const row = await db
+    .select()
+    .from(schema.user)
+    .where(eq(schema.user.email, normalizeEmail(email)))
+    .get();
+  return row ? toUserRow(row) : undefined;
+}
+
+/** The bootstrap gate (ADR 0003): sign-up stays open only while no account exists. */
+export async function usersExist(db: Db): Promise<boolean> {
+  const row = await db.select({ id: schema.user.id }).from(schema.user).limit(1).get();
+  return row !== undefined;
+}
+
 // ─── Invitations ──────────────────────────────────────────────────────────
 
 export async function getInvitation(db: Db, id: string): Promise<Invitation | undefined> {
@@ -206,6 +238,80 @@ export async function getInvitationsByList(db: Db, listId: string): Promise<Invi
     .where(eq(schema.invitations.listId, listId))
     .orderBy(asc(schema.invitations.createdAt));
   return rows.map(toInvitation);
+}
+
+export async function getInvitationsByListWithContext(
+  db: Db,
+  listId: string,
+): Promise<ListInvitation[]> {
+  const rows = await db
+    .select({
+      invitation: schema.invitations,
+      invitedByName: schema.user.name,
+    })
+    .from(schema.invitations)
+    .innerJoin(schema.user, eq(schema.invitations.invitedById, schema.user.id))
+    .where(eq(schema.invitations.listId, listId))
+    .orderBy(asc(schema.invitations.createdAt));
+  return rows.map((row) => toListInvitation(row.invitation, row.invitedByName));
+}
+
+/**
+ * The invitee's in-app inbox (ADR 0003): pending Invitations for one email,
+ * each carrying the List name and the inviting Owner's name.
+ */
+export async function getPendingInvitationsForEmail(
+  db: Db,
+  email: string,
+): Promise<PendingInvitation[]> {
+  const rows = await db
+    .select({
+      invitation: schema.invitations,
+      listName: schema.lists.name,
+      invitedByName: schema.user.name,
+    })
+    .from(schema.invitations)
+    .innerJoin(schema.lists, eq(schema.invitations.listId, schema.lists.id))
+    .innerJoin(schema.user, eq(schema.invitations.invitedById, schema.user.id))
+    .where(
+      and(
+        eq(schema.invitations.email, normalizeEmail(email)),
+        eq(schema.invitations.status, "pending"),
+      ),
+    )
+    .orderBy(asc(schema.invitations.createdAt));
+  return rows.map(
+    (row) =>
+      ({
+        id: row.invitation.id,
+        listId: row.invitation.listId,
+        listName: row.listName,
+        invitedById: row.invitation.invitedById,
+        invitedByName: row.invitedByName,
+        createdAt: row.invitation.createdAt,
+      }) satisfies PendingInvitation,
+  );
+}
+
+/** True while a pending Invitation for that List and email already exists. */
+export async function hasPendingInvitationForListAndEmail(
+  db: Db,
+  listId: string,
+  email: string,
+): Promise<boolean> {
+  const row = await db
+    .select({ id: schema.invitations.id })
+    .from(schema.invitations)
+    .where(
+      and(
+        eq(schema.invitations.listId, listId),
+        eq(schema.invitations.email, normalizeEmail(email)),
+        eq(schema.invitations.status, "pending"),
+      ),
+    )
+    .limit(1)
+    .get();
+  return row !== undefined;
 }
 
 export async function createInvitation(db: Db, input: CreateInvitationInput): Promise<Invitation> {
@@ -267,6 +373,33 @@ export async function getMembershipsByList(db: Db, listId: string): Promise<Memb
     .where(eq(schema.memberships.listId, listId))
     .orderBy(asc(schema.memberships.joinedAt));
   return rows.map(toMembership);
+}
+
+/**
+ * Everyone with access to a List, named: the Owner first (creation time as
+ * joinedAt), then joined Members in joined order — the same order
+ * `memberIdsOf` reproduces client-side from stored Memberships.
+ */
+export async function getMembersWithNames(db: Db, list: List): Promise<MemberDetails[]> {
+  const ownerRow = await db
+    .select()
+    .from(schema.user)
+    .where(eq(schema.user.id, list.ownerId))
+    .get();
+  const memberRows = await db
+    .select({
+      memberId: schema.memberships.memberId,
+      name: schema.user.name,
+      joinedAt: schema.memberships.joinedAt,
+    })
+    .from(schema.memberships)
+    .innerJoin(schema.user, eq(schema.memberships.memberId, schema.user.id))
+    .where(eq(schema.memberships.listId, list.id))
+    .orderBy(asc(schema.memberships.joinedAt));
+  const owner = ownerRow
+    ? { memberId: list.ownerId, name: ownerRow.name, joinedAt: list.createdAt }
+    : undefined;
+  return owner ? [owner, ...memberRows] : memberRows;
 }
 
 export async function createMembership(db: Db, key: MembershipKey): Promise<Membership> {
@@ -360,6 +493,12 @@ export interface MembershipKey {
   memberId: string;
 }
 
+/** The user columns the API surfaces for invitations (never the password). */
+export type UserRow = Pick<
+  typeof schema.user.$inferSelect,
+  "id" | "name" | "email" | "emailVerified" | "role" | "createdAt"
+>;
+
 const now = () => new Date().toISOString();
 
 const newId = () => crypto.randomUUID();
@@ -383,6 +522,25 @@ function toPayment(row: typeof schema.payments.$inferSelect): Payment {
 
 function toInvitation(row: typeof schema.invitations.$inferSelect): Invitation {
   return { ...row, status: row.status as InvitationStatus };
+}
+
+function toListInvitation(
+  row: typeof schema.invitations.$inferSelect,
+  invitedByName: string,
+): ListInvitation {
+  return {
+    id: row.id,
+    listId: row.listId,
+    email: row.email,
+    invitedById: row.invitedById,
+    invitedByName,
+    status: row.status as InvitationStatus,
+    createdAt: row.createdAt,
+  };
+}
+
+function toUserRow(row: typeof schema.user.$inferSelect): UserRow {
+  return { ...row };
 }
 
 function toMembership(row: typeof schema.memberships.$inferSelect): Membership {

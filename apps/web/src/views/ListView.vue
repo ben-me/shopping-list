@@ -2,10 +2,11 @@
 import { computed, onMounted, onUnmounted, ref } from "vue";
 import { useRoute } from "vue-router";
 import type { Item, List, Payment } from "@shopping-list/api/domain";
+import MembersList from "../components/MembersList.vue";
 import { onSyncPass, runSyncPass } from "../connectivity";
 import { db } from "../db";
 import { addItem, removeItem, setItemChecked, syncItemsFromServer } from "../items";
-import { memberIdsOf } from "../members";
+import { memberIdsOf, syncMembershipsFromServer } from "../members";
 import { addPayment, removePayment, syncPaymentsFromServer, updatePayment } from "../payments";
 import { syncOutbox } from "../lists";
 import { session } from "../session";
@@ -183,6 +184,9 @@ onMounted(() => {
   stopSyncPass = onSyncPass(async (db) => {
     await ignoreRejection(syncItemsFromServer(db, listId.value));
     await ignoreRejection(syncPaymentsFromServer(db, listId.value));
+    // Members change only through the online invite flow; pull the server
+    // truth so an accepted Invitation redivides the standing on every device.
+    await ignoreRejection(syncMembershipsFromServer(db, listId.value));
     await logRejection(loadMembers(), "Loading the members");
     await logRejection(loadItems(), "Loading the items");
     await logRejection(loadPayments(), "Loading the payments");
@@ -213,6 +217,8 @@ onUnmounted(() => {
       </li>
     </ul>
   </section>
+  <MembersList :list-id="listId" />
+
   <p v-if="items.length === 0">Nothing on this list yet.</p>
   <ul>
     <li v-for="item in items" :key="item.id">

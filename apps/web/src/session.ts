@@ -1,4 +1,6 @@
 import { reactive } from "vue";
+import type { Router } from "vue-router";
+import { apiFetch } from "./api";
 import { authClient } from "./auth-client";
 import { db } from "./db";
 import { ensureStoreForUser } from "./store-owner";
@@ -11,6 +13,7 @@ export interface SessionUser {
   email: string;
   emailVerified?: boolean;
   image?: string | null;
+  role?: string;
 }
 
 /**
@@ -25,6 +28,9 @@ export interface SessionUser {
 export const session = reactive<{ user: SessionUser | null }>({
   user: null,
 });
+
+/** Set while a sign-out navigation is in flight; lets the route guard admit the guest-only sign-in route. */
+export let signingOut = false;
 
 let activeRestore: Promise<void> | null = null;
 
@@ -88,6 +94,22 @@ export async function signUp(name: string, email: string, password: string) {
   await adoptUser(session.user);
 }
 
+/**
+ * Whether the one-time bootstrap sign-up is still open (ADR 0003): true only
+ * while the user table is empty, then closed for good. The sign-in view shows
+ * the "Create an account" toggle only while this is true; when the status
+ * cannot be reached it assumes sign-up is closed — provisioning is the only
+ * door in, and that never happens through the sign-in view.
+ */
+export async function isSignUpOpen(): Promise<boolean> {
+  try {
+    const body = await apiFetch<{ signUpOpen?: boolean }>("/api/signup-status");
+    return body?.signUpOpen === true;
+  } catch {
+    return false;
+  }
+}
+
 export async function signOut() {
   try {
     await authClient.signOut();
@@ -97,6 +119,17 @@ export async function signOut() {
     cacheUser(null);
     await clearLocalStore();
   }
+}
+
+/** Navigate to sign-in before tearing down, so the current view never re-renders signed out. */
+export async function signOutAndRedirect(router: Router) {
+  signingOut = true;
+  try {
+    await router.push({ name: "sign-in" });
+  } finally {
+    signingOut = false;
+  }
+  await signOut();
 }
 
 async function clearLocalStore() {

@@ -33,8 +33,11 @@ export default defineConfig({
 
   webServer: [
     {
+      // A fresh local D1 every run: the bootstrap spec expects an empty user
+      // table (sign-up is the one-time door that creates the Admin), then
+      // provisions every further account through the admin route.
       command:
-        "pnpm --filter @shopping-list/api run db:migrate && pnpm --filter @shopping-list/api run dev",
+        "pnpm --filter @shopping-list/api run db:reset && pnpm --filter @shopping-list/api run db:migrate && pnpm --filter @shopping-list/api run dev",
       url: API_HEALTH,
       reuseExistingServer: !process.env.CI,
       timeout: 120 * 1000,

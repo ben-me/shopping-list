@@ -1,7 +1,7 @@
 <script setup lang="ts">
-import { ref } from "vue";
+import { onMounted, ref } from "vue";
 import { useRouter } from "vue-router";
-import { signIn, signUp } from "../session";
+import { isSignUpOpen, signIn, signUp } from "../session";
 
 const router = useRouter();
 const mode = ref<"sign-in" | "sign-up">("sign-in");
@@ -10,6 +10,11 @@ const email = ref("");
 const password = ref("");
 const error = ref<string | null>(null);
 const submitting = ref(false);
+const signUpOpen = ref(false);
+
+onMounted(async () => {
+  signUpOpen.value = await isSignUpOpen();
+});
 
 async function onSubmit() {
   error.value = null;
@@ -56,7 +61,7 @@ function toggleMode() {
     </button>
   </form>
   <p v-if="error">{{ error }}</p>
-  <button type="button" @click="toggleMode">
+  <button v-if="signUpOpen" type="button" @click="toggleMode">
     {{ mode === "sign-in" ? "Create an account" : "Have an account?" }}
   </button>
 </template>

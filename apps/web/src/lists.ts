@@ -1,4 +1,4 @@
-import type { Item, List, Payment } from "@shopping-list/api/domain";
+import type { Item, ItemUpdate, List, Payment, PaymentUpdate } from "@shopping-list/api/domain";
 import { apiFetch } from "./api";
 import type { ShoppingDb } from "./store";
 import now from "./utils/now";
@@ -48,11 +48,16 @@ export async function syncOutbox(db: ShoppingDb): Promise<void> {
       if (!item) {
         return;
       }
+      const itemUpdate: ItemUpdate = {
+        name: item.name,
+        checked: item.checked,
+        checkedAt: item.checkedAt,
+      };
       const { item: serverItem } = await apiFetch<{ item: Item }>(
         `/api/lists/${item.listId}/items/${item.id}`,
         {
           method: "PUT",
-          body: { name: item.name, checked: item.checked, checkedAt: item.checkedAt },
+          body: itemUpdate,
         },
       );
       if (!serverItem?.id) {
@@ -72,11 +77,15 @@ export async function syncOutbox(db: ShoppingDb): Promise<void> {
       if (!payment) {
         return;
       }
+      const paymentUpdate: PaymentUpdate = {
+        amountInCents: payment.amountInCents,
+        paidAt: payment.paidAt,
+      };
       const { payment: serverPayment } = await apiFetch<{ payment: Payment }>(
         `/api/lists/${payment.listId}/payments/${payment.id}`,
         {
           method: "PUT",
-          body: { amountInCents: payment.amountInCents, paidAt: payment.paidAt },
+          body: paymentUpdate,
         },
       );
       if (!serverPayment?.id) {

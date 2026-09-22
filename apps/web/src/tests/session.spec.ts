@@ -4,6 +4,7 @@ import { db } from "../db";
 import * as storeOwner from "../store-owner";
 import {
   _resetSession,
+  isSignUpOpen,
   session,
   restoreSession,
   signIn,
@@ -253,6 +254,15 @@ describe("session", () => {
 
     expect(session.user).toEqual(user);
     spy.mockRestore();
+  });
+
+  it("reports the one-time bootstrap gate, defaulting to closed when unreachable", async () => {
+    fetchImpl = stubFetch(jsonResponse({ signUpOpen: true }));
+    expect(await isSignUpOpen()).toBe(true);
+    expect(callsTo("/api/signup-status")).toHaveLength(1);
+
+    fetchImpl = stubUnreachableFetch();
+    expect(await isSignUpOpen()).toBe(false);
   });
 
   it("allows a later restore to re-fetch after the first completed", async () => {

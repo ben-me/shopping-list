@@ -1,11 +1,11 @@
 <script setup lang="ts">
-import { onMounted, ref } from "vue";
+import { onMounted, onUnmounted, ref } from "vue";
 import { useRouter } from "vue-router";
 import type { List } from "@shopping-list/api/domain";
+import { onSyncPass, runSyncPass } from "../connectivity";
 import { db } from "../db";
 import { createList } from "../lists";
-import { runSyncPass } from "../connectivity";
-import { session, signOut } from "../session";
+import { session, signOutAndRedirect } from "../session";
 import { ignoreRejection, logRejection } from "../utils/fireAndForget";
 
 const router = useRouter();
@@ -37,14 +37,27 @@ async function onCreate() {
 }
 
 async function onSignOut() {
-  await signOut();
-  await router.push({ name: "sign-in" });
+  await signOutAndRedirect(router);
 }
+
+let stopSyncPass: (() => void) | null = null;
 
 onMounted(() => {
   // Paint the local state right away, then reconcile with the server.
   void logRejection(loadLists(), "Loading the lists");
+  stopSyncPass = onSyncPass(async () => {
+    // A sync pass may have pulled in Lists that appeared only on the server
+    // since this view mounted — e.g. an accepted invitation or a device
+    // hand-over where sign-in wiped the local Store. Re-read so the home is
+    // never stale.
+    await logRejection(loadLists(), "Loading the lists");
+  });
   void ignoreRejection(runSyncPass(db));
+});
+
+onUnmounted(() => {
+  stopSyncPass?.();
+  stopSyncPass = null;
 });
 </script>
 
@@ -52,6 +65,7 @@ onMounted(() => {
   <h1>Shopping Lists</h1>
   <div v-if="session.user">
     <p>Signed in as {{ session.user.name }}</p>
+    <RouterLink :to="{ name: 'settings' }">Settings</RouterLink>
     <button type="button" @click="onSignOut">Sign out</button>
   </div>
   <p v-if="lists.length === 0">Your lists will appear here.</p>
