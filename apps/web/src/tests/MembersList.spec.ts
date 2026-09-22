@@ -166,8 +166,6 @@ describe("MembersList", () => {
     expect(panel.exists()).toBe(true);
     expect(panel.element.hasAttribute("popover")).toBe(true);
 
-    expect(wrapper.find("button.members-close").attributes("popovertarget")).toBe(
-      "members-panel",
-    );
+    expect(wrapper.find("button.members-close").attributes("popovertarget")).toBe("members-panel");
   });
 });

@@ -159,7 +159,7 @@ describe("leaveList", () => {
       vi.fn(async () => jsonResponse({ error: { message: "Owner cannot leave" } }, 403)),
     );
 
-    await expect(leaveList(db, list.id)).rejects.toThrow();
+    await expect(leaveList(db, list.id)).rejects.toThrow("Owner cannot leave");
     expect(await db.getList(list.id)).toBeDefined();
     expect((await db.getMemberships(list.id)).map((m) => m.memberId)).toEqual(["user-2"]);
   });
