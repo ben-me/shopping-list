@@ -4,7 +4,7 @@
  * (`src/assets/styles.css`).
  */
 export default {
-  extends: ["stylelint-config-standard"],
+  extends: ["stylelint-config-standard", "stylelint-config-recommended-vue"],
   rules: {
     "color-no-hex": true,
     "color-named": "never",
@@ -22,10 +22,6 @@ export default {
     ],
   },
   overrides: [
-    {
-      files: ["**/*.vue"],
-      customSyntax: "postcss-html",
-    },
     {
       files: ["src/assets/styles.css"],
       rules: {
