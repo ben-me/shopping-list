@@ -100,7 +100,7 @@ export async function signOut(page: Page) {
 
 export async function createList(page: Page, name: string) {
   await input(page, "name").fill(name);
-  await page.getByRole("button", { name: "Create a List" }).click();
+  await page.getByRole("button", { name: "Create list" }).click();
   await page.getByRole("link", { name }).click();
   await expect(page.getByRole("heading", { name })).toBeVisible();
 }
@@ -120,7 +120,7 @@ export function paymentRow(page: Page, amount: string) {
 
 export async function addItem(page: Page, name: string) {
   await input(page, "item").fill(name);
-  await page.getByRole("button", { name: "Add an Item" }).click();
+  await page.getByRole("button", { name: "Add" }).click();
   await expect(itemRow(page, name)).toBeVisible();
 }
 

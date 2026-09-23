@@ -27,9 +27,10 @@ onUnmounted(() => {
 
 <style scoped>
 .offline {
+  flex: none;
   padding: var(--space-2) var(--space-4);
-  background-color: var(--color-danger-soft);
-  color: var(--color-danger);
+  background-color: var(--color-ink);
+  color: var(--color-paper);
   font-size: var(--fs-small);
   font-weight: 600;
   text-align: center;

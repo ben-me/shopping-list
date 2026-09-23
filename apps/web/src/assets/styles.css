@@ -5,10 +5,14 @@
  * are only allowed here; everywhere else use the custom properties below
  * (enforced by Stylelint, see stylelint.config.js).
  *
- * The picture: white ruled panels (cards, the app bar) sitting on a soft
- * cool-grey page — a household ledger on a desk. One accent color for commit
- * actions; red/green/grey keep their existing meaning (owes / is owed /
- * settled).
+ * The picture: a shopping pad on a desk. One sheet of paper (`.page`), rows
+ * ruled off with hairlines instead of boxed into cards, ink-black text and a
+ * single marker accent. The marker means one thing only — this has been
+ * marked — so it shows up on ticked-off items and nowhere else. Money keeps
+ * its own meaning on the Payments screen: green is owed, red owes.
+ *
+ * Type is Archivo Variable (OFL) in two widths: headings and figures are set
+ * wide and heavy like market signage, running text stays at normal width.
  *
  * Type scale generated with the Utopia type calculator:
  * https://utopia.fyi/type/calculator/?c=360,1240,16,18,1.2,1.25,6,2
@@ -18,37 +22,30 @@
 
 :root {
   /* Color */
-  --color-text: #111827;
-  --color-text-muted: #6b7280;
-  --color-page: #eef0f3;
-  --color-background: #fff;
-  --color-surface: #f9fafb;
-  --color-border: #d1d5db;
-  --color-primary: #2563eb;
-  --color-primary-strong: #1d4ed8;
-  --color-primary-contrast: #fff;
-  --color-danger: #dc2626;
-  --color-danger-soft: #fef2f2;
-  --color-success: #16a34a;
-  --color-success-soft: #f0fdf4;
-  --color-neutral: #6b7280;
-  --color-shadow: rgb(0 0 0 / 15%);
+  --color-ink: #191b1c;
+  --color-ink-muted: #6b7071;
+  --color-paper: #fff;
+  --color-page: #ecedea;
+  --color-rule: #dee0db;
+  --color-marker: #ffe04d;
+  --color-marker-soft: #fff7cd;
+  --color-owed: #0d6b3d;
+  --color-owes: #b02a1c;
+  --color-danger-soft: #fbeeec;
+  --color-shadow: rgb(0 0 0 / 12%);
 
-  /* Spacing, shape, and layout */
+  /* Spacing and shape */
   --space-1: 0.25rem;
   --space-2: 0.5rem;
   --space-3: 0.75rem;
   --space-4: 1rem;
-  --space-5: 1.5rem;
   --space-6: 2rem;
-  --radius-sm: 0.375rem;
-  --radius-md: 0.625rem;
-  --radius-lg: 0.875rem;
-  --shadow-sm: 0 1px 2px rgb(0 0 0 / 6%);
-  --shadow-md: 0 8px 24px rgb(0 0 0 / 10%);
+  --radius: 0.375rem;
+  --radius-lg: 0.75rem;
+  --shadow-md: 0 8px 24px var(--color-shadow);
   --control-size: 2.75rem; /* 44px, the smallest comfortable tap target */
-  --bar-height: 3.5rem;
-  --content-width: 40rem;
+  --bar-height: 3.25rem;
+  --sheet-width: 34rem;
 
   /* Type scale (fluid, no media queries) */
   --fs-small: clamp(13.333px, 0.8061rem + 0.1212vw, 14.4px);
@@ -58,26 +55,36 @@
   --fs-h1: clamp(27.648px, 1.536rem + 0.8532vw, 35.156px);
 }
 
+/* The app is a column: the offline banner, then a screen that fills the rest. */
+#app {
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;
+  min-height: 100dvh;
+}
+
 body {
   font-family:
+    "Archivo Variable",
     system-ui,
     -apple-system,
     "Segoe UI",
     roboto,
-    "Helvetica Neue",
     arial,
     sans-serif;
   font-size: var(--fs-body);
-  color: var(--color-text);
+  color: var(--color-ink);
   background-color: var(--color-page);
 }
 
+/* Market signage: the same family, stretched wide and set heavy. */
 h1,
 h2,
 h3 {
   font-weight: 700;
-  line-height: 1.2;
-  letter-spacing: -0.01em;
+  font-stretch: 115%;
+  line-height: 1.15;
+  letter-spacing: -0.005em;
 }
 
 h1 {
@@ -92,57 +99,77 @@ h3 {
   font-size: var(--fs-h3);
 }
 
+/* A section heading inside the sheet sits below the page title in the app bar. */
+.page h2 {
+  font-size: var(--fs-h3);
+}
+
 small {
   font-size: var(--fs-small);
 }
 
 a {
-  color: var(--color-primary);
-  text-underline-offset: 0.15em;
+  color: inherit;
+  text-underline-offset: 0.2em;
 }
 
 :focus-visible {
-  outline: 2px solid var(--color-primary);
+  outline: 2px solid var(--color-ink);
   outline-offset: 2px;
 }
 
-/* Controls: one quiet secondary style by default; a submit is the commit. */
+.muted {
+  color: var(--color-ink-muted);
+}
+
+.error {
+  color: var(--color-owes);
+}
+
+.empty {
+  color: var(--color-ink-muted);
+}
+
+/* Controls: one quiet secondary style; a submit is the commit. */
 button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   min-height: var(--control-size);
-  padding-inline: var(--space-4);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-md);
-  background-color: var(--color-background);
-  color: var(--color-text);
+  padding-inline: var(--space-3);
+  border: 1px solid var(--color-rule);
+  border-radius: var(--radius);
+  background-color: var(--color-paper);
+  color: var(--color-ink);
   font-weight: 600;
   cursor: pointer;
 }
 
 button:disabled {
-  opacity: 0.5;
+  opacity: 0.45;
   cursor: not-allowed;
 }
 
 button:hover:not(:disabled) {
-  background-color: var(--color-surface);
+  border-color: var(--color-ink-muted);
 }
 
 button[type="submit"],
 button.primary {
-  border-color: var(--color-primary);
-  background-color: var(--color-primary);
-  color: var(--color-primary-contrast);
+  border-color: var(--color-ink);
+  background-color: var(--color-ink);
+  color: var(--color-paper);
 }
 
 button[type="submit"]:hover:not(:disabled),
 button.primary:hover:not(:disabled) {
-  background-color: var(--color-primary-strong);
+  background-color: #333435;
 }
 
 button.danger {
   border-color: transparent;
   background-color: transparent;
-  color: var(--color-danger);
+  color: var(--color-owes);
 }
 
 button.danger:hover:not(:disabled) {
@@ -152,21 +179,16 @@ button.danger:hover:not(:disabled) {
 input:not([type="checkbox"], [type="radio"]),
 select,
 textarea {
+  min-width: 0;
   min-height: var(--control-size);
   padding-inline: var(--space-3);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-md);
-  background-color: var(--color-background);
-  color: var(--color-text);
+  border: 1px solid var(--color-rule);
+  border-radius: var(--radius);
+  background-color: var(--color-paper);
+  color: var(--color-ink);
 }
 
-input[type="checkbox"] {
-  width: 1.35rem;
-  height: 1.35rem;
-  accent-color: var(--color-primary);
-}
-
-/* Forms stack their fields; label text sits above the control. */
+/* Forms stack their fields; the label sits above the control. */
 form {
   display: grid;
   gap: var(--space-3);
@@ -175,18 +197,67 @@ form {
 form label {
   display: grid;
   gap: var(--space-1);
-  color: var(--color-text-muted);
+  color: var(--color-ink-muted);
+  font-size: var(--fs-small);
   font-weight: 600;
 }
 
-/* The page: one centred column of card panels. */
-.page {
+/*
+ * The one input bar a screen keeps at the top, above the scrolling rows: a
+ * field and the button that commits it. The bar is a full-width rule, but its
+ * contents stay on the sheet, lined up with the app bar above it.
+ */
+.entry {
   display: grid;
-  gap: var(--space-4);
-  align-content: start;
-  max-width: var(--content-width);
+  grid-template-columns: minmax(0, 1fr);
+  justify-items: center;
+  padding: var(--space-2) var(--space-4);
+  border-bottom: 1px solid var(--color-rule);
+  background-color: var(--color-paper);
+}
+
+.entry > * {
+  width: 100%;
+  max-width: calc(var(--sheet-width) - var(--space-4) * 2);
+}
+
+.entry > * + * {
+  margin-block-start: var(--space-1);
+}
+
+.entry form {
+  display: flex;
+  gap: var(--space-2);
+  min-width: 0;
+}
+
+.entry input {
+  padding-inline: var(--space-2);
+}
+
+.entry .error {
+  font-size: var(--fs-small);
+}
+
+input:not([type="checkbox"], [type="radio"]):focus,
+select:focus,
+textarea:focus {
+  border-color: var(--color-ink);
+}
+
+/* The page: one sheet of paper, sections ruled apart rather than boxed. */
+.page {
+  flex: 1 0 auto;
+  width: 100%;
+  max-width: var(--sheet-width);
   margin-inline: auto;
-  padding: var(--space-4) var(--space-4) var(--space-6);
+  padding-block-end: var(--space-6);
+  background-color: var(--color-paper);
+  border-inline: 1px solid var(--color-rule);
+}
+
+.page > * + * {
+  border-top: 1px solid var(--color-rule);
 }
 
 .page > section {
@@ -194,10 +265,10 @@ form label {
   gap: var(--space-3);
   align-content: start;
   padding: var(--space-4);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-lg);
-  background-color: var(--color-background);
-  box-shadow: var(--shadow-sm);
+}
+
+.page > p {
+  padding: var(--space-4);
 }
 
 .page ul {
@@ -206,14 +277,62 @@ form label {
   list-style: none;
 }
 
-.muted {
-  color: var(--color-text-muted);
+/*
+ * A screen whose top does not scroll: the bars stay put and only the rows
+ * below move. Used by the List and Payments screens.
+ */
+.screen {
+  display: grid;
+  grid-template-rows: auto auto 1fr;
+  grid-template-columns: minmax(0, 1fr);
+  flex: 1 1 0;
+  min-height: 0;
 }
 
-.error {
-  color: var(--color-danger);
+.screen > main {
+  overflow-y: auto;
+  overscroll-behavior: contain;
 }
 
-.empty {
-  color: var(--color-text-muted);
+/* Rows ruled off, edge to edge, with the type inset from the sheet edge. */
+.rows > li {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-2) var(--space-4);
+  border-bottom: 1px solid var(--color-rule);
+}
+
+.rows > li:last-child {
+  border-bottom: none;
+}
+
+/* The screen switcher: text tabs, the current one underlined like a paper tab. */
+.tab {
+  display: inline-flex;
+  align-items: center;
+  min-height: var(--control-size);
+  padding-inline: var(--space-3);
+  border: 0;
+  border-radius: 0;
+  background: none;
+  color: var(--color-ink-muted);
+  font-size: var(--fs-small);
+  font-weight: 600;
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+.tabs > .tab:first-child {
+  margin-inline-start: calc(var(--space-3) * -1);
+}
+
+.tab:hover:not(:disabled) {
+  background: none;
+  color: var(--color-ink);
+}
+
+.tab[aria-current="page"] {
+  color: var(--color-ink);
+  box-shadow: inset 0 -3px 0 var(--color-ink);
 }

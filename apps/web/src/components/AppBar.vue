@@ -6,6 +6,9 @@ import { session, signOutAndRedirect } from "../session";
  * The one chrome every screen wears: the current context on the left, the way
  * back when there is one, and the account actions on the right. The `title` is
  * the page's `h1`, so pages do not render their own heading.
+ *
+ * The `nav` slot adds a second row for screens with their own sections (the
+ * List's Items / Payments tabs).
  */
 defineProps<{
   title: string;
@@ -22,16 +25,17 @@ async function onSignOut() {
 
 <template>
   <header class="app-bar">
-    <div class="app-bar-inner">
+    <div class="bar">
       <RouterLink v-if="back" class="back" :to="back">← Lists</RouterLink>
       <h1 class="title">{{ title }}</h1>
       <nav v-if="session.user" class="actions" aria-label="Account">
-        <RouterLink v-if="settings" class="settings" :to="{ name: 'settings' }"
-          >Settings</RouterLink
-        >
+        <RouterLink v-if="settings" :to="{ name: 'settings' }">Settings</RouterLink>
         <button type="button" @click="onSignOut">Sign out</button>
       </nav>
     </div>
+    <nav v-if="$slots.nav" class="tabs" aria-label="Sections">
+      <slot name="nav" />
+    </nav>
   </header>
 </template>
 
@@ -40,18 +44,23 @@ async function onSignOut() {
   position: sticky;
   top: 0;
   z-index: 10;
-  background-color: var(--color-background);
-  border-bottom: 1px solid var(--color-border);
+  background-color: var(--color-paper);
+  border-bottom: 1px solid var(--color-ink);
 }
 
-.app-bar-inner {
+.bar,
+.tabs {
   display: flex;
   align-items: center;
-  gap: var(--space-2);
-  max-width: var(--content-width);
-  min-height: var(--bar-height);
+  gap: var(--space-1);
+  width: 100%;
+  max-width: var(--sheet-width);
   margin-inline: auto;
   padding-inline: var(--space-4);
+}
+
+.bar {
+  min-height: var(--bar-height);
 }
 
 .title {
@@ -63,36 +72,48 @@ async function onSignOut() {
   white-space: nowrap;
 }
 
-.back,
-.settings {
+.back {
   display: inline-flex;
   align-items: center;
   min-height: var(--control-size);
+  margin-inline-start: calc(var(--space-2) * -1);
+  padding-inline: var(--space-2);
+  color: var(--color-ink-muted);
+  font-size: var(--fs-small);
   font-weight: 600;
   text-decoration: none;
   white-space: nowrap;
 }
 
-.back {
-  margin-inline-start: calc(var(--space-2) * -1);
-  padding-inline: var(--space-2);
-  color: var(--color-primary);
+.back:hover {
+  color: var(--color-ink);
 }
 
 .actions {
   display: flex;
   align-items: center;
-  gap: var(--space-1);
+  gap: var(--space-3);
 }
 
 .actions a,
 .actions button {
+  display: inline-flex;
+  align-items: center;
   min-height: var(--control-size);
-  padding-inline: var(--space-3);
+  padding-inline: 0;
+  border: 0;
+  background: none;
+  color: var(--color-ink-muted);
+  font-size: var(--fs-small);
+  font-weight: 600;
+  text-decoration: none;
   white-space: nowrap;
 }
 
-.settings {
-  color: var(--color-text);
+.actions a:hover,
+.actions button:hover:not(:disabled) {
+  background: none;
+  color: var(--color-ink);
+  text-decoration: underline;
 }
 </style>

@@ -61,11 +61,12 @@ onUnmounted(() => {
   <main class="page">
     <p v-if="session.user" class="muted">Signed in as {{ session.user.name }}</p>
     <section class="lists" aria-label="Your lists">
-      <p v-if="lists.length === 0" class="empty">Your lists will appear here.</p>
-      <ul class="list-index">
+      <p v-if="lists.length === 0" class="empty">No lists yet. Create the first one below.</p>
+      <ul v-else class="rows list-index">
         <li v-for="list in lists" :key="list.id">
           <RouterLink :to="{ name: 'list', params: { listId: list.id } }">
-            {{ list.name }}
+            <span>{{ list.name }}</span>
+            <span class="chevron" aria-hidden="true">›</span>
           </RouterLink>
         </li>
       </ul>
@@ -77,7 +78,7 @@ onUnmounted(() => {
           List name
           <input v-model="name" name="name" />
         </label>
-        <button type="submit" :disabled="creating || !session.user">Create a List</button>
+        <button type="submit" :disabled="creating || !session.user">Create list</button>
       </form>
       <p v-if="error" class="error">{{ error }}</p>
     </section>
@@ -85,24 +86,24 @@ onUnmounted(() => {
 </template>
 
 <style scoped>
-.list-index {
-  display: grid;
-  gap: var(--space-1);
-}
-
-.list-index li {
-  border-bottom: 1px solid var(--color-border);
-}
-
-.list-index li:last-child {
-  border-bottom: none;
+.list-index > li {
+  padding-block: 0;
 }
 
 .list-index a {
   display: flex;
+  flex: 1;
   align-items: center;
-  min-height: var(--control-size);
+  gap: var(--space-3);
+  min-height: 3.25rem;
   font-weight: 600;
   text-decoration: none;
+}
+
+.chevron {
+  margin-inline-start: auto;
+  color: var(--color-ink-muted);
+  font-size: 1.25rem;
+  line-height: 1;
 }
 </style>

@@ -2,6 +2,7 @@ import { createRouter, createWebHistory, type RouterHistory } from "vue-router";
 import { restoreSession, session, signingOut } from "../session";
 import ListsView from "../views/ListsView.vue";
 import ListView from "../views/ListView.vue";
+import PaymentsView from "../views/PaymentsView.vue";
 import SignInView from "../views/SignInView.vue";
 import SettingsView from "../views/SettingsView.vue";
 
@@ -20,6 +21,12 @@ export function createAppRouter(
         meta: { requiresAuth: true },
       },
       { path: "/list/:listId", name: "list", component: ListView, meta: { requiresAuth: true } },
+      {
+        path: "/list/:listId/payments",
+        name: "list-payments",
+        component: PaymentsView,
+        meta: { requiresAuth: true },
+      },
     ],
   });
 

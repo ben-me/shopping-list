@@ -21,6 +21,13 @@ test("every signed-in screen shows a way back, and sign-out stays reachable", as
   await expect(page.getByRole("button", { name: "Sign out" })).toBeVisible();
   await expect(await horizontalOverflow(page)).toBe(0);
 
+  // The List's own sections are reachable from its navigation.
+  await page.getByRole("link", { name: "Payments" }).click();
+  await expect(page.getByRole("heading", { name: "Errands" })).toBeVisible();
+  await expect(await horizontalOverflow(page)).toBe(0);
+  await page.getByRole("link", { name: "Items" }).click();
+  await expect(page.getByRole("button", { name: "Add" })).toBeVisible();
+
   // List detail → Lists home.
   await page.getByRole("link", { name: "Lists" }).click();
   await expect(page.getByRole("heading", { name: "Shopping Lists" })).toBeVisible();

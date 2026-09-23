@@ -65,6 +65,7 @@ test("the Owner invites a user who accepts in-app and gets equal edit rights", a
 
     // The invitee is a Member with equal edit rights, and every device now
     // knows both Members — the standing re-divides for the real group.
+    await page.getByRole("link", { name: "Payments" }).click();
     await expect(page.locator(".standing-member")).toHaveCount(2);
   });
 });

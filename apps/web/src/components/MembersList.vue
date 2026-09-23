@@ -75,7 +75,7 @@ onUnmounted(() => {
   <div class="members-list">
     <button
       type="button"
-      class="members-toggle"
+      class="tab members-toggle"
       aria-haspopup="dialog"
       popovertarget="members-panel"
     >
@@ -133,23 +133,28 @@ onUnmounted(() => {
 </template>
 
 <style scoped>
+.members-list {
+  display: flex;
+  margin-inline-start: auto;
+}
+
 .members-toggle {
   anchor-name: --members;
 }
 
 /* Popovers render in the top layer, so they position against the viewport, not
-   the DOM parent. Anchor the panel to the button to drop it just below. */
+   the DOM parent. The panel drops below the button, right-aligned to the edge
+   so it cannot fall off a phone screen. */
 .members-dialog {
   position: fixed;
   position-anchor: --members;
-  inset: auto;
+  inset: auto var(--space-4) auto auto;
   top: anchor(--members bottom);
-  left: anchor(--members left);
   margin: 0.25rem 0 0;
   width: max-content;
   max-width: min(24rem, calc(100vw - 2rem));
   padding: var(--space-4);
-  border: 1px solid var(--color-border);
+  border: 1px solid var(--color-ink);
   border-radius: var(--radius-lg);
   box-shadow: var(--shadow-md);
 }
@@ -186,7 +191,7 @@ onUnmounted(() => {
   align-items: center;
   gap: var(--space-2);
   padding: var(--space-2) 0;
-  border-bottom: 1px solid var(--color-border);
+  border-bottom: 1px solid var(--color-rule);
 }
 
 .invitation-status {

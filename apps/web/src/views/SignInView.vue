@@ -42,7 +42,7 @@ function toggleMode() {
 
 <template>
   <AppBar :title="mode === 'sign-in' ? 'Sign in' : 'Sign up'" />
-  <main class="page sign-in">
+  <main class="page">
     <section aria-label="Sign in">
       <form @submit.prevent="onSubmit">
         <template v-if="mode === 'sign-up'">
@@ -72,7 +72,8 @@ function toggleMode() {
 </template>
 
 <style scoped>
-.sign-in {
-  max-width: 24rem;
+/* The one page with nothing else to look at: centre the form in the sheet. */
+section {
+  margin-block-start: var(--space-6);
 }
 </style>

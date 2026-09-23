@@ -224,8 +224,8 @@ onUnmounted(() => {
 .joined-list-index li {
   display: grid;
   gap: var(--space-2);
-  padding: var(--space-2) 0;
-  border-bottom: 1px solid var(--color-border);
+  padding-block: var(--space-3);
+  border-bottom: 1px solid var(--color-rule);
 }
 
 .joined-list-index li {

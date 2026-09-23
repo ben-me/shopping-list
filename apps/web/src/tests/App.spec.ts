@@ -84,7 +84,7 @@ describe("App", () => {
     await flushPromises();
 
     expect(wrapper.text()).toContain("Household");
-    expect(wrapper.text()).toContain("Nothing on this list yet.");
+    expect(wrapper.text()).toContain("Nothing here yet.");
   });
 
   it("shows the offline banner while the device has no connection", async () => {
