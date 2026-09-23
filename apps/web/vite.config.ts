@@ -1,4 +1,5 @@
 // <reference types="vitest/config" />
+import process from "node:process";
 import { fileURLToPath, URL } from "node:url";
 import { defineConfig } from "vite";
 import vue from "@vitejs/plugin-vue";
@@ -67,7 +68,9 @@ export default defineConfig({
   },
   server: {
     host: true,
-    proxy: { "/api": "http://localhost:8787" },
+    // Proxy /api to the API worker. Defaults to the dev worker on :8787; the
+    // e2e run points this at its own isolated API (see playwright.config.ts).
+    proxy: { "/api": process.env.API_PROXY_TARGET ?? "http://localhost:8787" },
   },
   test: {
     environment: "jsdom",

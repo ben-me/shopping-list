@@ -17,6 +17,7 @@
   },
   "scripts": {
     "dev": "wrangler dev",
+    "dev:e2e": "wrangler dev --port 8788 --persist-to .wrangler/e2e --env-file .dev.vars.e2e --var BETTER_AUTH_URL:http://localhost:8788 --var BETTER_AUTH_TRUSTED_ORIGINS:http://localhost:5174",
     "deploy": "wrangler deploy --minify",
     "build": "wrangler deploy --dry-run",
     "cf-typegen": "wrangler types --env-interface CloudflareBindings",
@@ -24,6 +25,8 @@
     "db:migrate": "wrangler d1 migrations apply dev-db-shopping-list --local",
     "db:migrate:remote": "wrangler d1 migrations apply dev-db-shopping-list --remote",
     "db:reset": "rm -rf .wrangler/state/v3/d1",
+    "db:migrate:e2e": "wrangler d1 migrations apply dev-db-shopping-list --local --persist-to .wrangler/e2e",
+    "db:reset:e2e": "rm -rf .wrangler/e2e",
     "test:unit": "vitest run",
     "type-check": "tsc --noEmit",
     "fmt": "oxfmt",

@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { expect, type APIRequestContext, type Page } from "@playwright/test";
+import { WEB_ORIGIN } from "./env";
 
 /**
  * Shared helpers for the e2e specs: the real provisioned flow against the dev
@@ -16,7 +17,7 @@ export const PASSWORD = "e2e-secret-123";
 
 /** The one account the bootstrap spec creates; provisioning uses its session. */
 /** The dev origin the browser talks to; better-auth CSRF-checks cookie POSTs against it. */
-const TRUSTED_ORIGIN = "http://localhost:5173";
+const TRUSTED_ORIGIN = WEB_ORIGIN;
 
 export const ADMIN_EMAIL = "admin@example.com";
 export const ADMIN_PASSWORD = "admin-e2e-password-123";

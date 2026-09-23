@@ -1,0 +1,2 @@
+# Fixed, non-sensitive secret for the isolated e2e worker only (see package.json dev:e2e).
+BETTER_AUTH_SECRET=e2e-only-secret-a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6
