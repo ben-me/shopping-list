@@ -1,5 +1,4 @@
 // <reference types="vitest/config" />
-import process from "node:process";
 import { fileURLToPath, URL } from "node:url";
 import { defineConfig } from "vite";
 import vue from "@vitejs/plugin-vue";
