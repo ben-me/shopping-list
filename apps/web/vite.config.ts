@@ -67,7 +67,8 @@ export default defineConfig({
   },
   server: {
     host: true,
-    proxy: { "/api": "http://localhost:8787" },
+    // e2e points this at its own API worker; the default is the dev worker.
+    proxy: { "/api": process.env.API_PROXY_TARGET ?? "http://localhost:8787" },
   },
   test: {
     environment: "jsdom",

@@ -1,17 +1,14 @@
-import process from "node:process";
 import { defineConfig, devices } from "@playwright/test";
 
-const WEB_PORT = 5173;
-const API_HEALTH = "http://localhost:8787/health";
-
 /**
- * E2E specs for the real user flow: a browser is driven against the dev stack
- * — vite on :5173 proxying /api to the wrangler dev worker on :8787, so the
- * browser only ever talks to :5173. Locally an already-running dev stack is
- * reused (`reuseExistingServer`); in CI both servers are started here, with
- * the API's local D1 migrations applied first so a fresh checkout gets a
- * usable database.
+ * The e2e stack runs on its own ports — set by `dev:e2e` in each package — and
+ * its own D1 store, so a run never touches or collides with the dev stack on
+ * :5173 / :8787. Exported for specs that send the better-auth CSRF origin.
  */
+export const WEB_ORIGIN = "http://localhost:5174";
+const API_ORIGIN = "http://localhost:8788";
+const API_HEALTH = `${API_ORIGIN}/health`;
+
 export default defineConfig({
   testDir: "./e2e",
   timeout: 30 * 1000,
@@ -20,11 +17,11 @@ export default defineConfig({
   forbidOnly: !!process.env.CI,
   /* Retry on CI only */
   retries: process.env.CI ? 2 : 0,
-  /* One worker: the shared dev database keeps the run deterministic. */
+  /* One worker: the shared e2e database keeps the run deterministic. */
   workers: 1,
   reporter: process.env.CI ? [["github"], ["html", { open: "never" }]] : "list",
   use: {
-    baseURL: `http://localhost:${WEB_PORT}`,
+    baseURL: WEB_ORIGIN,
     /* Collect trace when retrying the failed test. */
     trace: "on-first-retry",
   },
@@ -33,19 +30,16 @@ export default defineConfig({
 
   webServer: [
     {
-      // A fresh local D1 every run: the bootstrap spec expects an empty user
-      // table (sign-up is the one-time door that creates the Admin), then
-      // provisions every further account through the admin route.
+      // Fresh isolated D1 each run: the bootstrap spec needs an empty user table.
       command:
-        "pnpm --filter @shopping-list/api run db:reset && pnpm --filter @shopping-list/api run db:migrate && pnpm --filter @shopping-list/api run dev",
+        "pnpm --filter @shopping-list/api run db:reset:e2e && pnpm --filter @shopping-list/api run db:migrate:e2e && pnpm --filter @shopping-list/api run dev:e2e",
       url: API_HEALTH,
-      reuseExistingServer: !process.env.CI,
       timeout: 120 * 1000,
     },
     {
-      command: "pnpm dev",
-      port: WEB_PORT,
-      reuseExistingServer: !process.env.CI,
+      command: "pnpm --filter @shopping-list/web run dev:e2e",
+      url: WEB_ORIGIN,
+      env: { API_PROXY_TARGET: API_ORIGIN },
       timeout: 120 * 1000,
     },
   ],

@@ -1,0 +1,2 @@
+# Non-sensitive secret for the isolated e2e worker.
+BETTER_AUTH_SECRET=e2e-only-secret-0123456789abcdef01

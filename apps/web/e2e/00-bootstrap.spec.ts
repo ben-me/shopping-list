@@ -1,4 +1,5 @@
 import { expect, test } from "@playwright/test";
+import { WEB_ORIGIN } from "../playwright.config";
 import { ADMIN_EMAIL, ADMIN_PASSWORD, input, signInAsUser } from "./support";
 
 /**
@@ -7,11 +8,8 @@ import { ADMIN_EMAIL, ADMIN_PASSWORD, input, signInAsUser } from "./support";
  * rejected server-side and hidden in the UI. Every other account in the e2e
  * suite is provisioned through the admin route (see support.ts).
  *
- * This spec MUST run on an empty database and before every other spec: the
- * file-name `00-` prefix plus a single worker (playwright.config.ts) order
- * it first, and the webServer command resets the local D1 before each run.
- * Against an already-running dev stack (reuseExistingServer), restart it or
- * run `pnpm --filter @shopping-list/api db:reset` first.
+ * This spec MUST run first on an empty user table: the `00-` prefix plus a
+ * single worker order it first, and each run resets the isolated e2e store.
  */
 test("an empty database bootstraps the Admin, then sign-up closes for good", async ({
   page,
@@ -23,7 +21,7 @@ test("an empty database bootstraps the Admin, then sign-up closes for good", asy
     const { signUpOpen } = (await res.json()) as { signUpOpen: boolean };
     expect(
       signUpOpen,
-      "sign-up must be open (empty user table). Reset the local dev DB before e2e: pnpm --filter @shopping-list/api db:reset",
+      "sign-up must be open: reset the e2e store with `pnpm --filter @shopping-list/api db:reset:e2e`",
     ).toBe(true);
   });
 
@@ -67,7 +65,7 @@ test("an empty database bootstraps the Admin, then sign-up closes for good", asy
       .map((header) => header.value)
       .join("; ");
     const created = await request.post("/api/auth/admin/create-user", {
-      headers: { cookie, origin: "http://localhost:5173" },
+      headers: { cookie, origin: WEB_ORIGIN },
       data: {
         name: "First Provisioned",
         email: "provisioned@e2e.test",

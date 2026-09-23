@@ -1,23 +1,22 @@
 import { randomUUID } from "node:crypto";
 import { expect, type APIRequestContext, type Page } from "@playwright/test";
+import { WEB_ORIGIN } from "../playwright.config";
 
 /**
- * Shared helpers for the e2e specs: the real provisioned flow against the dev
- * stack — provision a user through the admin route, sign them in, create a
- * List, add, tick, and remove Items.
+ * Shared helpers for the e2e specs: provision a user through the admin route,
+ * sign them in, create a List, add, tick, and remove Items.
  *
- * Accounts are provisioned, not self-created (ADR 0003): the `00-bootstrap`
- * spec signs up once on the empty database — that first account becomes the
- * Admin — and every later account in this file is created through the admin
- * route with a unique email, so reruns never collide.
+ * Accounts are provisioned, not self-created (ADR 0003): `00-bootstrap` signs
+ * up once on the empty database (that account becomes the Admin) and every
+ * later account is created through the admin route with a unique email.
  */
 
 export const PASSWORD = "e2e-secret-123";
 
-/** The one account the bootstrap spec creates; provisioning uses its session. */
-/** The dev origin the browser talks to; better-auth CSRF-checks cookie POSTs against it. */
-const TRUSTED_ORIGIN = "http://localhost:5173";
+/** better-auth CSRF-checks cookie POSTs against the browser's origin. */
+const TRUSTED_ORIGIN = WEB_ORIGIN;
 
+/** The one account the bootstrap spec creates; provisioning uses its session. */
 export const ADMIN_EMAIL = "admin@example.com";
 export const ADMIN_PASSWORD = "admin-e2e-password-123";
 
@@ -26,24 +25,15 @@ export function input(page: Page, formName: string) {
 }
 
 /**
- * Sign the Admin in over the API and return the session cookie.
- *
- * A fresh APIRequestContext per call: an inherited session cookie would make
- * better-auth answer the sign-in with the existing session and no new
- * cookie, so provisioning must never depend on cross-test cookie state.
+ * Sign the Admin in over the API and return the session cookie. A fresh
+ * sign-in needs a fresh cookie, so sign out any stale session first.
  */
 export async function adminCookie(request: APIRequestContext): Promise<string> {
-  // The `request` fixture may carry an earlier test's session cookie, and a
-  // sign-in with a live session answers with the existing session and no new
-  // cookie. Sign the stale session out first so the fresh sign-in always
-  // mints (and sets) a new one.
   await request.post("/api/auth/sign-out", {
     headers: { origin: TRUSTED_ORIGIN },
     data: {},
   });
   const res = await request.post("/api/auth/sign-in/email", {
-    // The dev browser origin: better-auth CSRF-checks cookie-bearing POSTs
-    // against trusted origins; sending it up front makes the check a no-op.
     headers: { origin: TRUSTED_ORIGIN },
     data: { email: ADMIN_EMAIL, password: ADMIN_PASSWORD },
   });
@@ -62,11 +52,7 @@ export async function adminCookie(request: APIRequestContext): Promise<string> {
   return cookie;
 }
 
-/**
- * Create an account through the admin route (email-verified by provisioning)
- * and return its credentials. The account exists on the server; this helper
- * does not touch the browser.
- */
+/** Create an account through the admin route and return its credentials. */
 export async function provisionUser(
   request: APIRequestContext,
   name: string,
@@ -89,11 +75,7 @@ export async function signInAsUser(page: Page, email: string, password: string =
   await page.getByRole("button", { name: "Sign in" }).click();
 }
 
-/**
- * Provision an account and sign it in through the real sign-in form, landing
- * on the signed-in lists view. Sign-up itself happens only in the bootstrap
- * spec — every other account is provisioned by the Admin.
- */
+/** Provision an account and sign it in through the real sign-in form. */
 export async function signUp(page: Page, name: string, request: APIRequestContext) {
   const { email } = await provisionUser(request, name);
   await signInAsUser(page, email);
@@ -127,17 +109,13 @@ export async function addItem(page: Page, name: string) {
 }
 
 /**
- * Waits until the app's local Store reflects the expected Item state and its
- * outbox has fully drained — i.e. the action is durably committed locally and
- * nothing is left to sync. Only then is a reload guaranteed to show the same
- * state, whatever order the app syncs in. `checked: null` waits for the Item
- * to be gone (removal).
+ * Waits until the local Store reflects the expected Item state and the outbox
+ * has drained, so a reload is guaranteed to show the same state. `checked:
+ * null` waits for the Item to be gone.
  */
 export function itemSettled(page: Page, name: string, checked: boolean | null) {
   const listId = new URL(page.url()).pathname.split("/").pop() ?? "";
-  // The predicate runs in the page (string form, so it is not type-checked
-  // against the test's modules): it imports the app's own Store module — the
-  // same instance the app uses — and inspects its real state.
+  // Runs in the page: imports the app's own Store module and inspects its state.
   return page.waitForFunction(
     `async ({ listId, name, checked }) => {
       const { db } = await import("/src/db.ts");

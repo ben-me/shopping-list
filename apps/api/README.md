@@ -17,7 +17,20 @@ pnpm fmt            # format (oxfmt)
 pnpm cf-typegen     # regenerate CloudflareBindings types from wrangler config
 pnpm db:generate    # generate a versioned D1 migration from src/schema.ts
 pnpm db:migrate     # apply pending migrations to the local (dev) D1
-pnpm db:reset       # wipe the local (dev) D1 — e.g. before a fresh e2e run
+pnpm db:reset       # wipe the local (dev) D1
+```
+
+### E2E isolation
+
+`pnpm test:e2e` starts its own worker (:8788, D1 store in
+`apps/api/.wrangler/e2e` via `--persist-to`) and its own vite dev server
+(:5174 pointed at it). The dev stack (:5173 / :8787,
+`apps/api/.wrangler/state`) is never read, reset, or removed.
+
+```sh
+pnpm dev:e2e        # the isolated e2e worker (what the e2e suite starts)
+pnpm db:migrate:e2e # apply pending migrations to the isolated e2e D1
+pnpm db:reset:e2e   # wipe the isolated e2e D1 (fresh state per e2e run)
 ```
 
 ## Provisioning accounts (ADR 0003)
