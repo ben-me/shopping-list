@@ -5,6 +5,11 @@
  * are only allowed here; everywhere else use the custom properties below
  * (enforced by Stylelint, see stylelint.config.js).
  *
+ * The picture: white ruled panels (cards, the app bar) sitting on a soft
+ * cool-grey page — a household ledger on a desk. One accent color for commit
+ * actions; red/green/grey keep their existing meaning (owes / is owed /
+ * settled).
+ *
  * Type scale generated with the Utopia type calculator:
  * https://utopia.fyi/type/calculator/?c=360,1240,16,18,1.2,1.25,6,2
  * Config: viewports 360px -> 1240px, base 16px -> 18px,
@@ -15,15 +20,35 @@
   /* Color */
   --color-text: #111827;
   --color-text-muted: #6b7280;
+  --color-page: #eef0f3;
   --color-background: #fff;
   --color-surface: #f9fafb;
   --color-border: #d1d5db;
   --color-primary: #2563eb;
+  --color-primary-strong: #1d4ed8;
   --color-primary-contrast: #fff;
   --color-danger: #dc2626;
+  --color-danger-soft: #fef2f2;
   --color-success: #16a34a;
+  --color-success-soft: #f0fdf4;
   --color-neutral: #6b7280;
   --color-shadow: rgb(0 0 0 / 15%);
+
+  /* Spacing, shape, and layout */
+  --space-1: 0.25rem;
+  --space-2: 0.5rem;
+  --space-3: 0.75rem;
+  --space-4: 1rem;
+  --space-5: 1.5rem;
+  --space-6: 2rem;
+  --radius-sm: 0.375rem;
+  --radius-md: 0.625rem;
+  --radius-lg: 0.875rem;
+  --shadow-sm: 0 1px 2px rgb(0 0 0 / 6%);
+  --shadow-md: 0 8px 24px rgb(0 0 0 / 10%);
+  --control-size: 2.75rem; /* 44px, the smallest comfortable tap target */
+  --bar-height: 3.5rem;
+  --content-width: 40rem;
 
   /* Type scale (fluid, no media queries) */
   --fs-small: clamp(13.333px, 0.8061rem + 0.1212vw, 14.4px);
@@ -34,9 +59,25 @@
 }
 
 body {
+  font-family:
+    system-ui,
+    -apple-system,
+    "Segoe UI",
+    roboto,
+    "Helvetica Neue",
+    arial,
+    sans-serif;
   font-size: var(--fs-body);
   color: var(--color-text);
-  background-color: var(--color-background);
+  background-color: var(--color-page);
+}
+
+h1,
+h2,
+h3 {
+  font-weight: 700;
+  line-height: 1.2;
+  letter-spacing: -0.01em;
 }
 
 h1 {
@@ -53,4 +94,126 @@ h3 {
 
 small {
   font-size: var(--fs-small);
+}
+
+a {
+  color: var(--color-primary);
+  text-underline-offset: 0.15em;
+}
+
+:focus-visible {
+  outline: 2px solid var(--color-primary);
+  outline-offset: 2px;
+}
+
+/* Controls: one quiet secondary style by default; a submit is the commit. */
+button {
+  min-height: var(--control-size);
+  padding-inline: var(--space-4);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background-color: var(--color-background);
+  color: var(--color-text);
+  font-weight: 600;
+  cursor: pointer;
+}
+
+button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+button:hover:not(:disabled) {
+  background-color: var(--color-surface);
+}
+
+button[type="submit"],
+button.primary {
+  border-color: var(--color-primary);
+  background-color: var(--color-primary);
+  color: var(--color-primary-contrast);
+}
+
+button[type="submit"]:hover:not(:disabled),
+button.primary:hover:not(:disabled) {
+  background-color: var(--color-primary-strong);
+}
+
+button.danger {
+  border-color: transparent;
+  background-color: transparent;
+  color: var(--color-danger);
+}
+
+button.danger:hover:not(:disabled) {
+  background-color: var(--color-danger-soft);
+}
+
+input:not([type="checkbox"], [type="radio"]),
+select,
+textarea {
+  min-height: var(--control-size);
+  padding-inline: var(--space-3);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background-color: var(--color-background);
+  color: var(--color-text);
+}
+
+input[type="checkbox"] {
+  width: 1.35rem;
+  height: 1.35rem;
+  accent-color: var(--color-primary);
+}
+
+/* Forms stack their fields; label text sits above the control. */
+form {
+  display: grid;
+  gap: var(--space-3);
+}
+
+form label {
+  display: grid;
+  gap: var(--space-1);
+  color: var(--color-text-muted);
+  font-weight: 600;
+}
+
+/* The page: one centred column of card panels. */
+.page {
+  display: grid;
+  gap: var(--space-4);
+  align-content: start;
+  max-width: var(--content-width);
+  margin-inline: auto;
+  padding: var(--space-4) var(--space-4) var(--space-6);
+}
+
+.page > section {
+  display: grid;
+  gap: var(--space-3);
+  align-content: start;
+  padding: var(--space-4);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  background-color: var(--color-background);
+  box-shadow: var(--shadow-sm);
+}
+
+.page ul {
+  padding: 0;
+  margin: 0;
+  list-style: none;
+}
+
+.muted {
+  color: var(--color-text-muted);
+}
+
+.error {
+  color: var(--color-danger);
+}
+
+.empty {
+  color: var(--color-text-muted);
 }

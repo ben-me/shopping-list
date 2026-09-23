@@ -2,6 +2,7 @@
 import { computed, onMounted, onUnmounted, ref } from "vue";
 import { useRoute } from "vue-router";
 import type { Item, List, Payment } from "@shopping-list/api/domain";
+import AppBar from "../components/AppBar.vue";
 import MembersList from "../components/MembersList.vue";
 import { onSyncPass, runSyncPass } from "../connectivity";
 import { db } from "../db";
@@ -201,142 +202,236 @@ onUnmounted(() => {
 </script>
 
 <template>
-  <h1>{{ list?.name ?? "List" }}</h1>
-  <section class="standing" aria-label="Money standing">
-    <p class="total-paid">Total paid: {{ formatEuro(standing.totalInCents) }}</p>
-    <ul v-if="standingRows.length > 0" class="standing-members">
-      <li
-        v-for="row in standingRows"
-        :key="row.memberId"
-        class="standing-member"
-        :class="row.className"
-      >
-        <span class="member-name">{{ row.name }}</span>
-        <span class="member-share">share {{ row.share }}</span>
-        <span class="member-owed">{{ row.label }}</span>
-      </li>
-    </ul>
-  </section>
-  <MembersList :list-id="listId" />
+  <AppBar :title="list?.name ?? 'List'" :back="{ name: 'lists' }" />
+  <main class="page">
+    <section class="standing" aria-label="Money standing">
+      <p class="total-paid">Total paid: {{ formatEuro(standing.totalInCents) }}</p>
+      <ul v-if="standingRows.length > 0" class="standing-members">
+        <li
+          v-for="row in standingRows"
+          :key="row.memberId"
+          class="standing-member"
+          :class="row.className"
+        >
+          <span class="member-name">{{ row.name }}</span>
+          <span class="member-share">share {{ row.share }}</span>
+          <span class="member-owed">{{ row.label }}</span>
+        </li>
+      </ul>
+    </section>
 
-  <p v-if="items.length === 0">Nothing on this list yet.</p>
-  <ul>
-    <li v-for="item in items" :key="item.id">
-      <label>
-        <input
-          type="checkbox"
-          name="checked"
-          :checked="item.checked"
-          @change="onToggle(item, ($event.target as HTMLInputElement).checked)"
-        />
-        <span :class="{ bought: item.checked }">{{ item.name }}</span>
-      </label>
-      <button type="button" @click="onRemove(item)">Remove</button>
-    </li>
-  </ul>
-  <form @submit.prevent="onAdd">
-    <label>
-      Item name
-      <input v-model="itemForm.name" name="item" />
-    </label>
-    <button type="submit">Add an Item</button>
-  </form>
-  <p v-if="itemForm.error">{{ itemForm.error }}</p>
+    <section class="items" aria-label="Items on this list">
+      <div class="section-head">
+        <h2>Items</h2>
+        <MembersList :list-id="listId" />
+      </div>
+      <p v-if="items.length === 0" class="empty">Nothing on this list yet.</p>
+      <ul class="item-list">
+        <li v-for="item in items" :key="item.id">
+          <label class="item">
+            <input
+              type="checkbox"
+              name="checked"
+              :checked="item.checked"
+              @change="onToggle(item, ($event.target as HTMLInputElement).checked)"
+            />
+            <span :class="{ bought: item.checked }">{{ item.name }}</span>
+          </label>
+          <button type="button" class="danger" @click="onRemove(item)">Remove</button>
+        </li>
+      </ul>
+      <form @submit.prevent="onAdd">
+        <label>
+          Item name
+          <input v-model="itemForm.name" name="item" />
+        </label>
+        <button type="submit">Add an Item</button>
+      </form>
+      <p v-if="itemForm.error" class="error">{{ itemForm.error }}</p>
+    </section>
 
-  <section class="payments">
-    <h2>Payments</h2>
-    <p v-if="payments.length === 0">No payments recorded yet.</p>
-    <ul>
-      <li v-for="payment in payments" :key="payment.id">
-        <template v-if="editingPaymentId === payment.id">
-          <form class="edit-payment-form" @submit.prevent="onSaveEdit(payment)">
-            <label>
-              Amount €
-              <input v-model="editForm.amount" name="edit-amount" type="text" inputmode="decimal" />
-            </label>
-            <label>
-              Date
-              <input v-model="editForm.date" name="edit-date" type="date" />
-            </label>
-            <button type="submit">Save</button>
-            <button type="button" @click="cancelEdit">Cancel</button>
-            <p v-if="editForm.error">{{ editForm.error }}</p>
-          </form>
-        </template>
-        <template v-else>
-          {{ formatEuro(payment.amountInCents) }}
-          {{ payment.paidAt.slice(0, 10) }}
-          <button
-            v-if="isOwn(payment)"
-            type="button"
-            name="edit-payment"
-            @click="startEdit(payment)"
-          >
-            Edit
-          </button>
-          <button
-            v-if="isOwn(payment)"
-            type="button"
-            name="delete-payment"
-            @click="onDeletePayment(payment)"
-          >
-            Delete
-          </button>
-        </template>
-      </li>
-    </ul>
-    <form class="payments-form" @submit.prevent="onRecordPayment">
-      <label>
-        Amount €
-        <input v-model="paymentForm.amount" name="payment-amount" type="text" inputmode="decimal" />
-      </label>
-      <label>
-        Date
-        <input v-model="paymentForm.date" name="payment-date" type="date" />
-      </label>
-      <button type="submit">Record a Payment</button>
-    </form>
-    <p v-if="paymentForm.error">{{ paymentForm.error }}</p>
-  </section>
+    <section class="payments">
+      <h2>Payments</h2>
+      <p v-if="payments.length === 0" class="empty">No payments recorded yet.</p>
+      <ul class="payment-list">
+        <li v-for="payment in payments" :key="payment.id">
+          <template v-if="editingPaymentId === payment.id">
+            <form class="edit-payment-form" @submit.prevent="onSaveEdit(payment)">
+              <label>
+                Amount €
+                <input
+                  v-model="editForm.amount"
+                  name="edit-amount"
+                  type="text"
+                  inputmode="decimal"
+                />
+              </label>
+              <label>
+                Date
+                <input v-model="editForm.date" name="edit-date" type="date" />
+              </label>
+              <button type="submit">Save</button>
+              <button type="button" @click="cancelEdit">Cancel</button>
+              <p v-if="editForm.error" class="error">{{ editForm.error }}</p>
+            </form>
+          </template>
+          <template v-else>
+            <span class="payment-amount">{{ formatEuro(payment.amountInCents) }}</span>
+            <span class="payment-date">{{ payment.paidAt.slice(0, 10) }}</span>
+            <button
+              v-if="isOwn(payment)"
+              type="button"
+              name="edit-payment"
+              @click="startEdit(payment)"
+            >
+              Edit
+            </button>
+            <button
+              v-if="isOwn(payment)"
+              type="button"
+              class="danger"
+              name="delete-payment"
+              @click="onDeletePayment(payment)"
+            >
+              Delete
+            </button>
+          </template>
+        </li>
+      </ul>
+      <form class="payments-form" @submit.prevent="onRecordPayment">
+        <label>
+          Amount €
+          <input
+            v-model="paymentForm.amount"
+            name="payment-amount"
+            type="text"
+            inputmode="decimal"
+          />
+        </label>
+        <label>
+          Date
+          <input v-model="paymentForm.date" name="payment-date" type="date" />
+        </label>
+        <button type="submit">Record a Payment</button>
+      </form>
+      <p v-if="paymentForm.error" class="error">{{ paymentForm.error }}</p>
+    </section>
+  </main>
 </template>
 
 <style scoped>
-.standing {
-  margin-bottom: 1rem;
+.section-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
 }
 
-.total-paid {
+/* The ledger: names left, figures right, a rule between rows. */
+.standing-member {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-1) var(--space-3);
+  padding: var(--space-2) 0;
+  border-bottom: 1px solid var(--color-border);
+}
+
+.standing-member:last-child {
+  border-bottom: none;
+}
+
+.member-name {
   font-weight: 600;
 }
 
-.standing-members {
-  list-style: none;
-  padding: 0;
-  margin: 0.25rem 0 0;
+.member-share {
+  color: var(--color-text-muted);
+  font-size: var(--fs-small);
 }
 
-.standing-member {
-  margin: 0.125rem 0;
-}
-
-.standing-member span + span::before {
-  content: " — ";
-}
-
-.standing-member .member-name {
+.member-owed {
+  margin-inline-start: auto;
+  font-variant-numeric: tabular-nums;
   font-weight: 600;
 }
 
 /* Red: this Member owes the group. Green: the group owes them. */
-.standing-member.owes {
+.standing-member.owes .member-owed {
   color: var(--color-danger);
 }
 
-.standing-member.owed {
+.standing-member.owed .member-owed {
   color: var(--color-success);
 }
 
-.standing-member.settled {
+.standing-member.settled .member-owed {
   color: var(--color-neutral);
+}
+
+.item-list > li {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-2) 0;
+  border-bottom: 1px solid var(--color-border);
+}
+
+.payment-list > li {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2) var(--space-3);
+  padding: var(--space-2) 0;
+  border-bottom: 1px solid var(--color-border);
+}
+
+.item-list > li:last-child,
+.payment-list > li:last-child {
+  border-bottom: none;
+}
+
+.item {
+  display: flex;
+  flex: 1;
+  gap: var(--space-3);
+  align-items: center;
+  min-height: var(--control-size);
+  font-weight: 600;
+}
+
+.item span.bought {
+  color: var(--color-text-muted);
+  text-decoration: line-through;
+}
+
+.payment-amount {
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+}
+
+.payment-date {
+  color: var(--color-text-muted);
+  font-size: var(--fs-small);
+}
+
+.payment-list button {
+  margin-inline-start: auto;
+}
+
+.payment-list button + button {
+  margin-inline-start: 0;
+}
+
+.edit-payment-form {
+  flex: 1;
+}
+
+/* Tablet and up: the column is already capped, so give it room to breathe. */
+@media (width >= 720px) {
+  .standing-member {
+    gap: var(--space-4);
+  }
 }
 </style>

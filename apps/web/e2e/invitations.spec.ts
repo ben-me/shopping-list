@@ -1,5 +1,13 @@
 import { expect, test } from "@playwright/test";
-import { addItem, createList, input, provisionUser, signInAsUser } from "./support";
+import {
+  addItem,
+  createList,
+  input,
+  openMembers,
+  provisionUser,
+  signInAsUser,
+  signOut,
+} from "./support";
 
 /**
  * The in-app Invitation flow (ADR 0003): the Owner invites an existing user
@@ -19,6 +27,7 @@ test("the Owner invites a user who accepts in-app and gets equal edit rights", a
   await createList(page, "Weekend shop");
 
   await test.step("the Owner invites by email and the Invitation appears on the List", async () => {
+    await openMembers(page);
     await input(page, "invite-email").fill(invitee.email);
     await page.getByRole("button", { name: "Invite a member" }).click();
     await expect(page.locator(".invitations li").filter({ hasText: invitee.email })).toContainText(
@@ -40,14 +49,15 @@ test("the Owner invites a user who accepts in-app and gets equal edit rights", a
 
   await test.step("the invitee sees the pending Invitation and accepts in-app", async () => {
     await page.goto("/");
-    await page.getByRole("button", { name: "Sign out" }).click();
-    await expect(page.getByRole("heading", { name: "Sign in" })).toBeVisible();
-
+    await signOut(page);
     await signInAsUser(page, invitee.email);
+    // The pending Invitation lives in the Settings inbox, not on the home.
+    await page.goto("/settings");
     await expect(page.getByText("Ada invited you to Weekend shop")).toBeVisible();
     await page.getByRole("button", { name: "Accept" }).click();
 
     // Accepting makes them a Member: the List appears and can be edited.
+    await page.goto("/");
     await expect(page.getByRole("link", { name: "Weekend shop" })).toBeVisible();
     await page.getByRole("link", { name: "Weekend shop" }).click();
     await expect(page.getByRole("heading", { name: "Weekend shop" })).toBeVisible();
@@ -69,6 +79,7 @@ test("a declined invitation closes for both sides; the Owner can also revoke", a
   await createList(page, "Holiday shop");
 
   await test.step("the Owner invites, then revokes the pending Invitation", async () => {
+    await openMembers(page);
     await input(page, "invite-email").fill(invitee.email);
     await page.getByRole("button", { name: "Invite a member" }).click();
     const row = page.locator(".invitations li").filter({ hasText: invitee.email });
@@ -81,15 +92,18 @@ test("a declined invitation closes for both sides; the Owner can also revoke", a
   await test.step("a closed Invitation can be sent again, and the invitee declines it", async () => {
     await input(page, "invite-email").fill(invitee.email);
     await page.getByRole("button", { name: "Invite a member" }).click();
-    await expect(page.locator(".invitations li").filter({ hasText: invitee.email })).toContainText(
-      "invited",
-    );
+    await expect(
+      page
+        .locator(".invitations li")
+        .filter({ hasText: invitee.email })
+        .filter({ hasText: "invited" }),
+    ).toBeVisible();
 
     await page.goto("/");
-    await page.getByRole("button", { name: "Sign out" }).click();
-    await expect(page.getByRole("heading", { name: "Sign in" })).toBeVisible();
-
+    await signOut(page);
     await signInAsUser(page, invitee.email);
+    // The pending Invitation lives in the Settings inbox, not on the home.
+    await page.goto("/settings");
     await expect(page.getByText("Chris invited you to Holiday shop")).toBeVisible();
     await page.getByRole("button", { name: "Decline" }).click();
     await expect(page.getByText("Chris invited you to Holiday shop")).toHaveCount(0);
@@ -97,11 +111,11 @@ test("a declined invitation closes for both sides; the Owner can also revoke", a
 
   await test.step("decline maps to revoked: the Owner sees the Invitation closed", async () => {
     await page.goto("/");
-    await page.getByRole("button", { name: "Sign out" }).click();
-    await expect(page.getByRole("heading", { name: "Sign in" })).toBeVisible();
+    await signOut(page);
     await signInAsUser(page, owner.email);
     await page.getByRole("link", { name: "Holiday shop" }).click();
     await expect(page.getByRole("heading", { name: "Holiday shop" })).toBeVisible();
+    await openMembers(page);
     // Both the Owner-revoked and the declined invitations are closed.
     const closed = page.locator(".invitations li").filter({ hasText: "closed" });
     await expect(closed).toHaveCount(2);

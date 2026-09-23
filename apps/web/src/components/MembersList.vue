@@ -99,13 +99,13 @@ onUnmounted(() => {
         </ul>
         <template v-if="isOwner()">
           <h3>Invitations</h3>
-          <p v-if="invitations.length === 0">Nobody invited yet.</p>
-          <ul>
+          <p v-if="invitations.length === 0" class="empty">Nobody invited yet.</p>
+          <ul class="invitations">
             <li
               v-for="invitation in invitations.filter((invite) => invite.status !== 'accepted')"
               :key="invitation.id"
             >
-              {{ invitation.email }}
+              <span>{{ invitation.email }}</span>
               <span class="invitation-status">({{ statusLabel(invitation.status) }})</span>
               <button
                 v-if="invitation.status === 'pending'"
@@ -126,7 +126,7 @@ onUnmounted(() => {
             <button type="submit" :disabled="inviteForm.submitting">Invite a member</button>
           </form>
         </template>
-        <p v-if="error">{{ error }}</p>
+        <p v-if="error" class="error">{{ error }}</p>
       </div>
     </dialog>
   </div>
@@ -148,10 +148,10 @@ onUnmounted(() => {
   margin: 0.25rem 0 0;
   width: max-content;
   max-width: min(24rem, calc(100vw - 2rem));
-  padding: 0.5rem;
+  padding: var(--space-4);
   border: 1px solid var(--color-border);
-  border-radius: 0.5rem;
-  box-shadow: 0 4px 16px var(--color-shadow);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-md);
 }
 
 .members-dialog:focus {
@@ -160,13 +160,41 @@ onUnmounted(() => {
 
 .members-close {
   position: absolute;
-  top: 0.5rem;
-  right: 0.5rem;
+  top: var(--space-3);
+  right: var(--space-3);
+}
+
+.members-panel {
+  display: grid;
+  gap: var(--space-3);
+  align-content: start;
+}
+
+.members-panel h2 {
+  padding-inline-end: var(--space-6);
 }
 
 .member-names {
   list-style: none;
   padding: 0;
-  margin: 0.25rem 0 0.75rem;
+  margin: 0;
+}
+
+.invitations li {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-2) 0;
+  border-bottom: 1px solid var(--color-border);
+}
+
+.invitation-status {
+  color: var(--color-text-muted);
+  font-size: var(--fs-small);
+}
+
+.invitations button {
+  margin-inline-start: auto;
 }
 </style>

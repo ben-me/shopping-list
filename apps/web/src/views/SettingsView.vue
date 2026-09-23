@@ -1,16 +1,15 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref } from "vue";
-import { useRouter } from "vue-router";
 import type { List, PendingInvitation } from "@shopping-list/api/domain";
 import { apiFetch } from "../api";
+import AppBar from "../components/AppBar.vue";
 import { onSyncPass, runSyncPass } from "../connectivity";
 import { db } from "../db";
 import { acceptInvitation, declineInvitation, pendingInvitations } from "../invitations";
 import { leaveList } from "../members";
-import { session, signOutAndRedirect } from "../session";
+import { session } from "../session";
 import { ignoreRejection, logRejection } from "../utils/fireAndForget";
 
-const router = useRouter();
 const invitations = ref<PendingInvitation[]>([]);
 const inviteError = ref<string | null>(null);
 const joinedLists = ref<List[]>([]);
@@ -124,10 +123,6 @@ async function addUser() {
   form.value.password = "";
 }
 
-async function onSignOut() {
-  await signOutAndRedirect(router);
-}
-
 let stopSyncPass: (() => void) | null = null;
 
 async function reloadAll() {
@@ -151,67 +146,105 @@ onUnmounted(() => {
 </script>
 
 <template>
-  <h1>Settings</h1>
-  <div v-if="session.user">
-    <p>Signed in as {{ session.user.name }}</p>
-    <RouterLink :to="{ name: 'lists' }">Back to lists</RouterLink>
-    <button type="button" @click="onSignOut">Sign out</button>
-  </div>
-  <section v-if="invitations.length > 0" class="invitations" aria-label="Invitations for you">
-    <h2>Invitations</h2>
-    <ul>
-      <li v-for="invitation in invitations" :key="invitation.id">
-        {{ invitation.invitedByName }} invited you to {{ invitation.listName }}
-        <button type="button" name="accept-invitation" @click="onAccept(invitation)">Accept</button>
-        <button type="button" name="decline-invitation" @click="onDecline(invitation)">
-          Decline
-        </button>
-      </li>
-    </ul>
-    <p v-if="inviteError">{{ inviteError }}</p>
-  </section>
-  <section class="joined-lists" aria-label="Lists you joined">
-    <h2>Lists you joined</h2>
-    <p v-if="joinedLists.length === 0">You haven't joined any lists yet.</p>
-    <ul>
-      <li v-for="list in joinedLists" :key="list.id">
-        {{ list.name }}
-        <button
-          type="button"
-          name="leave-list"
-          :disabled="leavePending === list.id"
-          @click="onLeave(list)"
-        >
-          Leave
-        </button>
-      </li>
-    </ul>
-    <p v-if="leaveError">{{ leaveError }}</p>
-  </section>
-  <section v-if="isAdmin" class="add-user" aria-label="Add a user">
-    <h2>Add a user</h2>
-    <p>Give a new household member their name, email, and password.</p>
-    <form class="add-user-form" @submit.prevent="addUser">
-      <label>
-        Name
-        <input v-model="form.name" name="add-user-name" />
-      </label>
-      <label>
-        Email
-        <input v-model="form.email" name="add-user-email" type="email" />
-      </label>
-      <label>
-        Password
-        <input
-          v-model="form.password"
-          name="add-user-password"
-          type="password"
-          autocomplete="new-password"
-        />
-      </label>
-      <button type="submit" :disabled="form.submitting">Add user</button>
-    </form>
-    <p v-if="form.error">{{ form.error }}</p>
-    <p v-if="form.createdName">{{ form.createdName }} can now sign in.</p>
-  </section>
+  <AppBar title="Settings" :back="{ name: 'lists' }" />
+  <main class="page">
+    <p v-if="session.user" class="muted">Signed in as {{ session.user.name }}</p>
+    <section v-if="invitations.length > 0" class="invitations" aria-label="Invitations for you">
+      <h2>Invitations</h2>
+      <ul>
+        <li v-for="invitation in invitations" :key="invitation.id">
+          <p>{{ invitation.invitedByName }} invited you to {{ invitation.listName }}</p>
+          <div class="actions">
+            <button
+              type="button"
+              class="primary"
+              name="accept-invitation"
+              @click="onAccept(invitation)"
+            >
+              Accept
+            </button>
+            <button type="button" name="decline-invitation" @click="onDecline(invitation)">
+              Decline
+            </button>
+          </div>
+        </li>
+      </ul>
+      <p v-if="inviteError" class="error">{{ inviteError }}</p>
+    </section>
+    <section class="joined-lists" aria-label="Lists you joined">
+      <h2>Lists you joined</h2>
+      <p v-if="joinedLists.length === 0" class="empty">You haven't joined any lists yet.</p>
+      <ul class="joined-list-index">
+        <li v-for="list in joinedLists" :key="list.id">
+          <span>{{ list.name }}</span>
+          <button
+            type="button"
+            class="danger"
+            name="leave-list"
+            :disabled="leavePending === list.id"
+            @click="onLeave(list)"
+          >
+            Leave
+          </button>
+        </li>
+      </ul>
+      <p v-if="leaveError" class="error">{{ leaveError }}</p>
+    </section>
+    <section v-if="isAdmin" class="add-user" aria-label="Add a user">
+      <h2>Add a user</h2>
+      <p>Give a new household member their name, email, and password.</p>
+      <form class="add-user-form" @submit.prevent="addUser">
+        <label>
+          Name
+          <input v-model="form.name" name="add-user-name" />
+        </label>
+        <label>
+          Email
+          <input v-model="form.email" name="add-user-email" type="email" />
+        </label>
+        <label>
+          Password
+          <input
+            v-model="form.password"
+            name="add-user-password"
+            type="password"
+            autocomplete="new-password"
+          />
+        </label>
+        <button type="submit" :disabled="form.submitting">Add user</button>
+      </form>
+      <p v-if="form.error" class="error">{{ form.error }}</p>
+      <p v-if="form.createdName">{{ form.createdName }} can now sign in.</p>
+    </section>
+  </main>
 </template>
+
+<style scoped>
+.invitations li,
+.joined-list-index li {
+  display: grid;
+  gap: var(--space-2);
+  padding: var(--space-2) 0;
+  border-bottom: 1px solid var(--color-border);
+}
+
+.joined-list-index li {
+  grid-template-columns: 1fr auto;
+  align-items: center;
+}
+
+.invitations li:last-child,
+.joined-list-index li:last-child {
+  border-bottom: none;
+}
+
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
+.actions button {
+  flex: 1;
+}
+</style>

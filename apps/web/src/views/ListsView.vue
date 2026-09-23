@@ -1,14 +1,13 @@
 <script setup lang="ts">
 import { onMounted, onUnmounted, ref } from "vue";
-import { useRouter } from "vue-router";
 import type { List } from "@shopping-list/api/domain";
+import AppBar from "../components/AppBar.vue";
 import { onSyncPass, runSyncPass } from "../connectivity";
 import { db } from "../db";
 import { createList } from "../lists";
-import { session, signOutAndRedirect } from "../session";
+import { session } from "../session";
 import { ignoreRejection, logRejection } from "../utils/fireAndForget";
 
-const router = useRouter();
 const lists = ref<List[]>([]);
 const name = ref("");
 const error = ref<string | null>(null);
@@ -36,10 +35,6 @@ async function onCreate() {
   await logRejection(loadLists(), "Loading the lists");
 }
 
-async function onSignOut() {
-  await signOutAndRedirect(router);
-}
-
 let stopSyncPass: (() => void) | null = null;
 
 onMounted(() => {
@@ -62,24 +57,52 @@ onUnmounted(() => {
 </script>
 
 <template>
-  <h1>Shopping Lists</h1>
-  <div v-if="session.user">
-    <p>Signed in as {{ session.user.name }}</p>
-    <RouterLink :to="{ name: 'settings' }">Settings</RouterLink>
-    <button type="button" @click="onSignOut">Sign out</button>
-  </div>
-  <p v-if="lists.length === 0">Your lists will appear here.</p>
-  <ul>
-    <li v-for="list in lists" :key="list.id">
-      <RouterLink :to="{ name: 'list', params: { listId: list.id } }">{{ list.name }}</RouterLink>
-    </li>
-  </ul>
-  <form @submit.prevent="onCreate">
-    <label>
-      List name
-      <input v-model="name" name="name" />
-    </label>
-    <button type="submit" :disabled="creating || !session.user">Create a List</button>
-  </form>
-  <p v-if="error">{{ error }}</p>
+  <AppBar title="Shopping Lists" settings />
+  <main class="page">
+    <p v-if="session.user" class="muted">Signed in as {{ session.user.name }}</p>
+    <section class="lists" aria-label="Your lists">
+      <p v-if="lists.length === 0" class="empty">Your lists will appear here.</p>
+      <ul class="list-index">
+        <li v-for="list in lists" :key="list.id">
+          <RouterLink :to="{ name: 'list', params: { listId: list.id } }">
+            {{ list.name }}
+          </RouterLink>
+        </li>
+      </ul>
+    </section>
+    <section class="new-list" aria-label="Create a list">
+      <h2>Create a list</h2>
+      <form @submit.prevent="onCreate">
+        <label>
+          List name
+          <input v-model="name" name="name" />
+        </label>
+        <button type="submit" :disabled="creating || !session.user">Create a List</button>
+      </form>
+      <p v-if="error" class="error">{{ error }}</p>
+    </section>
+  </main>
 </template>
+
+<style scoped>
+.list-index {
+  display: grid;
+  gap: var(--space-1);
+}
+
+.list-index li {
+  border-bottom: 1px solid var(--color-border);
+}
+
+.list-index li:last-child {
+  border-bottom: none;
+}
+
+.list-index a {
+  display: flex;
+  align-items: center;
+  min-height: var(--control-size);
+  font-weight: 600;
+  text-decoration: none;
+}
+</style>
