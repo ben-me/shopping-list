@@ -18,6 +18,29 @@ import { relations, sql } from "drizzle-orm";
  * single schema source.
  */
 
+// ─── Shared column builders ───────────────────────────────────────────────────
+
+/** Epoch-milliseconds default shared by every timestamp column. */
+const nowMs = sql`(cast(unixepoch('subsecond') * 1000 as integer))`;
+
+/** A `timestamp_ms` column — the mode better-auth stores every date in. */
+function timestamp(name: string) {
+  return integer(name, { mode: "timestamp_ms" });
+}
+
+/** `created_at`: set once, from the SQL-side clock. */
+function createdAt() {
+  return timestamp("created_at").default(nowMs).notNull();
+}
+
+/** `updated_at`: set on insert (optionally) and refreshed by drizzle on every update. */
+function updatedAt({ withDefault = false }: { withDefault?: boolean } = {}) {
+  const column = timestamp("updated_at");
+  return (withDefault ? column.default(nowMs) : column)
+    .$onUpdate(() => /* @__PURE__ */ new Date())
+    .notNull();
+}
+
 // ─── Auth tables (better-auth) ───────────────────────────────────────────────
 
 export const user = sqliteTable("user", {
@@ -30,13 +53,8 @@ export const user = sqliteTable("user", {
   banned: integer("banned", { mode: "boolean" }).default(false).notNull(),
   banReason: text("ban_reason"),
   banExpires: integer("ban_expires", { mode: "timestamp_ms" }),
-  createdAt: integer("created_at", { mode: "timestamp_ms" })
-    .default(sql`(cast(unixepoch('subsecond') * 1000 as integer))`)
-    .notNull(),
-  updatedAt: integer("updated_at", { mode: "timestamp_ms" })
-    .default(sql`(cast(unixepoch('subsecond') * 1000 as integer))`)
-    .$onUpdate(() => /* @__PURE__ */ new Date())
-    .notNull(),
+  createdAt: createdAt(),
+  updatedAt: updatedAt({ withDefault: true }),
 });
 
 export const session = sqliteTable(
@@ -45,12 +63,8 @@ export const session = sqliteTable(
     id: text("id").primaryKey(),
     expiresAt: integer("expires_at", { mode: "timestamp_ms" }).notNull(),
     token: text("token").notNull().unique(),
-    createdAt: integer("created_at", { mode: "timestamp_ms" })
-      .default(sql`(cast(unixepoch('subsecond') * 1000 as integer))`)
-      .notNull(),
-    updatedAt: integer("updated_at", { mode: "timestamp_ms" })
-      .$onUpdate(() => /* @__PURE__ */ new Date())
-      .notNull(),
+    createdAt: createdAt(),
+    updatedAt: updatedAt(),
     ipAddress: text("ip_address"),
     userAgent: text("user_agent"),
     userId: text("user_id")
@@ -83,12 +97,8 @@ export const account = sqliteTable(
     }),
     scope: text("scope"),
     password: text("password"),
-    createdAt: integer("created_at", { mode: "timestamp_ms" })
-      .default(sql`(cast(unixepoch('subsecond') * 1000 as integer))`)
-      .notNull(),
-    updatedAt: integer("updated_at", { mode: "timestamp_ms" })
-      .$onUpdate(() => /* @__PURE__ */ new Date())
-      .notNull(),
+    createdAt: createdAt(),
+    updatedAt: updatedAt(),
   },
   (table) => [
     uniqueIndex("account_issuer_accountId_uidx").on(table.issuer, table.accountId),
@@ -103,13 +113,8 @@ export const verification = sqliteTable(
     identifier: text("identifier").notNull(),
     value: text("value").notNull(),
     expiresAt: integer("expires_at", { mode: "timestamp_ms" }).notNull(),
-    createdAt: integer("created_at", { mode: "timestamp_ms" })
-      .default(sql`(cast(unixepoch('subsecond') * 1000 as integer))`)
-      .notNull(),
-    updatedAt: integer("updated_at", { mode: "timestamp_ms" })
-      .default(sql`(cast(unixepoch('subsecond') * 1000 as integer))`)
-      .$onUpdate(() => /* @__PURE__ */ new Date())
-      .notNull(),
+    createdAt: createdAt(),
+    updatedAt: updatedAt({ withDefault: true }),
   },
   (table) => [index("verification_identifier_idx").on(table.identifier)],
 );

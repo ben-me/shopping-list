@@ -1,3 +1,4 @@
+// fallow-ignore-file unused-file -- consumed by the `generate-pwa-assets` script (pwa-assets-generator), which discovers this config by convention
 import { defineConfig, minimal2023Preset as preset } from "@vite-pwa/assets-generator/config";
 
 // The source (public/favicon.svg) is full-bleed and its glyph sits inside

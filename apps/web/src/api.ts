@@ -2,7 +2,7 @@ import { ofetch, type FetchOptions } from "ofetch";
 
 type ApiErrorBody = { error?: { message?: string }; message?: string };
 
-export class ApiError extends Error {
+class ApiError extends Error {
   readonly status: number;
 
   constructor(status: number, message: string) {

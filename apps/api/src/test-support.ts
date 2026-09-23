@@ -33,7 +33,7 @@ export function uniq(prefix: string) {
 export const TEST_PASSWORD = "password123";
 
 let signupCounter = 0;
-export function uniqueEmail(prefix: string) {
+function uniqueEmail(prefix: string) {
   signupCounter += 1;
   return `${prefix}${signupCounter}@example.com`;
 }
@@ -113,7 +113,7 @@ async function provisionAndSignIn(app: TestApp, env: AuthEnv, emailPrefix: strin
   return signIn(app, env, email);
 }
 
-export async function signIn(app: TestApp, env: AuthEnv, email: string) {
+async function signIn(app: TestApp, env: AuthEnv, email: string) {
   const res = await app.request(
     "/api/auth/sign-in/email",
     {

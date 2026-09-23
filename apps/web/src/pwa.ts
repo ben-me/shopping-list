@@ -12,6 +12,7 @@ const startedUnderServiceWorker =
 let ready = false;
 
 /** True once the worker is active and the app shell can be served offline. */
+// fallow-ignore-next-line unused-export -- imported dynamically by e2e/pwa-offline.spec.ts via page.evaluate, which static analysis cannot see
 export function serviceWorkerReady(): boolean {
   return ready;
 }

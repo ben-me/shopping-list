@@ -16,7 +16,7 @@ export interface OutboxEntry {
   syncedAt: string | null;
 }
 
-export type OutboxWrite = Pick<OutboxEntry, "targetType" | "targetId" | "listId" | "operation">;
+type OutboxWrite = Pick<OutboxEntry, "targetType" | "targetId" | "listId" | "operation">;
 
 export type OutboxTransport = (entry: OutboxEntry) => Promise<void>;
 
