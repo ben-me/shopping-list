@@ -2,6 +2,8 @@ import { createApp } from "vue";
 import App from "./App.vue";
 import router from "./router";
 import { prepareServiceWorker } from "./pwa";
+import "./assets/reset.css";
+import "./assets/styles.css";
 
 const app = createApp(App);
 

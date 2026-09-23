@@ -1,0 +1,56 @@
+/*
+ * Design tokens and global base styles.
+ *
+ * This is the single source of truth for color and type. Raw color literals
+ * are only allowed here; everywhere else use the custom properties below
+ * (enforced by Stylelint, see stylelint.config.js).
+ *
+ * Type scale generated with the Utopia type calculator:
+ * https://utopia.fyi/type/calculator/?c=360,1240,16,18,1.2,1.25,6,2
+ * Config: viewports 360px -> 1240px, base 16px -> 18px,
+ * min scale 1.2, max scale 1.25, steps -1..3 (small to h1).
+ */
+
+:root {
+  /* Color */
+  --color-text: #111827;
+  --color-text-muted: #6b7280;
+  --color-background: #fff;
+  --color-surface: #f9fafb;
+  --color-border: #d1d5db;
+  --color-primary: #2563eb;
+  --color-primary-contrast: #fff;
+  --color-danger: #dc2626;
+  --color-success: #16a34a;
+  --color-neutral: #6b7280;
+  --color-shadow: rgb(0 0 0 / 15%);
+
+  /* Type scale (fluid, no media queries) */
+  --fs-small: clamp(13.333px, 0.8061rem + 0.1212vw, 14.4px);
+  --fs-body: clamp(16px, 0.9489rem + 0.2273vw, 18px);
+  --fs-h3: clamp(19.2px, 1.1156rem + 0.375vw, 22.5px);
+  --fs-h2: clamp(23.04px, 1.31rem + 0.5778vw, 28.125px);
+  --fs-h1: clamp(27.648px, 1.536rem + 0.8532vw, 35.156px);
+}
+
+body {
+  font-size: var(--fs-body);
+  color: var(--color-text);
+  background-color: var(--color-background);
+}
+
+h1 {
+  font-size: var(--fs-h1);
+}
+
+h2 {
+  font-size: var(--fs-h2);
+}
+
+h3 {
+  font-size: var(--fs-h3);
+}
+
+small {
+  font-size: var(--fs-small);
+}
