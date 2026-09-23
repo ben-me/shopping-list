@@ -68,8 +68,7 @@ export default defineConfig({
   },
   server: {
     host: true,
-    // Proxy /api to the API worker. Defaults to the dev worker on :8787; the
-    // e2e run points this at its own isolated API (see playwright.config.ts).
+    // e2e points this at its own API worker; the default is the dev worker.
     proxy: { "/api": process.env.API_PROXY_TARGET ?? "http://localhost:8787" },
   },
   test: {

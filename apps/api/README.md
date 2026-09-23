@@ -22,10 +22,9 @@ pnpm db:reset       # wipe the local (dev) D1
 
 ### E2E isolation
 
-The web e2e suite does **not** use the dev worker or the dev database. It
-starts its own worker on :8788 backed by a separate D1 store in
-`apps/api/.wrangler/e2e` (via `--persist-to`), and runs the vite dev server
-on :5174 pointed at it. The developer's dev stack (:5173 / :8787,
+`pnpm test:e2e` starts its own worker (:8788, D1 store in
+`apps/api/.wrangler/e2e` via `--persist-to`) and its own vite dev server
+(:5174 pointed at it). The dev stack (:5173 / :8787,
 `apps/api/.wrangler/state`) is never read, reset, or removed.
 
 ```sh

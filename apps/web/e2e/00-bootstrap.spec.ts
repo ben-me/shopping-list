@@ -8,10 +8,8 @@ import { ADMIN_EMAIL, ADMIN_PASSWORD, input, signInAsUser } from "./support";
  * rejected server-side and hidden in the UI. Every other account in the e2e
  * suite is provisioned through the admin route (see support.ts).
  *
- * This spec MUST run on an empty database and before every other spec: the
- * file-name `00-` prefix plus a single worker (playwright.config.ts) order
- * it first, and the webServer command resets the isolated e2e D1 store before
- * each run (never the developer's dev database).
+ * This spec MUST run first on an empty user table: the `00-` prefix plus a
+ * single worker order it first, and each run resets the isolated e2e store.
  */
 test("an empty database bootstraps the Admin, then sign-up closes for good", async ({
   page,
@@ -23,7 +21,7 @@ test("an empty database bootstraps the Admin, then sign-up closes for good", asy
     const { signUpOpen } = (await res.json()) as { signUpOpen: boolean };
     expect(
       signUpOpen,
-      "sign-up must be open (empty user table). The e2e run resets its own isolated D1 store: pnpm --filter @shopping-list/api db:reset:e2e",
+      "sign-up must be open: reset the e2e store with `pnpm --filter @shopping-list/api db:reset:e2e`",
     ).toBe(true);
   });
 
