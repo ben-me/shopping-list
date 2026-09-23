@@ -25,6 +25,7 @@ function post(path: string) {
     });
 }
 
+// fallow-ignore-next-line unused-export -- loaded dynamically by the component specs (vi.mock factory import), which static analysis cannot see
 export function makeAuthClientMock() {
   return {
     authClient: {

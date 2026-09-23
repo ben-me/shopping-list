@@ -1,0 +1,8 @@
+{
+  "$schema": "https://raw.githubusercontent.com/fallow-rs/fallow/main/schema.json",
+  // `postcss-html` is a required peer dependency of `stylelint-config-recommended-vue`
+  // and `stylelint-config-html` — the pair that lets stylelint parse `.vue`
+  // `<style>` blocks. It is declared explicitly so pnpm resolves that peer;
+  // nothing imports it directly, so fallow cannot observe the usage.
+  "ignoreDependencies": ["postcss-html"]
+}
