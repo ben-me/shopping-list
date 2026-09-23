@@ -1,5 +1,5 @@
 import { expect, test } from "@playwright/test";
-import { WEB_ORIGIN } from "./env";
+import { WEB_ORIGIN } from "../playwright.config";
 import { ADMIN_EMAIL, ADMIN_PASSWORD, input, signInAsUser } from "./support";
 
 /**

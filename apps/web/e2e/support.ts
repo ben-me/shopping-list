@@ -1,11 +1,11 @@
 import { randomUUID } from "node:crypto";
 import { expect, type APIRequestContext, type Page } from "@playwright/test";
-import { WEB_ORIGIN } from "./env";
+import { WEB_ORIGIN } from "../playwright.config";
 
 /**
- * Shared helpers for the e2e specs: the real provisioned flow against the dev
- * stack — provision a user through the admin route, sign them in, create a
- * List, add, tick, and remove Items.
+ * Shared helpers for the e2e specs: the real provisioned flow against the
+ * isolated e2e stack — provision a user through the admin route, sign them in,
+ * create a List, add, tick, and remove Items.
  *
  * Accounts are provisioned, not self-created (ADR 0003): the `00-bootstrap`
  * spec signs up once on the empty database — that first account becomes the
@@ -16,7 +16,7 @@ import { WEB_ORIGIN } from "./env";
 export const PASSWORD = "e2e-secret-123";
 
 /** The one account the bootstrap spec creates; provisioning uses its session. */
-/** The dev origin the browser talks to; better-auth CSRF-checks cookie POSTs against it. */
+/** The e2e origin the browser talks to; better-auth CSRF-checks cookie POSTs against it. */
 const TRUSTED_ORIGIN = WEB_ORIGIN;
 
 export const ADMIN_EMAIL = "admin@example.com";
@@ -43,7 +43,7 @@ export async function adminCookie(request: APIRequestContext): Promise<string> {
     data: {},
   });
   const res = await request.post("/api/auth/sign-in/email", {
-    // The dev browser origin: better-auth CSRF-checks cookie-bearing POSTs
+    // The e2e browser origin: better-auth CSRF-checks cookie-bearing POSTs
     // against trusted origins; sending it up front makes the check a no-op.
     headers: { origin: TRUSTED_ORIGIN },
     data: { email: ADMIN_EMAIL, password: ADMIN_PASSWORD },

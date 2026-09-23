@@ -5,6 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
+    "dev:e2e": "vite --port 5174 --strictPort",
     "build": "pnpm type-check && pnpm build-only",
     "preview": "vite preview",
     "test:unit": "vitest",

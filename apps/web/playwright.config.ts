@@ -1,6 +1,14 @@
 import process from "node:process";
 import { defineConfig, devices } from "@playwright/test";
-import { API_HEALTH, API_ORIGIN, WEB_ORIGIN, WEB_PORT } from "./e2e/env";
+
+/**
+ * The e2e stack runs on its own ports, separate from the developer's dev
+ * stack (:5173 / :8787), so a run never collides with whatever is already
+ * running. The ports themselves live in each package's `dev:e2e` script.
+ */
+export const WEB_ORIGIN = "http://localhost:5174";
+const API_ORIGIN = "http://localhost:8788";
+const API_HEALTH = `${API_ORIGIN}/health`;
 
 /**
  * E2E specs for the real user flow: a browser is driven against a stack the
@@ -19,8 +27,6 @@ export default defineConfig({
   retries: process.env.CI ? 2 : 0,
   /* One worker: the shared e2e database keeps the run deterministic. */
   workers: 1,
-  /* Remove the isolated e2e D1 store when the run ends. */
-  globalTeardown: "./e2e/global-teardown.ts",
   reporter: process.env.CI ? [["github"], ["html", { open: "never" }]] : "list",
   use: {
     baseURL: WEB_ORIGIN,
@@ -42,8 +48,8 @@ export default defineConfig({
       timeout: 120 * 1000,
     },
     {
-      command: `pnpm --filter @shopping-list/web run dev -- --port ${WEB_PORT} --strictPort`,
-      port: WEB_PORT,
+      command: "pnpm --filter @shopping-list/web run dev:e2e",
+      url: WEB_ORIGIN,
       // Point the vite dev proxy at this run's API, not the dev worker.
       env: { API_PROXY_TARGET: API_ORIGIN },
       timeout: 120 * 1000,
