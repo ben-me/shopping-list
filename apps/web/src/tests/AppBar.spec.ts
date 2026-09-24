@@ -8,6 +8,7 @@ vi.mock(
 import { flushPromises, mount } from "@vue/test-utils";
 import { createMemoryHistory, type RouteLocationRaw } from "vue-router";
 import AppBar from "../components/AppBar.vue";
+import { pendingInvitationCount } from "../pending-invitations";
 import { createAppRouter } from "../router";
 import { _resetSession, session, type SessionUser } from "../session";
 
@@ -30,6 +31,7 @@ async function mountBar(
 
 afterEach(() => {
   _resetSession();
+  pendingInvitationCount.value = 0;
 });
 
 describe("AppBar", () => {
@@ -54,6 +56,21 @@ describe("AppBar", () => {
     const bar = await mountBar({ title: "Shopping Lists", settings: true }, "/", user);
     expect(bar.find('a[href="/settings"]').text()).toBe("Settings");
     expect(bar.findAll("button").some((b) => b.text() === "Sign out")).toBe(true);
+  });
+
+  it("marks the Settings action with the pending-invitation count", async () => {
+    pendingInvitationCount.value = 2;
+    const bar = await mountBar({ title: "Shopping Lists", settings: true }, "/", user);
+    const settings = bar.find('a[href="/settings"]');
+    expect(settings.find(".invite-badge").text()).toBe("2");
+    // The screen reader hears the full state, not just the number.
+    expect(settings.text()).toContain("2 pending invitations");
+  });
+
+  it("leaves the Settings action unmarked when the inbox is empty", async () => {
+    pendingInvitationCount.value = 0;
+    const bar = await mountBar({ title: "Shopping Lists", settings: true }, "/", user);
+    expect(bar.find('a[href="/settings"] .invite-badge').exists()).toBe(false);
   });
 
   it("shows neither account action while signed out", async () => {

@@ -6,6 +6,7 @@ import AppBar from "../components/AppBar.vue";
 import { onSyncPass, runSyncPass } from "../connectivity";
 import { db } from "../db";
 import { acceptInvitation, declineInvitation, pendingInvitations } from "../invitations";
+import { pendingInvitationCount } from "../pending-invitations";
 import { session } from "../session";
 import { ignoreRejection, logRejection } from "../utils/fireAndForget";
 
@@ -21,8 +22,10 @@ const form = ref({
   createdName: null as string | null,
 });
 
+/** The inbox is the only place Invitations are seen; the badge reads the same count. */
 async function loadInvitations() {
   invitations.value = await pendingInvitations();
+  pendingInvitationCount.value = invitations.value.length;
 }
 
 /**

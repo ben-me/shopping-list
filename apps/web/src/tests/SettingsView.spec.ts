@@ -10,6 +10,7 @@ import { createMemoryHistory } from "vue-router";
 import type { List, PendingInvitation } from "@shopping-list/api/domain";
 import App from "../App.vue";
 import { db } from "../db";
+import { pendingInvitationCount } from "../pending-invitations";
 import { createAppRouter } from "../router";
 import { _resetSession, type SessionUser } from "../session";
 
@@ -53,6 +54,7 @@ function settle() {
 beforeEach(async () => {
   await db.lists.clear();
   await db.outbox.clear();
+  pendingInvitationCount.value = 0;
   _resetSession();
 });
 
@@ -218,6 +220,8 @@ describe("SettingsView", () => {
     expect(wrapper.text()).toContain("Ada invited you to Weekend shop");
     expect(wrapper.find('button[name="accept-invitation"]').exists()).toBe(true);
     expect(wrapper.find('button[name="decline-invitation"]').exists()).toBe(true);
+    // The Settings badge reads the same count as the inbox.
+    expect(pendingInvitationCount.value).toBe(1);
 
     // Accepting clears the inbox; Sync pulls the List in for the Lists home.
     await wrapper.find('button[name="accept-invitation"]').trigger("click");
@@ -226,6 +230,7 @@ describe("SettingsView", () => {
 
     expect(apiCalls).toContain("POST /api/invitations/inv-1/accept");
     expect(wrapper.text()).not.toContain("Ada invited you");
+    expect(pendingInvitationCount.value).toBe(0);
   });
 
   it("lets the invitee decline a pending invitation", async () => {
