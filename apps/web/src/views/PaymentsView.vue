@@ -5,6 +5,7 @@ import type { List, Payment } from "@shopping-list/api/domain";
 import ListScreen from "../components/ListScreen.vue";
 import PaymentRow from "../components/PaymentRow.vue";
 import { onSyncPass, runSyncPass } from "../connectivity";
+import { currentList, loadList } from "../current-list";
 import { db } from "../db";
 import { syncOutbox } from "../lists";
 import { memberIdsOf, syncMembershipsFromServer } from "../members";
@@ -15,7 +16,7 @@ import { ignoreRejection, logRejection } from "../utils/fireAndForget";
 
 const route = useRoute();
 const listId = computed(() => String(route.params.listId ?? ""));
-const list = ref<List | null>(null);
+const list = ref<List | null>(currentList(listId.value));
 const members = ref<string[]>([]);
 const payments = ref<Payment[]>([]);
 const paymentForm = ref({
@@ -63,8 +64,8 @@ const standingRows = computed(() => {
   }));
 });
 
-async function loadList() {
-  list.value = (await db.getList(listId.value)) ?? null;
+async function loadTheList() {
+  list.value = await loadList(db, listId.value);
   members.value = list.value ? await memberIdsOf(db, list.value) : [];
 }
 
@@ -111,14 +112,14 @@ async function onDeletePayment(payment: Payment) {
 let stopSyncPass: (() => void) | null = null;
 
 onMounted(() => {
-  logRejection(loadList(), "Loading the list");
+  logRejection(loadTheList(), "Loading the list");
   logRejection(loadPayments(), "Loading the payments");
   stopSyncPass = onSyncPass(async (db) => {
     await ignoreRejection(syncPaymentsFromServer(db, listId.value));
     // Members change only through the online invite flow; pull the server
     // truth so an accepted Invitation redivides the standing on every device.
     await ignoreRejection(syncMembershipsFromServer(db, listId.value));
-    await logRejection(loadList(), "Loading the list");
+    await logRejection(loadTheList(), "Loading the list");
     await logRejection(loadPayments(), "Loading the payments");
   });
   void ignoreRejection(runSyncPass(db));

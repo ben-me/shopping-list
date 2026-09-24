@@ -4,6 +4,7 @@ import { useRoute } from "vue-router";
 import type { Item, List } from "@shopping-list/api/domain";
 import ListScreen from "../components/ListScreen.vue";
 import { onSyncPass, runSyncPass } from "../connectivity";
+import { currentList, loadList } from "../current-list";
 import { db } from "../db";
 import { addItem, removeItem, setItemChecked, syncItemsFromServer } from "../items";
 import { syncOutbox } from "../lists";
@@ -11,15 +12,15 @@ import { ignoreRejection, logRejection } from "../utils/fireAndForget";
 
 const route = useRoute();
 const listId = computed(() => String(route.params.listId ?? ""));
-const list = ref<List | null>(null);
+const list = ref<List | null>(currentList(listId.value));
 const items = ref<Item[]>([]);
 const itemForm = ref({
   name: "",
   error: null as string | null,
 });
 
-async function loadList() {
-  list.value = (await db.getList(listId.value)) ?? null;
+async function loadTheList() {
+  list.value = await loadList(db, listId.value);
 }
 
 async function loadItems() {
@@ -54,11 +55,11 @@ async function onRemove(item: Item) {
 let stopSyncPass: (() => void) | null = null;
 
 onMounted(() => {
-  logRejection(loadList(), "Loading the list");
+  logRejection(loadTheList(), "Loading the list");
   logRejection(loadItems(), "Loading the items");
   stopSyncPass = onSyncPass(async (db) => {
     await ignoreRejection(syncItemsFromServer(db, listId.value));
-    await logRejection(loadList(), "Loading the list");
+    await logRejection(loadTheList(), "Loading the list");
     await logRejection(loadItems(), "Loading the items");
   });
   void ignoreRejection(runSyncPass(db));

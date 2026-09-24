@@ -9,6 +9,7 @@ import { flushPromises, mount } from "@vue/test-utils";
 import { createMemoryHistory } from "vue-router";
 import type { List } from "@shopping-list/api/domain";
 import { runSyncPass } from "../connectivity";
+import { forgetLists } from "../current-list";
 import App from "../App.vue";
 import { db } from "../db";
 import { createAppRouter } from "../router";
@@ -58,6 +59,13 @@ async function mountList() {
   return mount(App, { global: { plugins: [router] } });
 }
 
+async function mountItems() {
+  const router = createAppRouter(createMemoryHistory());
+  await router.push(`/list/${list.id}`);
+  await router.isReady();
+  return mount(App, { global: { plugins: [router] } });
+}
+
 async function mountPayments() {
   const router = createAppRouter(createMemoryHistory());
   await router.push(`/list/${list.id}/payments`);
@@ -84,6 +92,7 @@ beforeEach(async () => {
   await db.memberships.clear();
   await db.outbox.clear();
   await db.syncList(list);
+  forgetLists();
   _resetSession();
 });
 
@@ -92,6 +101,20 @@ afterEach(() => {
 });
 
 describe("PaymentsView", () => {
+  it("keeps the List's name painted when switching between Items and Payments", async () => {
+    stubRoutes(() => new Response(null, { status: 503 }));
+
+    const items = await mountItems();
+    await flushPromises();
+    expect(items.find("h1").text()).toBe("Household");
+    items.unmount();
+
+    // Mounting is enough: the name is already there, so the app bar does not
+    // flash an empty title while the Store read is in flight.
+    const payments = await mountPayments();
+    expect(payments.find("h1").text()).toBe("Household");
+  });
+
   it("hangs off the List's navigation rather than living under the Items", async () => {
     stubRoutes(() => new Response(null, { status: 503 }));
     const wrapper = await mountList();

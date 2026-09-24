@@ -9,6 +9,7 @@ import { flushPromises, mount } from "@vue/test-utils";
 import { createMemoryHistory } from "vue-router";
 import type { List, ListInvitation } from "@shopping-list/api/domain";
 import App from "../App.vue";
+import { forgetLists } from "../current-list";
 import { db } from "../db";
 import { createAppRouter } from "../router";
 import { _resetSession, type SessionUser } from "../session";
@@ -64,6 +65,7 @@ beforeEach(async () => {
   await db.memberships.clear();
   await db.outbox.clear();
   await db.syncList(list);
+  forgetLists();
   _resetSession();
 });
 

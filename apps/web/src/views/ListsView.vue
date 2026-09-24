@@ -3,6 +3,7 @@ import { onMounted, onUnmounted, ref } from "vue";
 import type { List } from "@shopping-list/api/domain";
 import AppBar from "../components/AppBar.vue";
 import { onSyncPass, runSyncPass } from "../connectivity";
+import { rememberLists } from "../current-list";
 import { db } from "../db";
 import { createList } from "../lists";
 import { session } from "../session";
@@ -15,6 +16,9 @@ const creating = ref(false);
 
 async function loadLists() {
   lists.value = await db.getLists();
+  // Hand the names to the List screens, which paint their app bar from there
+  // rather than flashing an empty title while the Store read is in flight.
+  rememberLists(lists.value);
 }
 
 async function onCreate() {
