@@ -164,75 +164,81 @@ onUnmounted(() => {
 .members-list {
   display: flex;
   margin-inline-start: auto;
-}
 
-.members-toggle {
-  anchor-name: --members;
-}
-
-/* Popovers render in the top layer, so they position against the viewport, not
-   the DOM parent. The panel drops below the button, right-aligned to the edge
-   so it cannot fall off a phone screen. */
-.members-dialog {
-  position: fixed;
-  position-anchor: --members;
-  inset: auto var(--space-4) auto auto;
-  top: anchor(--members bottom);
-  margin: 0.25rem 0 0;
-  width: max-content;
-  max-width: min(24rem, calc(100vw - 2rem));
-  padding: var(--space-4);
-  border: 1px solid var(--color-ink);
-  border-radius: var(--radius-lg);
-  box-shadow: var(--shadow-md);
-}
-
-.members-dialog:focus {
-  outline: none;
-}
-
-.members-panel {
-  display: grid;
-  gap: var(--space-3);
-  align-content: start;
-}
-
-/* Heading and Close share a line, so the heading never runs under the button
-   on a narrow screen the way an absolute Close made it. */
-.members-heading {
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: var(--space-3);
-}
-
-.member-names {
-  list-style: none;
-  padding: 0;
-  margin: 0;
-}
-
-.invitations {
-  list-style: none;
-  padding: 0;
-  margin: 0;
-
-  li {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: center;
-    gap: var(--space-2);
-    padding: var(--space-2) 0;
-    border-bottom: 1px solid var(--color-rule);
+  .members-toggle {
+    anchor-name: --members;
   }
-}
 
-.invitation-status {
-  color: var(--color-text-muted);
-  font-size: var(--fs-small);
-}
+  /* Popovers render in the top layer, so they position against the viewport,
+     not the DOM parent. The panel drops below the button, right-aligned to the
+     edge so it cannot fall off a phone screen. */
+  .members-dialog {
+    position: fixed;
+    position-anchor: --members;
+    inset: auto var(--space-4) auto auto;
+    top: anchor(--members bottom);
+    margin: 0.25rem 0 0;
+    width: max-content;
+    max-width: min(24rem, calc(100vw - 2rem));
+    padding: var(--space-4);
+    border: 1px solid var(--color-ink);
+    border-radius: var(--radius-lg);
+    box-shadow: var(--shadow-md);
 
-.invitations button {
-  margin-inline-start: auto;
+    &:focus {
+      outline: none;
+    }
+
+    .members-panel {
+      display: grid;
+      gap: var(--space-3);
+      align-content: start;
+
+      /* Heading and Close share a line, so the heading never runs under the
+         button on a narrow screen the way an absolute Close made it. */
+      .members-heading {
+        display: flex;
+        align-items: baseline;
+        justify-content: space-between;
+        gap: var(--space-3);
+      }
+
+      .member-names {
+        list-style: none;
+        padding: 0;
+        margin: 0;
+      }
+
+      .invitations {
+        list-style: none;
+        padding: 0;
+        margin: 0;
+
+        li {
+          display: flex;
+          flex-wrap: wrap;
+          align-items: center;
+          gap: var(--space-2);
+          padding: var(--space-2) 0;
+          border-bottom: 1px solid var(--color-rule);
+        }
+
+        .invitation-status {
+          color: var(--color-text-muted);
+          font-size: var(--fs-small);
+        }
+
+        button {
+          margin-inline-start: auto;
+        }
+      }
+
+      /* The lone Member action sits under the Member names, sized to the
+         surface. */
+      .leave-list {
+        justify-self: start;
+      }
+    }
+  }
 }
 </style>
