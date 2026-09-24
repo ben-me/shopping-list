@@ -108,15 +108,17 @@ onUnmounted(() => {
     </button>
     <dialog id="members-panel" popover class="members-dialog" aria-labelledby="members-heading">
       <div class="members-panel">
-        <button
-          type="button"
-          class="members-close"
-          popovertarget="members-panel"
-          popovertargetaction="close"
-        >
-          Close
-        </button>
-        <h2 id="members-heading">Members</h2>
+        <div class="members-heading">
+          <h2 id="members-heading">Members</h2>
+          <button
+            type="button"
+            class="members-close"
+            popovertarget="members-panel"
+            popovertargetaction="close"
+          >
+            Close
+          </button>
+        </div>
         <p v-if="!loaded" class="muted">Loading…</p>
         <ul v-else class="member-names">
           <li v-for="member in members" :key="member.memberId">
@@ -189,20 +191,19 @@ onUnmounted(() => {
   outline: none;
 }
 
-.members-close {
-  position: absolute;
-  top: var(--space-3);
-  right: var(--space-3);
-}
-
 .members-panel {
   display: grid;
   gap: var(--space-3);
   align-content: start;
 }
 
-.members-panel h2 {
-  padding-inline-end: var(--space-6);
+/* Heading and Close share a line, so the heading never runs under the button
+   on a narrow screen the way an absolute Close made it. */
+.members-heading {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-3);
 }
 
 .member-names {
