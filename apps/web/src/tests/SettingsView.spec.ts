@@ -128,7 +128,7 @@ describe("SettingsView", () => {
     expect(wrapper.find("section.invitations").exists()).toBe(false);
   });
 
-  it("shows the Lists the user joined and removes one they leave", async () => {
+  it("shows the Lists the user joined on the home; leaving lives in the List", async () => {
     const joinedList: List = {
       id: "list-2",
       ownerId: "user-2",
@@ -142,7 +142,6 @@ describe("SettingsView", () => {
       memberId: user.id,
       joinedAt: new Date().toISOString(),
     });
-    let leaveCalled = false;
     vi.stubGlobal(
       "fetch",
       vi.fn<typeof fetch>(async (input: string | URL | Request, init?: RequestInit) => {
@@ -156,30 +155,23 @@ describe("SettingsView", () => {
         if (url === "/api/lists" && !init?.method) {
           return jsonResponse({ lists: [joinedList] });
         }
-        if (url === `/api/lists/${joinedList.id}/membership` && init?.method === "DELETE") {
-          leaveCalled = true;
-          return jsonResponse({ ok: true });
-        }
         throw new Error(`No stub for ${url}`);
       }),
     );
     const router = createAppRouter(createMemoryHistory());
-    await router.push("/settings");
+    await router.push("/");
     await router.isReady();
 
     const wrapper = mount(App, { global: { plugins: [router] } });
     await flushPromises();
     await settle();
 
+    // Joined Lists are Lists first: they belong on the home, not in Settings.
     expect(wrapper.text()).toContain("Holiday shop");
 
-    await wrapper.find('button[name="leave-list"]').trigger("click");
+    await router.push("/settings");
     await flushPromises();
-    await settle();
-
-    expect(leaveCalled).toBe(true);
-    expect(wrapper.text()).not.toContain("Holiday shop");
-    expect(await db.getList(joinedList.id)).toBeUndefined();
+    expect(wrapper.text()).not.toContain("Lists you joined");
   });
 
   it("lets the invitee accept a pending invitation and clears the inbox", async () => {

@@ -1,18 +1,22 @@
 <script setup lang="ts">
 import { onMounted, onUnmounted, ref } from "vue";
+import { useRouter } from "vue-router";
 import type { ListInvitation, MemberDetails } from "@shopping-list/api/domain";
 import { onSyncPass } from "../connectivity";
+import { db } from "../db";
 import { createInvitation, listInvitations, revokeInvitation } from "../invitations";
-import { listMembers } from "../members";
+import { leaveList, listMembers } from "../members";
 import { session } from "../session";
 import { ignoreRejection, logRejection } from "../utils/fireAndForget";
 
 const props = defineProps<{ listId: string }>();
 
+const router = useRouter();
 const members = ref<MemberDetails[]>([]);
 const invitations = ref<ListInvitation[]>([]);
 const error = ref<string | null>(null);
 const loaded = ref(false);
+const leavePending = ref(false);
 const inviteForm = ref({
   email: "",
   submitting: false,
@@ -56,6 +60,26 @@ async function onInvite() {
 async function onRevoke(invitation: ListInvitation) {
   await logRejection(revokeInvitation(props.listId, invitation.id), "Revoking the invitation");
   await logRejection(loadInvitations(), "Loading the invitations");
+}
+
+/**
+ * A Member departs (ADR 0003), online-only like the invite flow. The server
+ * drops the Membership first, then the local List goes; the Lists home re-reads
+ * the Store on navigation, so the left List is gone from there too.
+ */
+async function onLeave() {
+  error.value = null;
+  leavePending.value = true;
+  try {
+    await leaveList(db, props.listId);
+  } catch (err) {
+    error.value = err instanceof Error ? err.message : "Could not leave the list";
+    return;
+  } finally {
+    leavePending.value = false;
+  }
+  // The List screen itself is gone now; end on the Lists home.
+  await router.push({ name: "lists" });
 }
 
 let stopSyncPass: (() => void) | null = null;
@@ -153,6 +177,17 @@ onUnmounted(() => {
             </label>
             <button type="submit" :disabled="inviteForm.submitting">Invite a member</button>
           </form>
+        </template>
+        <template v-else>
+          <button
+            type="button"
+            class="danger leave-list"
+            name="leave-list"
+            :disabled="leavePending"
+            @click="onLeave"
+          >
+            Leave this list
+          </button>
         </template>
         <p v-if="error" class="error">{{ error }}</p>
       </div>

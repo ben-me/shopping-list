@@ -1,20 +1,16 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref } from "vue";
-import type { List, PendingInvitation } from "@shopping-list/api/domain";
+import type { PendingInvitation } from "@shopping-list/api/domain";
 import { apiFetch } from "../api";
 import AppBar from "../components/AppBar.vue";
 import { onSyncPass, runSyncPass } from "../connectivity";
 import { db } from "../db";
 import { acceptInvitation, declineInvitation, pendingInvitations } from "../invitations";
-import { leaveList } from "../members";
 import { session } from "../session";
 import { ignoreRejection, logRejection } from "../utils/fireAndForget";
 
 const invitations = ref<PendingInvitation[]>([]);
 const inviteError = ref<string | null>(null);
-const joinedLists = ref<List[]>([]);
-const leavePending = ref<string | null>(null);
-const leaveError = ref<string | null>(null);
 const isAdmin = computed(() => session.user?.role === "admin");
 const form = ref({
   name: "",
@@ -27,27 +23,6 @@ const form = ref({
 
 async function loadInvitations() {
   invitations.value = await pendingInvitations();
-}
-
-/** Lists the caller joined as a Member — their own Lists never appear here. */
-async function loadJoinedLists() {
-  const user = session.user;
-  if (!user) {
-    joinedLists.value = [];
-    return;
-  }
-  const localLists = await db.getLists();
-  const joined: List[] = [];
-  for (const list of localLists) {
-    if (list.ownerId === user.id) {
-      continue;
-    }
-    const memberships = await db.getMemberships(list.id);
-    if (memberships.some((membership) => membership.memberId === user.id)) {
-      joined.push(list);
-    }
-  }
-  joinedLists.value = joined;
 }
 
 /**
@@ -72,25 +47,6 @@ async function onDecline(invitation: PendingInvitation) {
   inviteError.value = null;
   await logRejection(declineInvitation(invitation.id), "Declining the invitation");
   await logRejection(loadInvitations(), "Loading the invitations");
-}
-
-/**
- * Online-only, like accepting: the server drops the Membership first, then
- * the local List goes. The Lists home re-reads the Store on navigation, so
- * the left List is gone from there too.
- */
-async function onLeave(list: List) {
-  leaveError.value = null;
-  leavePending.value = list.id;
-  try {
-    await leaveList(db, list.id);
-  } catch (err) {
-    leaveError.value = err instanceof Error ? err.message : "Could not leave the list";
-    return;
-  } finally {
-    leavePending.value = null;
-  }
-  await logRejection(loadJoinedLists(), "Loading the joined lists");
 }
 
 /**
@@ -127,13 +83,11 @@ let stopSyncPass: (() => void) | null = null;
 
 async function reloadAll() {
   await ignoreRejection(loadInvitations());
-  await logRejection(loadJoinedLists(), "Loading the joined lists");
 }
 
 onMounted(() => {
   // Paint the local state right away, then reconcile with the server so the
-  // joined Lists are fresh before they are offered for leaving.
-  void logRejection(loadJoinedLists(), "Loading the joined lists");
+  // inbox is fresh before it is offered for accepting or declining.
   ignoreRejection(loadInvitations());
   stopSyncPass = onSyncPass(reloadAll);
   void ignoreRejection(runSyncPass(db));
@@ -171,25 +125,6 @@ onUnmounted(() => {
       </ul>
       <p v-if="inviteError" class="error">{{ inviteError }}</p>
     </section>
-    <section class="joined-lists" aria-label="Lists you joined">
-      <h2>Lists you joined</h2>
-      <p v-if="joinedLists.length === 0" class="empty">You haven't joined any lists yet.</p>
-      <ul class="joined-list-index">
-        <li v-for="list in joinedLists" :key="list.id">
-          <span>{{ list.name }}</span>
-          <button
-            type="button"
-            class="danger"
-            name="leave-list"
-            :disabled="leavePending === list.id"
-            @click="onLeave(list)"
-          >
-            Leave
-          </button>
-        </li>
-      </ul>
-      <p v-if="leaveError" class="error">{{ leaveError }}</p>
-    </section>
     <section v-if="isAdmin" class="add-user" aria-label="Add a user">
       <h2>Add a user</h2>
       <p>Give a new household member their name, email, and password.</p>
@@ -220,21 +155,14 @@ onUnmounted(() => {
 </template>
 
 <style scoped>
-.invitations li,
-.joined-list-index li {
+.invitations li {
   display: grid;
   gap: var(--space-2);
   padding-block: var(--space-3);
   border-bottom: 1px solid var(--color-rule);
 }
 
-.joined-list-index li {
-  grid-template-columns: 1fr auto;
-  align-items: center;
-}
-
-.invitations li:last-child,
-.joined-list-index li:last-child {
+.invitations li:last-child {
   border-bottom: none;
 }
 
