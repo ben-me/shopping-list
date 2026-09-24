@@ -12,6 +12,7 @@ const props = defineProps<{ listId: string }>();
 const members = ref<MemberDetails[]>([]);
 const invitations = ref<ListInvitation[]>([]);
 const error = ref<string | null>(null);
+const loaded = ref(false);
 const inviteForm = ref({
   email: "",
   submitting: false,
@@ -29,6 +30,12 @@ async function loadMembers() {
 
 async function loadInvitations() {
   invitations.value = await listInvitations(props.listId);
+}
+
+async function loadPanel() {
+  await logRejection(loadMembers(), "Loading the members");
+  await logRejection(loadInvitations(), "Loading the invitations");
+  loaded.value = true;
 }
 
 async function onInvite() {
@@ -53,13 +60,30 @@ async function onRevoke(invitation: ListInvitation) {
 
 let stopSyncPass: (() => void) | null = null;
 
+const opened = ref(false);
+
+/**
+ * Members and Invitations are server-only, and a closed popover shows
+ * nothing — so the first read waits for the open. Reading on mount would cost
+ * every List screen two Members requests, because the screen starts a Sync
+ * pass right after mounting and that pass refreshes an open panel again.
+ */
+function onOpen() {
+  if (opened.value) {
+    return;
+  }
+  opened.value = true;
+  void loadPanel();
+}
+
 onMounted(() => {
-  void logRejection(loadMembers(), "Loading the members");
-  void logRejection(loadInvitations(), "Loading the invitations");
   stopSyncPass = onSyncPass(async () => {
-    // A Sync pass may have pulled a Membership the server created since this
-    // component mounted (an accepted Invitation elsewhere); re-read so the
-    // access list is never stale.
+    if (!opened.value) {
+      return;
+    }
+    // A Sync pass may have pulled a Membership the server created since the
+    // panel opened (an accepted Invitation elsewhere); re-read so the access
+    // list is never stale.
     await ignoreRejection(loadMembers());
     await ignoreRejection(loadInvitations());
   });
@@ -78,6 +102,7 @@ onUnmounted(() => {
       class="tab members-toggle"
       aria-haspopup="dialog"
       popovertarget="members-panel"
+      @click="onOpen"
     >
       Members
     </button>
@@ -92,7 +117,8 @@ onUnmounted(() => {
           Close
         </button>
         <h2 id="members-heading">Members</h2>
-        <ul class="member-names">
+        <p v-if="!loaded" class="muted">Loading…</p>
+        <ul v-else class="member-names">
           <li v-for="member in members" :key="member.memberId">
             {{ member.memberId === session.user?.id ? `${member.name} (you)` : member.name }}
           </li>

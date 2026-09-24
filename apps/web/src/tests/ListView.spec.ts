@@ -5,7 +5,7 @@ vi.mock(
   async () => await import("./mocks/auth-client").then((m) => m.makeAuthClientMock()),
 );
 
-import { flushPromises, mount } from "@vue/test-utils";
+import { flushPromises, mount, type VueWrapper } from "@vue/test-utils";
 import { createMemoryHistory } from "vue-router";
 import type { List, ListInvitation } from "@shopping-list/api/domain";
 import App from "../App.vue";
@@ -49,6 +49,12 @@ function stubRoutes(handler?: (url: string, init?: RequestInit) => Response) {
 
 function settle() {
   return new Promise((resolve) => setTimeout(resolve, 25));
+}
+
+/** The Members panel reads the server only once it is open. */
+async function openMembers(wrapper: VueWrapper) {
+  await wrapper.find("button.members-toggle").trigger("click");
+  await flushPromises();
 }
 
 async function mountList() {
@@ -255,6 +261,7 @@ describe("ListView", () => {
 
     const wrapper = await mountList();
     await flushPromises();
+    await openMembers(wrapper);
     await settle();
 
     // A fresh List has no invitations, and the Owner sees the invite form.
@@ -309,6 +316,7 @@ describe("ListView", () => {
 
     const wrapper = await mountList();
     await flushPromises();
+    await openMembers(wrapper);
     await settle();
 
     expect(wrapper.text()).toContain("Other Owner");

@@ -56,8 +56,10 @@ afterEach(() => {
   _resetSession();
 });
 
+/** The panel reads the server only once it is opened. */
 async function mountList() {
   const wrapper = mount(MembersList, { props: { listId } });
+  await wrapper.find("button.members-toggle").trigger("click");
   await flushPromises();
   return wrapper;
 }
