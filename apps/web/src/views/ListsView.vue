@@ -1,14 +1,14 @@
 <script setup lang="ts">
 import { onMounted, onUnmounted, ref } from "vue";
-import { useRouter } from "vue-router";
 import type { List } from "@shopping-list/api/domain";
+import AppBar from "../components/AppBar.vue";
 import { onSyncPass, runSyncPass } from "../connectivity";
+import { rememberLists } from "../current-list";
 import { db } from "../db";
 import { createList } from "../lists";
-import { session, signOutAndRedirect } from "../session";
+import { session } from "../session";
 import { ignoreRejection, logRejection } from "../utils/fireAndForget";
 
-const router = useRouter();
 const lists = ref<List[]>([]);
 const name = ref("");
 const error = ref<string | null>(null);
@@ -16,6 +16,9 @@ const creating = ref(false);
 
 async function loadLists() {
   lists.value = await db.getLists();
+  // Hand the names to the List screens, which paint their app bar from there
+  // rather than flashing an empty title while the Store read is in flight.
+  rememberLists(lists.value);
 }
 
 async function onCreate() {
@@ -34,10 +37,6 @@ async function onCreate() {
   }
   name.value = "";
   await logRejection(loadLists(), "Loading the lists");
-}
-
-async function onSignOut() {
-  await signOutAndRedirect(router);
 }
 
 let stopSyncPass: (() => void) | null = null;
@@ -62,24 +61,53 @@ onUnmounted(() => {
 </script>
 
 <template>
-  <h1>Shopping Lists</h1>
-  <div v-if="session.user">
-    <p>Signed in as {{ session.user.name }}</p>
-    <RouterLink :to="{ name: 'settings' }">Settings</RouterLink>
-    <button type="button" @click="onSignOut">Sign out</button>
-  </div>
-  <p v-if="lists.length === 0">Your lists will appear here.</p>
-  <ul>
-    <li v-for="list in lists" :key="list.id">
-      <RouterLink :to="{ name: 'list', params: { listId: list.id } }">{{ list.name }}</RouterLink>
-    </li>
-  </ul>
-  <form @submit.prevent="onCreate">
-    <label>
-      List name
-      <input v-model="name" name="name" />
-    </label>
-    <button type="submit" :disabled="creating || !session.user">Create a List</button>
-  </form>
-  <p v-if="error">{{ error }}</p>
+  <AppBar title="Shopping Lists" settings />
+  <main class="page">
+    <p v-if="session.user" class="muted">Signed in as {{ session.user.name }}</p>
+    <section class="lists" aria-label="Your lists">
+      <p v-if="lists.length === 0" class="empty">No lists yet. Create the first one below.</p>
+      <ul v-else class="rows list-index">
+        <li v-for="list in lists" :key="list.id">
+          <RouterLink :to="{ name: 'list', params: { listId: list.id } }">
+            <span>{{ list.name }}</span>
+            <span class="chevron" aria-hidden="true">›</span>
+          </RouterLink>
+        </li>
+      </ul>
+    </section>
+    <section class="new-list" aria-label="Create a list">
+      <h2>Create a list</h2>
+      <form @submit.prevent="onCreate">
+        <label>
+          List name
+          <input v-model="name" name="name" />
+        </label>
+        <button type="submit" :disabled="creating || !session.user">Create list</button>
+      </form>
+      <p v-if="error" class="error">{{ error }}</p>
+    </section>
+  </main>
 </template>
+
+<style scoped>
+.list-index > li {
+  padding-block: 0;
+}
+
+.list-index a {
+  display: flex;
+  flex: 1;
+  align-items: center;
+  gap: var(--space-3);
+  min-height: 3.25rem;
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.chevron {
+  margin-inline-start: auto;
+  color: var(--color-ink-muted);
+  font-size: 1.25rem;
+  line-height: 1;
+}
+</style>

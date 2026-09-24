@@ -59,7 +59,7 @@ test("an offline write is queued locally and syncs when the connection returns",
   await test.step("go offline and add an Item — the edit is never blocked", async () => {
     await page.context().setOffline(true);
     await input(page, "item").fill("Matches");
-    await page.getByRole("button", { name: "Add an Item" }).click();
+    await page.getByRole("button", { name: "Add" }).click();
     await expect(itemRow(page, "Matches")).toBeVisible();
 
     // The write sits in the local outbox, waiting for a connection.

@@ -10,6 +10,7 @@ import { createMemoryHistory } from "vue-router";
 import type { List, PendingInvitation } from "@shopping-list/api/domain";
 import App from "../App.vue";
 import { db } from "../db";
+import { pendingInvitationCount } from "../pending-invitations";
 import { createAppRouter } from "../router";
 import { _resetSession, type SessionUser } from "../session";
 
@@ -53,6 +54,7 @@ function settle() {
 beforeEach(async () => {
   await db.lists.clear();
   await db.outbox.clear();
+  pendingInvitationCount.value = 0;
   _resetSession();
 });
 
@@ -128,7 +130,7 @@ describe("SettingsView", () => {
     expect(wrapper.find("section.invitations").exists()).toBe(false);
   });
 
-  it("shows the Lists the user joined and removes one they leave", async () => {
+  it("shows the Lists the user joined on the home; leaving lives in the List", async () => {
     const joinedList: List = {
       id: "list-2",
       ownerId: "user-2",
@@ -142,7 +144,6 @@ describe("SettingsView", () => {
       memberId: user.id,
       joinedAt: new Date().toISOString(),
     });
-    let leaveCalled = false;
     vi.stubGlobal(
       "fetch",
       vi.fn<typeof fetch>(async (input: string | URL | Request, init?: RequestInit) => {
@@ -156,30 +157,23 @@ describe("SettingsView", () => {
         if (url === "/api/lists" && !init?.method) {
           return jsonResponse({ lists: [joinedList] });
         }
-        if (url === `/api/lists/${joinedList.id}/membership` && init?.method === "DELETE") {
-          leaveCalled = true;
-          return jsonResponse({ ok: true });
-        }
         throw new Error(`No stub for ${url}`);
       }),
     );
     const router = createAppRouter(createMemoryHistory());
-    await router.push("/settings");
+    await router.push("/");
     await router.isReady();
 
     const wrapper = mount(App, { global: { plugins: [router] } });
     await flushPromises();
     await settle();
 
+    // Joined Lists are Lists first: they belong on the home, not in Settings.
     expect(wrapper.text()).toContain("Holiday shop");
 
-    await wrapper.find('button[name="leave-list"]').trigger("click");
+    await router.push("/settings");
     await flushPromises();
-    await settle();
-
-    expect(leaveCalled).toBe(true);
-    expect(wrapper.text()).not.toContain("Holiday shop");
-    expect(await db.getList(joinedList.id)).toBeUndefined();
+    expect(wrapper.text()).not.toContain("Lists you joined");
   });
 
   it("lets the invitee accept a pending invitation and clears the inbox", async () => {
@@ -226,6 +220,8 @@ describe("SettingsView", () => {
     expect(wrapper.text()).toContain("Ada invited you to Weekend shop");
     expect(wrapper.find('button[name="accept-invitation"]').exists()).toBe(true);
     expect(wrapper.find('button[name="decline-invitation"]').exists()).toBe(true);
+    // The Settings badge reads the same count as the inbox.
+    expect(pendingInvitationCount.value).toBe(1);
 
     // Accepting clears the inbox; Sync pulls the List in for the Lists home.
     await wrapper.find('button[name="accept-invitation"]').trigger("click");
@@ -234,6 +230,7 @@ describe("SettingsView", () => {
 
     expect(apiCalls).toContain("POST /api/invitations/inv-1/accept");
     expect(wrapper.text()).not.toContain("Ada invited you");
+    expect(pendingInvitationCount.value).toBe(0);
   });
 
   it("lets the invitee decline a pending invitation", async () => {

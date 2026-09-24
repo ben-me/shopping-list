@@ -21,6 +21,7 @@
     "lint:fix": "oxlint --fix"
   },
   "dependencies": {
+    "@fontsource-variable/archivo": "^5.3.0",
     "@shopping-list/api": "workspace:*",
     "better-auth": "catalog:",
     "dexie": "^4.4.5",

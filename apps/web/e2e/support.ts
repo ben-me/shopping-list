@@ -72,7 +72,12 @@ export async function signInAsUser(page: Page, email: string, password: string =
   await page.goto("/");
   await input(page, "email").fill(email);
   await input(page, "password").fill(password);
+  // Wait for the session cookie to be set before the caller navigates on.
+  const signedIn = page.waitForResponse((response) =>
+    response.url().includes("/api/auth/sign-in/email"),
+  );
   await page.getByRole("button", { name: "Sign in" }).click();
+  await signedIn;
 }
 
 /** Provision an account and sign it in through the real sign-in form. */
@@ -83,15 +88,26 @@ export async function signUp(page: Page, name: string, request: APIRequestContex
 }
 
 export async function signOut(page: Page) {
+  // Wait for sign-out to reach the server before navigating away, or the
+  // in-flight request can race the next sign-in and drop the new session.
+  const signedOut = page.waitForResponse((response) =>
+    response.url().includes("/api/auth/sign-out"),
+  );
   await page.getByRole("button", { name: "Sign out" }).click();
+  await signedOut;
   await expect(page.getByRole("heading", { name: "Sign in" })).toBeVisible();
 }
 
 export async function createList(page: Page, name: string) {
   await input(page, "name").fill(name);
-  await page.getByRole("button", { name: "Create a List" }).click();
+  await page.getByRole("button", { name: "Create list" }).click();
   await page.getByRole("link", { name }).click();
   await expect(page.getByRole("heading", { name })).toBeVisible();
+}
+
+/** The Members panel is a popover: it must be opened before its controls are used. */
+export async function openMembers(page: Page) {
+  await page.getByRole("button", { name: "Members" }).click();
 }
 
 export function itemRow(page: Page, name: string) {
@@ -104,7 +120,7 @@ export function paymentRow(page: Page, amount: string) {
 
 export async function addItem(page: Page, name: string) {
   await input(page, "item").fill(name);
-  await page.getByRole("button", { name: "Add an Item" }).click();
+  await page.getByRole("button", { name: "Add" }).click();
   await expect(itemRow(page, name)).toBeVisible();
 }
 

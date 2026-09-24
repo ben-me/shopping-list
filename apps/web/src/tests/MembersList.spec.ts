@@ -1,8 +1,10 @@
 import "fake-indexeddb/auto";
 
 import { flushPromises, mount } from "@vue/test-utils";
+import { createMemoryHistory, createRouter } from "vue-router";
 import type { ListInvitation, MemberDetails } from "@shopping-list/api/domain";
 import MembersList from "../components/MembersList.vue";
+import { db } from "../db";
 import { _resetSession, session, type SessionUser } from "../session";
 
 const user: SessionUser = { id: "user-1", name: "Test User", email: "[EMAIL]" };
@@ -12,6 +14,20 @@ const members: MemberDetails[] = [
   { memberId: user.id, name: "Test User", joinedAt: "2026-01-01T00:00:00.000Z" },
   { memberId: "user-2", name: "Ada", joinedAt: "2026-01-02T00:00:00.000Z" },
 ];
+
+/** The Owner first — the server lists them first, and the panel reads that. */
+const ownerFirstMembers: MemberDetails[] = [
+  { memberId: "user-2", name: "Ada", joinedAt: "2026-01-01T00:00:00.000Z" },
+  { memberId: user.id, name: "Test User", joinedAt: "2026-01-02T00:00:00.000Z" },
+];
+
+/** A bare router with only the route the panel navigates to after leaving. */
+function makeRouter() {
+  return createRouter({
+    history: createMemoryHistory(),
+    routes: [{ path: "/", name: "lists", component: { template: "<div />" } }],
+  });
+}
 
 function jsonResponse(body: unknown, status = 200): Response {
   return new Response(JSON.stringify(body), {
@@ -46,9 +62,11 @@ function settle() {
   return new Promise((resolve) => setTimeout(resolve, 25));
 }
 
-beforeEach(() => {
+beforeEach(async () => {
   _resetSession();
   session.user = user;
+  await db.lists.clear();
+  await db.memberships.clear();
 });
 
 afterEach(() => {
@@ -56,8 +74,11 @@ afterEach(() => {
   _resetSession();
 });
 
+/** The panel reads the server only once it is opened. */
 async function mountList() {
-  const wrapper = mount(MembersList, { props: { listId } });
+  const router = makeRouter();
+  const wrapper = mount(MembersList, { props: { listId }, global: { plugins: [router] } });
+  await wrapper.find("button.members-toggle").trigger("click");
   await flushPromises();
   return wrapper;
 }
@@ -132,12 +153,7 @@ describe("MembersList", () => {
   it("hides the invite controls from a Member", async () => {
     stubRoutes((url) => {
       if (url === `/api/lists/${listId}/members`) {
-        return jsonResponse({
-          members: [
-            { memberId: "user-2", name: "Ada", joinedAt: "2026-01-01T00:00:00.000Z" },
-            { memberId: user.id, name: "Test User", joinedAt: "2026-01-02T00:00:00.000Z" },
-          ],
-        });
+        return jsonResponse({ members: ownerFirstMembers });
       }
       if (url === `/api/lists/${listId}/invitations`) {
         return jsonResponse({ invitations: [] });
@@ -152,6 +168,41 @@ describe("MembersList", () => {
     expect(wrapper.text()).toContain("Test User (you)");
     expect(wrapper.find('input[name="invite-email"]').exists()).toBe(false);
     expect(wrapper.find("form.invite-form").exists()).toBe(false);
+    expect(wrapper.find('button[name="leave-list"]').exists()).toBe(true);
+  });
+
+  it("lets a Member leave the List from the panel", async () => {
+    await db.syncList({
+      id: listId,
+      ownerId: "user-2",
+      name: "Holiday shop",
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    });
+    let left = false;
+    stubRoutes((url, init) => {
+      if (url === `/api/lists/${listId}/members`) {
+        return jsonResponse({ members: ownerFirstMembers });
+      }
+      if (url === `/api/lists/${listId}/invitations`) {
+        return jsonResponse({ invitations: [] });
+      }
+      if (url === `/api/lists/${listId}/membership` && init?.method === "DELETE") {
+        left = true;
+        return jsonResponse({ ok: true });
+      }
+      throw new Error(`No stub for ${url}`);
+    });
+
+    const wrapper = await mountList();
+    await settle();
+
+    await wrapper.find('button[name="leave-list"]').trigger("click");
+    await flushPromises();
+    await settle();
+
+    expect(left).toBe(true);
+    expect(await db.getList(listId)).toBeUndefined();
   });
 
   it("exposes the members panel as a popover the toggle opens", async () => {

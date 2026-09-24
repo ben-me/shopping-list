@@ -73,7 +73,7 @@ describe("SignInView", () => {
     expect(router.currentRoute.value.name).toBe("lists");
     expect(wrapper.text()).toContain("Shopping Lists");
     expect(wrapper.text()).toContain("Signed in as Test User");
-    expect(wrapper.text()).toContain("Your lists will appear here.");
+    expect(wrapper.text()).toContain("No lists yet. Create the first one below.");
   });
 
   it("does not offer sign-up once the bootstrap Admin exists", async () => {
