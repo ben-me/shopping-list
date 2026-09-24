@@ -222,7 +222,27 @@ describe("PaymentsView", () => {
   });
 
   it("shows the running total and each Member's share and Owed under the equal Split", async () => {
-    stubRoutes(() => new Response(null, { status: 503 }));
+    stubRoutes((url) => {
+      if (url.endsWith("/api/lists")) {
+        return jsonResponse({ lists: [list] });
+      }
+      // The queued Payment writes drain through the outbox before the pull.
+      if (url.startsWith(`/api/lists/${list.id}/payments/`)) {
+        return jsonResponse({});
+      }
+      if (url.endsWith(`/api/lists/${list.id}/payments`)) {
+        return jsonResponse({ payments: [] });
+      }
+      if (url.endsWith(`/api/lists/${list.id}/members`)) {
+        return jsonResponse({
+          members: [
+            { memberId: user.id, name: "Test User", joinedAt: list.createdAt },
+            { memberId: "user-2", name: "Two", joinedAt: "2026-01-01T00:00:00.000Z" },
+          ],
+        });
+      }
+      return new Response(null, { status: 503 });
+    });
     await db.syncMembership({
       listId: list.id,
       memberId: "user-2",
@@ -249,6 +269,9 @@ describe("PaymentsView", () => {
 
     const wrapper = await mountPayments();
     await flushPromises();
+    // Names are server-only: the mount's Sync pass is what labels the rows.
+    await runSyncPass(db);
+    await flushPromises();
 
     // Running total and the equal share, exactly as computeOwed figures them.
     expect(wrapper.find(".total-paid").text()).toContain("4,00");
@@ -262,10 +285,29 @@ describe("PaymentsView", () => {
     expect(you.classes()).toContain("owed"); // green: the group owes them
 
     const other = rows[1]!;
-    expect(other.text()).toContain("user-2");
+    // Labelled with the name from the server, never the raw Member id.
+    expect(other.text()).toContain("Two");
+    expect(other.text()).not.toContain("user-2");
     expect(other.text()).toContain("share 2,00");
     expect(other.text()).toContain("owes 1,00");
     expect(other.classes()).toContain("owes"); // red: they owe the group
+  });
+
+  it("labels a Member it cannot name by role, not by their raw id", async () => {
+    stubRoutes(() => new Response(null, { status: 503 }));
+    await db.syncMembership({
+      listId: list.id,
+      memberId: "user-2",
+      joinedAt: "2026-01-01T00:00:00.000Z",
+    });
+
+    const wrapper = await mountPayments();
+    await flushPromises();
+    await settle();
+
+    const other = wrapper.findAll(".standing-member")[1]!;
+    expect(other.text()).toContain("Member");
+    expect(other.text()).not.toContain("user-2");
   });
 
   it("shows only the running total on a lone-Member List — never a Share or an Owed figure", async () => {

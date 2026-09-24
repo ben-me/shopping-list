@@ -11,6 +11,7 @@ import { syncOutbox } from "../lists";
 import { memberIdsOf, syncMembershipsFromServer } from "../members";
 import { addPayment, removePayment, syncPaymentsFromServer, updatePayment } from "../payments";
 import { session } from "../session";
+import type { ShoppingDb } from "../store";
 import { computeOwed } from "../utils/computeOwed";
 import { ignoreRejection, logRejection } from "../utils/fireAndForget";
 
@@ -19,6 +20,7 @@ const listId = computed(() => String(route.params.listId ?? ""));
 const list = ref<List | null>(currentList(listId.value));
 const members = ref<string[]>([]);
 const payments = ref<Payment[]>([]);
+const memberNames = ref<Record<string, string>>({});
 const paymentForm = ref({
   amount: "",
   date: new Date().toISOString().slice(0, 10),
@@ -29,14 +31,14 @@ const euroFormat = new Intl.NumberFormat("de-DE", { style: "currency", currency:
 const formatEuro = (cents: number) => euroFormat.format(cents / 100);
 const isoFromDate = (date: string) => new Date(`${date}T12:00:00.000Z`).toISOString();
 const isOwn = (payment: Payment) => payment.memberId === session.user?.id;
-
-/**
- * The money standing, recomputed live from the loaded Members and Payments —
- * the display surface for the pure Split/Owed calculation.
- */
 const standing = computed(() => computeOwed(members.value, payments.value));
 
-const memberLabel = (memberId: string) => (memberId === session.user?.id ? "You" : memberId);
+const memberLabel = (memberId: string) => {
+  if (memberId === session.user?.id) {
+    return "You";
+  }
+  return memberNames.value[memberId] ?? "Member";
+};
 
 /** The Owed wording and colour for one Member: red owes the group, green the group owes. */
 const owedPresentation = (amountInCents: number) =>
@@ -46,11 +48,6 @@ const owedPresentation = (amountInCents: number) =>
       ? { label: `is owed ${formatEuro(-amountInCents)}`, className: "owed" }
       : { label: "settled", className: "settled" };
 
-/**
- * One row per Member for the standing, each with the equal share. Empty when
- * the List has fewer than two Members — no Split is possible, and a lone
- * Member sees only the running total (spec: no Owed figure).
- */
 const standingRows = computed(() => {
   const { shareInCents, owed } = standing.value;
   if (shareInCents === null) {
@@ -71,6 +68,11 @@ async function loadTheList() {
 
 async function loadPayments() {
   payments.value = (await db.getPayments(listId.value)).slice().reverse();
+}
+
+async function syncMembers(store: ShoppingDb) {
+  const details = await syncMembershipsFromServer(store, listId.value);
+  memberNames.value = Object.fromEntries(details.map((member) => [member.memberId, member.name]));
 }
 
 async function onRecordPayment() {
@@ -118,7 +120,7 @@ onMounted(() => {
     await ignoreRejection(syncPaymentsFromServer(db, listId.value));
     // Members change only through the online invite flow; pull the server
     // truth so an accepted Invitation redivides the standing on every device.
-    await ignoreRejection(syncMembershipsFromServer(db, listId.value));
+    await ignoreRejection(syncMembers(db));
     await logRejection(loadTheList(), "Loading the list");
     await logRejection(loadPayments(), "Loading the payments");
   });
@@ -218,11 +220,17 @@ onUnmounted(() => {
   font-variant-numeric: tabular-nums;
 }
 
+/* A long name wraps onto its own line and breaks mid-word rather than pushing
+   the figures past the sheet edge — on a phone the name simply takes the row
+   and the money lines up under it. */
 .standing-members > li {
+  flex-wrap: wrap;
   justify-content: space-between;
+  overflow-wrap: anywhere;
 }
 
 .member-name {
+  min-width: 0;
   font-weight: 600;
 }
 
