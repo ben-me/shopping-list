@@ -211,13 +211,19 @@ onUnmounted(() => {
   margin: 0;
 }
 
-.invitations li {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: var(--space-2);
-  padding: var(--space-2) 0;
-  border-bottom: 1px solid var(--color-rule);
+.invitations {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+
+  li {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--space-2);
+    padding: var(--space-2) 0;
+    border-bottom: 1px solid var(--color-rule);
+  }
 }
 
 .invitation-status {
