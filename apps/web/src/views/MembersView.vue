@@ -68,6 +68,11 @@ const totalPaid = computed(() =>
   standing.value.shareInCents === null ? formatEuro(standing.value.totalInCents) : null,
 );
 
+/** Invitations that can still be revoked; accepted ones are hidden from the Owner panel. */
+const openInvitations = computed(() =>
+  invitations.value.filter((invite) => invite.status !== "accepted"),
+);
+
 const leavePending = ref(false);
 const inviteForm = ref({
   email: "",
@@ -192,10 +197,7 @@ onUnmounted(() => {
       <h2>Invitations</h2>
       <p v-if="invitations.length === 0" class="empty">Nobody invited yet.</p>
       <ul v-else class="invitations">
-        <li
-          v-for="invitation in invitations.filter((invite) => invite.status !== 'accepted')"
-          :key="invitation.id"
-        >
+        <li v-for="invitation in openInvitations" :key="invitation.id">
           <span>{{ invitation.email }}</span>
           <span class="invitation-status">({{ statusLabel(invitation.status) }})</span>
           <button

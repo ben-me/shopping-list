@@ -105,7 +105,7 @@ async function runPassLoop(db: ShoppingDb, scope: SyncScope): Promise<void> {
  * the user sits on a List screen the whole time. Visibility-gated below, so
  * a hidden tab never polls.
  */
-export const SYNC_POLL_MS = 60_000;
+const SYNC_POLL_MS = 60_000;
 
 /**
  * Keep the device in sync without user action. Installs listeners that:
