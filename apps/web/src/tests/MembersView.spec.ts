@@ -5,14 +5,11 @@ vi.mock(
   async () => await import("./mocks/auth-client").then((m) => m.makeAuthClientMock()),
 );
 
-import { flushPromises, mount } from "@vue/test-utils";
-import { createMemoryHistory } from "vue-router";
+import { flushPromises } from "@vue/test-utils";
 import type { List, ListInvitation, MemberDetails } from "@shopping-list/api/domain";
-import App from "../App.vue";
-import { forgetLists } from "../current-list";
 import { db } from "../db";
-import { createAppRouter } from "../router";
-import { _resetSession, session, type SessionUser } from "../session";
+import type { SessionUser } from "../session";
+import { jsonResponse, mountApp, resetStore, settle, stubApi } from "./support/app";
 
 const user: SessionUser = { id: "user-1", name: "Test User", email: "[EMAIL]" };
 
@@ -35,67 +32,29 @@ const ownerFirstMembers: MemberDetails[] = [
   { memberId: user.id, name: "Test User", joinedAt: "2026-01-02T00:00:00.000Z" },
 ];
 
-function jsonResponse(body: unknown, status = 200): Response {
-  return new Response(JSON.stringify(body), {
-    status,
-    headers: { "Content-Type": "application/json" },
-  });
+function membersRoute(listMembers: MemberDetails[]) {
+  return { [`GET /api/lists/${list.id}/members`]: { members: listMembers } };
 }
 
-function stubRoutes(handler?: (url: string, init?: RequestInit) => Response) {
-  vi.stubGlobal(
-    "fetch",
-    vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
-      const url = typeof input === "string" ? input : String(input);
-      if (url === "/api/auth/get-session") {
-        return jsonResponse({ user });
-      }
-      if (handler) {
-        return handler(url, init);
-      }
-      throw new Error(`No stub for ${url}`);
-    }),
+/** The Owner on their own List, with an empty inbox. */
+function memberStub() {
+  stubApi(
+    { ...membersRoute(members), [`GET /api/lists/${list.id}/invitations`]: { invitations: [] } },
+    { user },
   );
 }
 
-function memberStub() {
-  stubRoutes((url) => {
-    if (url === `/api/lists/${list.id}/members`) {
-      return jsonResponse({ members });
-    }
-    if (url === `/api/lists/${list.id}/invitations`) {
-      return jsonResponse({ invitations: [] });
-    }
-    throw new Error(`No stub for ${url}`);
-  });
-}
-
-function settle() {
-  return new Promise((resolve) => setTimeout(resolve, 25));
-}
-
 async function mountMembers() {
-  const router = createAppRouter(createMemoryHistory());
-  await router.push(`/list/${list.id}/members`);
-  await router.isReady();
-  session.user = user;
-  return mount(App, { global: { plugins: [router] } });
+  const { wrapper } = await mountApp(`/list/${list.id}/members`);
+  return wrapper;
 }
 
 beforeEach(async () => {
-  await db.lists.clear();
-  await db.items.clear();
-  await db.payments.clear();
-  await db.memberships.clear();
-  await db.outbox.clear();
-  await db.syncList(list);
-  forgetLists();
-  _resetSession();
+  await resetStore([list]);
 });
 
 afterEach(() => {
   vi.unstubAllGlobals();
-  _resetSession();
 });
 
 describe("MembersView", () => {
@@ -129,13 +88,12 @@ describe("MembersView", () => {
 
   it("lets the Owner invite by email and revoke a pending invitation", async () => {
     let invitations: ListInvitation[] = [];
-    stubRoutes((url, init) => {
-      if (url === `/api/lists/${list.id}/members`) {
-        return jsonResponse({ members });
-      }
-      if (url === `/api/lists/${list.id}/invitations`) {
-        if (init?.method === "POST" && init?.body) {
-          const { email } = JSON.parse(init.body as string) as { email: string };
+    stubApi(
+      {
+        ...membersRoute(members),
+        [`GET /api/lists/${list.id}/invitations`]: () => ({ invitations }),
+        [`POST /api/lists/${list.id}/invitations`]: (init) => {
+          const { email } = JSON.parse(String(init?.body)) as { email: string };
           invitations = [
             {
               id: "inv-1",
@@ -148,17 +106,16 @@ describe("MembersView", () => {
             },
           ];
           return jsonResponse({ invitation: { id: "inv-1" } }, 201);
-        }
-        return jsonResponse({ invitations });
-      }
-      if (url === `/api/lists/${list.id}/invitations/inv-1` && init?.method === "DELETE") {
-        invitations = invitations.map((inv) =>
-          inv.id === "inv-1" ? { ...inv, status: "revoked" } : inv,
-        );
-        return jsonResponse({ ok: true });
-      }
-      throw new Error(`No stub for ${url}`);
-    });
+        },
+        [`DELETE /api/lists/${list.id}/invitations/inv-1`]: () => {
+          invitations = invitations.map((inv) =>
+            inv.id === "inv-1" ? { ...inv, status: "revoked" } : inv,
+          );
+          return { ok: true };
+        },
+      },
+      { user },
+    );
 
     const wrapper = await mountMembers();
     await settle();
@@ -187,17 +144,13 @@ describe("MembersView", () => {
   it("shows invitations to a Member without the Owner-only controls", async () => {
     // The signed-in user is a Member; someone else owns the List.
     await db.lists.put({ ...list, ownerId: "user-2" });
-    stubRoutes((url) => {
-      if (url === `/api/lists/${list.id}/members`) {
-        return jsonResponse({
-          members: [
-            { memberId: "user-2", name: "Other Owner", joinedAt: list.createdAt },
-            { memberId: user.id, name: "Test User", joinedAt: list.createdAt },
-          ],
-        });
-      }
-      if (url === `/api/lists/${list.id}/invitations`) {
-        return jsonResponse({
+    stubApi(
+      {
+        ...membersRoute([
+          { memberId: "user-2", name: "Other Owner", joinedAt: list.createdAt },
+          { memberId: user.id, name: "Test User", joinedAt: list.createdAt },
+        ]),
+        [`GET /api/lists/${list.id}/invitations`]: {
           invitations: [
             {
               id: "inv-2",
@@ -209,10 +162,10 @@ describe("MembersView", () => {
               createdAt: new Date().toISOString(),
             },
           ],
-        });
-      }
-      throw new Error(`No stub for ${url}`);
-    });
+        },
+      },
+      { user },
+    );
 
     const wrapper = await mountMembers();
     await settle();
@@ -226,19 +179,17 @@ describe("MembersView", () => {
   it("lets a Member leave the List", async () => {
     await db.lists.put({ ...list, ownerId: "user-2" });
     let left = false;
-    stubRoutes((url, init) => {
-      if (url === `/api/lists/${list.id}/members`) {
-        return jsonResponse({ members: ownerFirstMembers });
-      }
-      if (url === `/api/lists/${list.id}/invitations`) {
-        return jsonResponse({ invitations: [] });
-      }
-      if (url === `/api/lists/${list.id}/membership` && init?.method === "DELETE") {
-        left = true;
-        return jsonResponse({ ok: true });
-      }
-      throw new Error(`No stub for ${url}`);
-    });
+    stubApi(
+      {
+        ...membersRoute(ownerFirstMembers),
+        [`GET /api/lists/${list.id}/invitations`]: { invitations: [] },
+        [`DELETE /api/lists/${list.id}/membership`]: () => {
+          left = true;
+          return { ok: true };
+        },
+      },
+      { user },
+    );
 
     const wrapper = await mountMembers();
     await settle();
@@ -296,15 +247,13 @@ describe("MembersView", () => {
   });
 
   it("shows the running total instead of an Owed figure on a lone-Member List", async () => {
-    stubRoutes((url) => {
-      if (url === `/api/lists/${list.id}/members`) {
-        return jsonResponse({ members: [members[0]!] });
-      }
-      if (url === `/api/lists/${list.id}/invitations`) {
-        return jsonResponse({ invitations: [] });
-      }
-      throw new Error(`No stub for ${url}`);
-    });
+    stubApi(
+      {
+        ...membersRoute([members[0]!]),
+        [`GET /api/lists/${list.id}/invitations`]: { invitations: [] },
+      },
+      { user },
+    );
     await db.putPayment({
       id: "pay-1",
       listId: list.id,

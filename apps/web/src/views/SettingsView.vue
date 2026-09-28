@@ -1,9 +1,9 @@
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, ref } from "vue";
+import { computed, onMounted, ref } from "vue";
 import type { PendingInvitation } from "@shopping-list/api/domain";
 import { apiFetch } from "../api";
 import AppBar from "../components/AppBar.vue";
-import { onSyncPass, runSyncPass } from "../connectivity";
+import { runSyncPass, useSyncPass } from "../connectivity";
 import { db } from "../db";
 import { acceptInvitation, declineInvitation, pendingInvitations } from "../invitations";
 import { pendingInvitationCount } from "../pending-invitations";
@@ -82,23 +82,17 @@ async function addUser() {
   form.value.password = "";
 }
 
-let stopSyncPass: (() => void) | null = null;
-
 async function reloadAll() {
   await ignoreRejection(loadInvitations());
 }
+
+useSyncPass(reloadAll);
 
 onMounted(() => {
   // Paint the local state right away, then reconcile with the server so the
   // inbox is fresh before it is offered for accepting or declining.
   ignoreRejection(loadInvitations());
-  stopSyncPass = onSyncPass(reloadAll);
   void ignoreRejection(runSyncPass(db));
-});
-
-onUnmounted(() => {
-  stopSyncPass?.();
-  stopSyncPass = null;
 });
 </script>
 

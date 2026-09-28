@@ -1,9 +1,9 @@
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, ref } from "vue";
+import { computed, onMounted, ref } from "vue";
 import { useRoute } from "vue-router";
 import type { Item } from "@shopping-list/api/domain";
 import ListScreen from "../components/ListScreen.vue";
-import { onSyncPass, runSyncPass } from "../connectivity";
+import { runSyncPass, useSyncPass } from "../connectivity";
 import { db } from "../db";
 import { addItem, removeItem, setItemChecked, syncItemsFromServer } from "../items";
 import { syncOutbox } from "../lists";
@@ -46,22 +46,16 @@ async function onRemove(item: Item) {
   ignoreRejection(syncOutbox(db));
 }
 
-let stopSyncPass: (() => void) | null = null;
+useSyncPass(async (db) => {
+  await ignoreRejection(syncItemsFromServer(db, listId.value));
+  await logRejection(loadItems(), "Loading the items");
+});
 
 onMounted(() => {
   logRejection(loadItems(), "Loading the items");
-  stopSyncPass = onSyncPass(async (db) => {
-    await ignoreRejection(syncItemsFromServer(db, listId.value));
-    await logRejection(loadItems(), "Loading the items");
-  });
   // A list-scoped pass: this screen drains the outbox and pulls its own
   // Items, but does not pull the app-wide Lists index or invitation inbox.
   void ignoreRejection(runSyncPass(db, "list"));
-});
-
-onUnmounted(() => {
-  stopSyncPass?.();
-  stopSyncPass = null;
 });
 </script>
 

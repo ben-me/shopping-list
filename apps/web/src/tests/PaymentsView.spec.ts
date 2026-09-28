@@ -5,15 +5,12 @@ vi.mock(
   async () => await import("./mocks/auth-client").then((m) => m.makeAuthClientMock()),
 );
 
-import { flushPromises, mount } from "@vue/test-utils";
-import { createMemoryHistory } from "vue-router";
+import { flushPromises } from "@vue/test-utils";
 import type { List } from "@shopping-list/api/domain";
 import { runSyncPass } from "../connectivity";
-import { forgetLists } from "../current-list";
-import App from "../App.vue";
 import { db } from "../db";
-import { createAppRouter } from "../router";
-import { _resetSession, session, type SessionUser } from "../session";
+import type { SessionUser } from "../session";
+import { mountApp, resetStore, serverDown, settle, stubApi } from "./support/app";
 
 const user: SessionUser = { id: "user-1", name: "Test User", email: "[EMAIL]" };
 
@@ -25,53 +22,42 @@ const list: List = {
   updatedAt: new Date().toISOString(),
 };
 
-function jsonResponse(body: unknown, status = 200): Response {
-  return new Response(JSON.stringify(body), {
-    status,
-    headers: { "Content-Type": "application/json" },
-  });
+/**
+ * The screen reads its figures from the local Store, so most of these tests
+ * only need the server to be out of reach.
+ */
+function stubOfflineServer() {
+  stubApi({}, { user, fallback: serverDown });
 }
 
-function stubRoutes(handler?: (url: string, init?: RequestInit) => Response) {
-  vi.stubGlobal(
-    "fetch",
-    vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
-      const url = typeof input === "string" ? input : String(input);
-      if (url === "/api/auth/get-session") {
-        return jsonResponse({ user });
-      }
-      if (handler) {
-        return handler(url, init);
-      }
-      throw new Error(`No stub for ${url}`);
-    }),
+/** A reachable server that names the Members: only a Sync pass can label a row. */
+function stubNamedMembers() {
+  stubApi(
+    {
+      "GET /api/lists": { lists: [list] },
+      [`GET /api/lists/${list.id}/items`]: { items: [] },
+      [`GET /api/lists/${list.id}/payments`]: { payments: [] },
+      [`GET /api/lists/${list.id}/members`]: {
+        members: [
+          { memberId: user.id, name: "Test User", joinedAt: list.createdAt },
+          { memberId: "user-2", name: "Two", joinedAt: "2026-01-01T00:00:00.000Z" },
+        ],
+      },
+      // The queued Payment writes drain through the outbox before the pull.
+      [`PUT /api/lists/${list.id}/payments/*`]: {},
+    },
+    { user, fallback: serverDown },
   );
 }
 
-function settle() {
-  return new Promise((resolve) => setTimeout(resolve, 25));
-}
-
 async function mountList() {
-  const router = createAppRouter(createMemoryHistory());
-  await router.push(`/list/${list.id}`);
-  await router.isReady();
-  return mount(App, { global: { plugins: [router] } });
-}
-
-async function mountItems() {
-  const router = createAppRouter(createMemoryHistory());
-  await router.push(`/list/${list.id}`);
-  await router.isReady();
-  return mount(App, { global: { plugins: [router] } });
+  const { wrapper } = await mountApp(`/list/${list.id}`);
+  return wrapper;
 }
 
 async function mountPayments() {
-  const router = createAppRouter(createMemoryHistory());
-  await router.push(`/list/${list.id}/payments`);
-  await router.isReady();
-  session.user = user;
-  return mount(App, { global: { plugins: [router] } });
+  const { wrapper } = await mountApp(`/list/${list.id}/payments`);
+  return wrapper;
 }
 
 async function recordPayment(amount: string, date: string) {
@@ -86,14 +72,7 @@ async function recordPayment(amount: string, date: string) {
 }
 
 beforeEach(async () => {
-  await db.lists.clear();
-  await db.items.clear();
-  await db.payments.clear();
-  await db.memberships.clear();
-  await db.outbox.clear();
-  await db.syncList(list);
-  forgetLists();
-  _resetSession();
+  await resetStore([list]);
 });
 
 afterEach(() => {
@@ -102,9 +81,9 @@ afterEach(() => {
 
 describe("PaymentsView", () => {
   it("keeps the List's name painted when switching between Items and Payments", async () => {
-    stubRoutes(() => new Response(null, { status: 503 }));
+    stubOfflineServer();
 
-    const items = await mountItems();
+    const items = await mountList();
     await flushPromises();
     expect(items.find("h1").text()).toBe("Household");
     items.unmount();
@@ -116,7 +95,7 @@ describe("PaymentsView", () => {
   });
 
   it("hangs off the List's navigation rather than living under the Items", async () => {
-    stubRoutes(() => new Response(null, { status: 503 }));
+    stubOfflineServer();
     const wrapper = await mountList();
     await flushPromises();
 
@@ -129,7 +108,7 @@ describe("PaymentsView", () => {
   });
 
   it("records a Payment with an amount and a date, and it survives a reload", async () => {
-    stubRoutes(() => new Response(null, { status: 503 }));
+    stubOfflineServer();
 
     const wrapper = await recordPayment("12.50", "2026-02-01");
 
@@ -152,7 +131,7 @@ describe("PaymentsView", () => {
   });
 
   it("rejects recording a Payment without a positive amount", async () => {
-    stubRoutes(() => new Response(null, { status: 503 }));
+    stubOfflineServer();
 
     const wrapper = await recordPayment("0", "2026-02-01");
 
@@ -161,7 +140,7 @@ describe("PaymentsView", () => {
   });
 
   it("edits and deletes your own Payment but offers nothing on another Member's", async () => {
-    stubRoutes(() => new Response(null, { status: 503 }));
+    stubOfflineServer();
     await db.putPayment({
       id: "pay-mine",
       listId: list.id,
@@ -222,7 +201,7 @@ describe("PaymentsView", () => {
   });
 
   it("keeps the running total in the foot of the screen", async () => {
-    stubRoutes(() => new Response(null, { status: 503 }));
+    stubOfflineServer();
     await db.putPayment({
       id: "pay-1",
       listId: list.id,
@@ -240,30 +219,7 @@ describe("PaymentsView", () => {
   });
 
   it("names the Member who paid on every row of the ledger", async () => {
-    stubRoutes((url) => {
-      if (url.endsWith("/api/lists")) {
-        return jsonResponse({ lists: [list] });
-      }
-      if (url.endsWith(`/api/lists/${list.id}/items`)) {
-        return jsonResponse({ items: [] });
-      }
-      // The queued Payment writes drain through the outbox before the pull.
-      if (url.startsWith(`/api/lists/${list.id}/payments/`)) {
-        return jsonResponse({});
-      }
-      if (url.endsWith(`/api/lists/${list.id}/payments`)) {
-        return jsonResponse({ payments: [] });
-      }
-      if (url.endsWith(`/api/lists/${list.id}/members`)) {
-        return jsonResponse({
-          members: [
-            { memberId: user.id, name: "Test User", joinedAt: list.createdAt },
-            { memberId: "user-2", name: "Two", joinedAt: "2026-01-01T00:00:00.000Z" },
-          ],
-        });
-      }
-      return new Response(null, { status: 503 });
-    });
+    stubNamedMembers();
     await db.putPayment({
       id: "pay-1",
       listId: list.id,
@@ -298,27 +254,7 @@ describe("PaymentsView", () => {
   });
 
   it("keeps your own net in the foot of the screen, under the running total", async () => {
-    stubRoutes((url) => {
-      if (url.endsWith("/api/lists")) {
-        return jsonResponse({ lists: [list] });
-      }
-      // The queued Payment writes drain through the outbox before the pull.
-      if (url.startsWith(`/api/lists/${list.id}/payments/`)) {
-        return jsonResponse({});
-      }
-      if (url.endsWith(`/api/lists/${list.id}/payments`)) {
-        return jsonResponse({ payments: [] });
-      }
-      if (url.endsWith(`/api/lists/${list.id}/members`)) {
-        return jsonResponse({
-          members: [
-            { memberId: user.id, name: "Test User", joinedAt: list.createdAt },
-            { memberId: "user-2", name: "Two", joinedAt: "2026-01-01T00:00:00.000Z" },
-          ],
-        });
-      }
-      return new Response(null, { status: 503 });
-    });
+    stubNamedMembers();
     await db.syncMembership({
       listId: list.id,
       memberId: "user-2",
@@ -361,7 +297,7 @@ describe("PaymentsView", () => {
   });
 
   it("shows only the running total on a lone-Member List — never a Share or an Owed figure", async () => {
-    stubRoutes(() => new Response(null, { status: 503 }));
+    stubOfflineServer();
     await db.putPayment({
       id: "pay-1",
       listId: list.id,
@@ -383,7 +319,7 @@ describe("PaymentsView", () => {
   });
 
   it("recomputes your own net live as a Payment is added, edited, and deleted", async () => {
-    stubRoutes(() => new Response(null, { status: 503 }));
+    stubOfflineServer();
     await db.syncMembership({
       listId: list.id,
       memberId: "user-2",
@@ -419,20 +355,17 @@ describe("PaymentsView", () => {
   });
 
   it("re-divides your own net when Membership changes arrive on Sync", async () => {
-    stubRoutes((url) => {
-      if (url === "/api/lists") {
+    stubApi(
+      {
         // The server still returns the List (Sync prunes local Lists the
         // server no longer returns); only Memberships and Payments change.
-        return jsonResponse({ lists: [list] });
-      }
-      if (url.endsWith("/items")) {
-        return jsonResponse({ items: [] });
-      }
-      if (url.endsWith("/payments")) {
-        return jsonResponse({ payments: [] });
-      }
-      throw new Error(`No stub for ${url}`);
-    });
+        "GET /api/lists": { lists: [list] },
+        [`GET /api/lists/${list.id}/items`]: { items: [] },
+        [`GET /api/lists/${list.id}/payments`]: { payments: [] },
+        [`PUT /api/lists/${list.id}/payments/*`]: {},
+      },
+      { user, fallback: serverDown },
+    );
     await db.syncMembership({
       listId: list.id,
       memberId: "user-2",

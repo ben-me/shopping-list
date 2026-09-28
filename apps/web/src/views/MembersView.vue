@@ -1,15 +1,17 @@
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, ref } from "vue";
+import { computed, onMounted, ref } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import type { ListInvitation, MemberDetails, Payment } from "@shopping-list/api/domain";
 import ListScreen from "../components/ListScreen.vue";
-import { onSyncPass } from "../connectivity";
+import InvitationsPanel from "../components/InvitationsPanel.vue";
+import { useSyncPass } from "../connectivity";
 import { db } from "../db";
 import { createInvitation, listInvitations, revokeInvitation } from "../invitations";
 import { leaveList, listMembers } from "../members";
 import { session } from "../session";
 import { computeOwed } from "../utils/computeOwed";
 import { ignoreRejection, logRejection } from "../utils/fireAndForget";
+import { formatEuro } from "../utils/formatEuro";
 
 const route = useRoute();
 const router = useRouter();
@@ -19,9 +21,6 @@ const invitations = ref<ListInvitation[]>([]);
 const payments = ref<Payment[]>([]);
 const error = ref<string | null>(null);
 const loaded = ref(false);
-
-const euroFormat = new Intl.NumberFormat("de-DE", { style: "currency", currency: "EUR" });
-const formatEuro = (cents: number) => euroFormat.format(cents / 100);
 
 const standing = computed(() =>
   computeOwed(
@@ -68,11 +67,6 @@ const totalPaid = computed(() =>
   standing.value.shareInCents === null ? formatEuro(standing.value.totalInCents) : null,
 );
 
-/** Invitations that can still be revoked; accepted ones are hidden from the Owner panel. */
-const openInvitations = computed(() =>
-  invitations.value.filter((invite) => invite.status !== "accepted"),
-);
-
 const leavePending = ref(false);
 const inviteForm = ref({
   email: "",
@@ -82,8 +76,8 @@ const inviteForm = ref({
 /** The server always lists the Owner first, so the first row names them. */
 const isOwner = () => members.value[0]?.memberId === session.user?.id;
 
-const statusLabel = (status: ListInvitation["status"]) =>
-  status === "pending" ? "invited" : status === "accepted" ? "joined" : "closed";
+/** The Owner panel and the leave action are opposites: exactly one of them shows. */
+const showInvitations = computed(() => loaded.value && isOwner());
 
 async function loadMembers() {
   members.value = await listMembers(listId.value);
@@ -144,27 +138,21 @@ async function onLeave() {
   await router.push({ name: "lists" });
 }
 
-let stopSyncPass: (() => void) | null = null;
+useSyncPass(async () => {
+  await ignoreRejection(loadMembers());
+  await ignoreRejection(loadInvitations());
+  await ignoreRejection(loadPayments());
+});
 
 onMounted(() => {
   // Mount reads the server state this screen needs directly (members and
   // invitations) and Payments locally, so it deliberately starts no Sync
   // pass of its own — a pass would re-pull the same members and invitations
   // after `loadPanel` and drag in the app-wide Lists and inbox pulls, which
-  // this screen does not render. It stays subscribed to passes started
-  // elsewhere (a reconnect, an accepted Invitation) so the access list and
-  // standing are never stale while the screen is open.
+  // this screen does not render. The screen stays subscribed to passes
+  // started elsewhere (a reconnect, an accepted Invitation), so the access
+  // list and standing are never stale while it is open.
   logRejection(loadPanel(), "Loading the members");
-  stopSyncPass = onSyncPass(async () => {
-    await ignoreRejection(loadMembers());
-    await ignoreRejection(loadInvitations());
-    await ignoreRejection(loadPayments());
-  });
-});
-
-onUnmounted(() => {
-  stopSyncPass?.();
-  stopSyncPass = null;
 });
 </script>
 
@@ -193,32 +181,14 @@ onUnmounted(() => {
       </p>
     </template>
 
-    <section v-if="loaded && isOwner()">
-      <h2>Invitations</h2>
-      <p v-if="invitations.length === 0" class="empty">Nobody invited yet.</p>
-      <ul v-else class="invitations">
-        <li v-for="invitation in openInvitations" :key="invitation.id">
-          <span>{{ invitation.email }}</span>
-          <span class="invitation-status">({{ statusLabel(invitation.status) }})</span>
-          <button
-            v-if="invitation.status === 'pending'"
-            type="button"
-            name="revoke-invitation"
-            :aria-label="`Revoke invitation for ${invitation.email}`"
-            @click="onRevoke(invitation)"
-          >
-            Revoke
-          </button>
-        </li>
-      </ul>
-      <form class="invite-form" @submit.prevent="onInvite">
-        <label>
-          Email
-          <input v-model="inviteForm.email" name="invite-email" type="email" />
-        </label>
-        <button type="submit" :disabled="inviteForm.submitting">Invite a member</button>
-      </form>
-    </section>
+    <InvitationsPanel
+      v-if="showInvitations"
+      v-model:email="inviteForm.email"
+      :invitations="invitations"
+      :submitting="inviteForm.submitting"
+      @invite="onInvite"
+      @revoke="onRevoke"
+    />
     <p v-else-if="loaded" class="leave-row">
       <button
         type="button"
@@ -288,27 +258,6 @@ li.member-standing {
   .member-total-paid {
     font-variant-numeric: tabular-nums;
     font-weight: 700;
-  }
-}
-
-/* Invitations sit below the Members, one row each with the revoke on the
-   right edge. */
-.invitations {
-  li {
-    display: flex;
-    align-items: center;
-    gap: var(--space-2);
-    padding-block: var(--space-1);
-    overflow-wrap: anywhere;
-  }
-
-  .invitation-status {
-    color: var(--color-ink-muted);
-  }
-
-  button {
-    margin-inline-start: auto;
-    padding-inline: var(--space-2);
   }
 }
 

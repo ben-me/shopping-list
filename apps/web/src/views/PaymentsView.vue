@@ -1,10 +1,10 @@
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, ref } from "vue";
+import { computed, onMounted, ref } from "vue";
 import { useRoute } from "vue-router";
 import type { Payment } from "@shopping-list/api/domain";
 import ListScreen from "../components/ListScreen.vue";
 import PaymentRow from "../components/PaymentRow.vue";
-import { onSyncPass, runSyncPass } from "../connectivity";
+import { runSyncPass, useSyncPass } from "../connectivity";
 import { db } from "../db";
 import { syncOutbox } from "../lists";
 import { memberIdsOf, syncMembershipsFromServer } from "../members";
@@ -13,6 +13,7 @@ import { session } from "../session";
 import type { ShoppingDb } from "../store";
 import { computeOwed } from "../utils/computeOwed";
 import { ignoreRejection, logRejection } from "../utils/fireAndForget";
+import { formatEuro } from "../utils/formatEuro";
 
 const route = useRoute();
 const listId = computed(() => String(route.params.listId ?? ""));
@@ -25,8 +26,6 @@ const paymentForm = ref({
   error: null as string | null,
 });
 
-const euroFormat = new Intl.NumberFormat("de-DE", { style: "currency", currency: "EUR" });
-const formatEuro = (cents: number) => euroFormat.format(cents / 100);
 const isoFromDate = (date: string) => new Date(`${date}T12:00:00.000Z`).toISOString();
 const isOwn = (payment: Payment) => payment.memberId === session.user?.id;
 const standing = computed(() => computeOwed(members.value, payments.value));
@@ -105,27 +104,21 @@ async function onDeletePayment(payment: Payment) {
   ignoreRejection(syncOutbox(db));
 }
 
-let stopSyncPass: (() => void) | null = null;
+useSyncPass(async (db) => {
+  await ignoreRejection(syncPaymentsFromServer(db, listId.value));
+  // Members change only through the online invite flow; pull the server
+  // truth so an accepted Invitation redivides the standing on every device.
+  await ignoreRejection(syncMembers(db));
+  await logRejection(loadMembers(), "Loading the members");
+  await logRejection(loadPayments(), "Loading the payments");
+});
 
 onMounted(() => {
   logRejection(loadMembers(), "Loading the members");
   logRejection(loadPayments(), "Loading the payments");
-  stopSyncPass = onSyncPass(async (db) => {
-    await ignoreRejection(syncPaymentsFromServer(db, listId.value));
-    // Members change only through the online invite flow; pull the server
-    // truth so an accepted Invitation redivides the standing on every device.
-    await ignoreRejection(syncMembers(db));
-    await logRejection(loadMembers(), "Loading the members");
-    await logRejection(loadPayments(), "Loading the payments");
-  });
   // A list-scoped pass: this screen drains the outbox and pulls its own
   // Payments and Memberships, but not the app-wide Lists index or inbox.
   void ignoreRejection(runSyncPass(db, "list"));
-});
-
-onUnmounted(() => {
-  stopSyncPass?.();
-  stopSyncPass = null;
 });
 </script>
 

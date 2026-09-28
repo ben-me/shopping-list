@@ -1,4 +1,4 @@
-import { ref } from "vue";
+import { onMounted, onUnmounted, ref } from "vue";
 import { syncFromServer, syncOutbox } from "./lists";
 import type { ShoppingDb } from "./store";
 import { ignoreRejection } from "./utils/fireAndForget";
@@ -34,6 +34,23 @@ export function onSyncPass(viewSync: ViewSync, opts?: { globalOnly?: boolean }):
   return () => {
     viewSyncs.delete(entry);
   };
+}
+
+/**
+ * Subscribe a view to Sync for exactly as long as it is mounted: the
+ * subscription goes in on mount and comes out on unmount, so a screen never
+ * outlives its own subscription. Every view wants this shape, and it keeps
+ * the stop handle out of the screens that only care about their own sync.
+ */
+export function useSyncPass(handler: ViewSync): void {
+  let stop: (() => void) | null = null;
+  onMounted(() => {
+    stop = onSyncPass(handler);
+  });
+  onUnmounted(() => {
+    stop?.();
+    stop = null;
+  });
 }
 
 /**
@@ -132,7 +149,9 @@ export function startSyncWatcher(db: ShoppingDb, pollMs: number = SYNC_POLL_MS):
   const markOffline = () => {
     online.value = false;
   };
-  const syncIfOnline = () => {
+  // A hidden tab never syncs, so the visibility gate is shared by the tab
+  // switch and the poll rather than written twice.
+  const syncIfVisible = () => {
     if (online.value && document.visibilityState === "visible") {
       void ignoreRejection(runSyncPass(db));
     }
@@ -145,17 +164,13 @@ export function startSyncWatcher(db: ShoppingDb, pollMs: number = SYNC_POLL_MS):
   online.value = navigator.onLine;
   window.addEventListener("online", markOnlineAndSync);
   window.addEventListener("offline", markOffline);
-  document.addEventListener("visibilitychange", syncIfOnline);
-  const pollTimer = setInterval(() => {
-    if (online.value && document.visibilityState === "visible") {
-      void ignoreRejection(runSyncPass(db));
-    }
-  }, pollMs);
+  document.addEventListener("visibilitychange", syncIfVisible);
+  const pollTimer = setInterval(syncIfVisible, pollMs);
 
   return () => {
     window.removeEventListener("online", markOnlineAndSync);
     window.removeEventListener("offline", markOffline);
-    document.removeEventListener("visibilitychange", syncIfOnline);
+    document.removeEventListener("visibilitychange", syncIfVisible);
     clearInterval(pollTimer);
   };
 }
