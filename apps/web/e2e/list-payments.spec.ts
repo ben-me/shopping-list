@@ -26,10 +26,13 @@ test("a member records a Payment and it survives reloads", async ({ page, reques
   await page.getByRole("button", { name: "Record" }).click();
 
   await expect(paymentRow(page, "12,50")).toBeVisible();
+  // The ledger names who paid, not just the amount.
+  await expect(paymentRow(page, "12,50")).toContainText("You");
 
   await test.step("the screen shows the running total, and a lone Member gets no Owed figure", async () => {
     await expect(page.locator(".total-paid")).toContainText("12,50");
     await expect(page.locator(".standing-member")).toHaveCount(0);
+    await expect(page.locator(".own-standing")).toHaveCount(0);
   });
 
   await page.reload();

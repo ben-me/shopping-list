@@ -64,9 +64,11 @@ test("the Owner invites a user who accepts in-app and gets equal edit rights", a
     await addItem(page, "Olive oil");
 
     // The invitee is a Member with equal edit rights, and every device now
-    // knows both Members — the standing re-divides for the real group.
+    // knows both Members — the standing re-divides for the real group. A lone
+    // Member would get no standing at all; the invitee, who paid nothing,
+    // reads as settled, which only the two-Member split can say.
     await page.getByRole("link", { name: "Payments" }).click();
-    await expect(page.locator(".standing-member")).toHaveCount(2);
+    await expect(page.locator(".own-standing.settled")).toContainText("Settled up");
   });
 });
 

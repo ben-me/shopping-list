@@ -5,11 +5,12 @@
  * are only allowed here; everywhere else use the custom properties below
  * (enforced by Stylelint, see stylelint.config.js).
  *
- * The picture: a shopping pad on a desk. One sheet of paper (`.page`), rows
- * ruled off with hairlines instead of boxed into cards, ink-black text and a
- * single marker accent. The marker means one thing only — this has been
- * marked — so it shows up on ticked-off items and nowhere else. Money keeps
- * its own meaning on the Payments screen: green is owed, red owes.
+ * The picture: a shopping pad on a desk. Each List is its own pad, written in
+ * its own marker pen — one of the six below, drawn once and kept for the life
+ * of the pad, so the home reads as a fan of coloured pads and a List keeps its
+ * pen inside: Items are ticked off in it and it underlines the section that is
+ * open. Ticking is the one thing a pen may mean; money keeps its own words, so
+ * green is owed and red owes, and no pen ever borrows either.
  *
  * Type is Archivo Variable (OFL) in two widths: headings and figures are set
  * wide and heavy like market signage, running text stays at normal width.
@@ -25,12 +26,36 @@
   --color-ink: #191b1c;
   --color-ink-muted: #6b7071;
   --color-paper: #fff;
-  --color-page: #ecedea;
   --color-rule: #dee0db;
-  --color-marker: #ffe04d;
-  --color-marker-soft: #fff7cd;
+
+  /*
+   * The marker-pen palette: every List is written in its own pen, drawn from
+   * these six and fixed for the life of the pad. Each pen carries the soft
+   * shade of ink bled into paper, for fills that sit behind text. The first
+   * pen is the original marker, so a pad without a pen of its own — and every
+   * ticked-off Item — keeps the yellow.
+   */
+  --palette-1: #ffe04d;
+  --palette-1-soft: #fff7cd;
+  --palette-2: #ff6fae;
+  --palette-2-soft: #ffe3ee;
+  --palette-3: #ff9d3c;
+  --palette-3-soft: #ffe9c9;
+  --palette-4: #2fbf6f;
+  --palette-4-soft: #d9f2df;
+  --palette-5: #3d9be9;
+  --palette-5-soft: #d9ebfb;
+  --palette-6: #9a6ade;
+  --palette-6-soft: #ecdef7;
+  --color-marker: var(--palette-1);
+  --color-marker-soft: var(--palette-1-soft);
   --color-owed: #0d6b3d;
   --color-owes: #b02a1c;
+
+  /* The same two meanings set on the ink bar, where the dark shades above
+     would fall below a readable contrast. */
+  --color-owed-on-ink: #7ad19f;
+  --color-owes-on-ink: #ff9b8a;
   --color-danger-soft: #fbeeec;
   --color-shadow: rgb(0 0 0 / 12%);
 
@@ -74,7 +99,10 @@ body {
     sans-serif;
   font-size: var(--fs-body);
   color: var(--color-ink);
-  background-color: var(--color-page);
+
+  /* The sheet reaches the screen edges at every width: only the type inside it
+     stops at `--sheet-width`. */
+  background-color: var(--color-paper);
 }
 
 /* Market signage: the same family, stretched wide and set heavy. */
@@ -128,6 +156,19 @@ a {
 
 .empty {
   color: var(--color-ink-muted);
+}
+
+/* Text only a screen reader hears: the disc itself says just the number. */
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+  border: 0;
 }
 
 /* Controls: one quiet secondary style; a submit is the commit. */
@@ -211,14 +252,14 @@ form label {
   display: grid;
   grid-template-columns: minmax(0, 1fr);
   justify-items: center;
-  padding: var(--space-2) var(--space-4);
+  padding: var(--space-2) var(--space-3);
   border-bottom: 1px solid var(--color-rule);
   background-color: var(--color-paper);
 }
 
 .entry > * {
   width: 100%;
-  max-width: calc(var(--sheet-width) - var(--space-4) * 2);
+  max-width: calc(var(--sheet-width) - var(--space-3) * 2);
 }
 
 .entry > * + * {
@@ -239,13 +280,17 @@ form label {
   font-size: var(--fs-small);
 }
 
+/* Focus stays in ink: the pen is a resting identity, never the thing a key
+   press must hunt for. */
 input:not([type="checkbox"], [type="radio"]):focus,
 select:focus,
 textarea:focus {
   border-color: var(--color-ink);
 }
 
-/* The page: one sheet of paper, sections ruled apart rather than boxed. */
+/* The page: one sheet of paper, sections ruled apart rather than boxed. It
+   caps the readability of its contents, not the sheet itself — the paper runs
+   the full width behind it. */
 .page {
   flex: 1 0 auto;
   width: 100%;
@@ -253,7 +298,6 @@ textarea:focus {
   margin-inline: auto;
   padding-block-end: var(--space-6);
   background-color: var(--color-paper);
-  border-inline: 1px solid var(--color-rule);
 }
 
 .page > * + * {
@@ -279,19 +323,43 @@ textarea:focus {
 
 /*
  * A screen whose top does not scroll: the bars stay put and only the rows
- * below move. Used by the List and Payments screens.
+ * below move. The app bar and section tabs live in the List layout above;
+ * this grid holds the entry bar, the scrolling sheet, and the foot bar. The
+ * sheet is pinned to row two explicitly so an absent entry bar (a screen
+ * with nothing to add) does not pull the rows up into the empty first row.
  */
 .screen {
   display: grid;
-  grid-template-rows: auto auto 1fr;
+  grid-template-rows: auto minmax(0, 1fr) auto;
   grid-template-columns: minmax(0, 1fr);
   flex: 1 1 0;
   min-height: 0;
 }
 
 .screen > main {
+  grid-row: 2;
   overflow-y: auto;
   overscroll-behavior: contain;
+}
+
+/*
+ * The foot bar: the one figure a screen keeps under its rows. It is a row of
+ * the screen's grid rather than an overlay on the sheet, so the last row can
+ * never end up hidden behind it. Set in ink, the way a submit is, so the
+ * running total reads as the sum of the whole pad rather than one more row.
+ */
+.screen-footer {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  justify-items: center;
+  padding: var(--space-2) var(--space-3);
+  background-color: var(--color-ink);
+  color: var(--color-paper);
+}
+
+.screen-footer > * {
+  width: 100%;
+  max-width: calc(var(--sheet-width) - var(--space-3) * 2);
 }
 
 /* Rows ruled off, edge to edge, with the type inset from the sheet edge. */
@@ -332,7 +400,10 @@ textarea:focus {
   color: var(--color-ink);
 }
 
+/* The open section reads in ink against the muted tabs beside it — identity,
+   never the only marker. The underline itself is no longer a shadow on the
+   tab: ListTabs draws one line for the whole bar and glides it over to the
+   open section, in the pad's own pen. */
 .tab[aria-current="page"] {
   color: var(--color-ink);
-  box-shadow: inset 0 -3px 0 var(--color-ink);
 }

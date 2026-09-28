@@ -105,9 +105,9 @@ export async function createList(page: Page, name: string) {
   await expect(page.getByRole("heading", { name })).toBeVisible();
 }
 
-/** The Members panel is a popover: it must be opened before its controls are used. */
+/** The Members section is a tab on the List screens; open it like Items or Payments. */
 export async function openMembers(page: Page) {
-  await page.getByRole("button", { name: "Members" }).click();
+  await page.getByRole("link", { name: "Members" }).click();
 }
 
 export function itemRow(page: Page, name: string) {
@@ -115,7 +115,7 @@ export function itemRow(page: Page, name: string) {
 }
 
 export function paymentRow(page: Page, amount: string) {
-  return page.locator(".payments li").filter({ hasText: amount });
+  return page.locator("main ul li").filter({ hasText: amount });
 }
 
 export async function addItem(page: Page, name: string) {

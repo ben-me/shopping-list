@@ -8,14 +8,17 @@ import { refreshPendingInvitationCount } from "./pending-invitations";
 // offline writes drain and remote state is pulled in whenever the connection
 // returns — no user action, no error surface.
 let stopSyncWatcher: (() => void) | null = null;
-// Invitations only ever arrive from the server, so every Sync pass is the
-// moment the Settings badge can learn about a new one. Runs alongside the
-// per-view syncs; never blocks them.
+// Invitations only ever arrive from the server, so every **global** Sync pass
+// is the moment the Settings badge can learn about a new one. The badge is
+// app-wide state that list screens never render, so it is marked globalOnly:
+// it runs on the app-wide passes (Lists home, Settings, reconnect, the
+// background poll) but not on the lighter passes List screens start. Never
+// blocks them.
 let stopInviteCountRefresh: (() => void) | null = null;
 
 onMounted(() => {
   stopSyncWatcher = startSyncWatcher(db);
-  stopInviteCountRefresh = onSyncPass(refreshPendingInvitationCount);
+  stopInviteCountRefresh = onSyncPass(refreshPendingInvitationCount, { globalOnly: true });
   // The badge should be right on first paint, not only after the first pass.
   void refreshPendingInvitationCount();
 });
@@ -29,14 +32,12 @@ onUnmounted(() => {
 </script>
 
 <template>
-  <p v-if="!online" role="status" class="offline">
-    Offline — your changes will sync when you reconnect
-  </p>
+  <p v-if="!online" role="status">Offline — your changes will sync when you reconnect</p>
   <RouterView />
 </template>
 
 <style scoped>
-.offline {
+p {
   flex: none;
   padding: var(--space-2) var(--space-4);
   background-color: var(--color-ink);

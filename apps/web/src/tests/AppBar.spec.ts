@@ -42,14 +42,14 @@ describe("AppBar", () => {
 
   it("renders a tappable back link when a back target is given", async () => {
     const bar = await mountBar({ title: "Household", back: { name: "lists" } });
-    const back = bar.find("a.back");
+    const back = bar.find('a[aria-label="Back"]');
     expect(back.exists()).toBe(true);
     expect(back.attributes("href")).toBe("/");
   });
 
   it("offers no back link on the home screen", async () => {
     const bar = await mountBar({ title: "Shopping Lists" });
-    expect(bar.find("a.back").exists()).toBe(false);
+    expect(bar.find('a[aria-label="Back"]').exists()).toBe(false);
   });
 
   it("shows Settings and Sign out on signed-in screens", async () => {
@@ -62,7 +62,7 @@ describe("AppBar", () => {
     pendingInvitationCount.value = 2;
     const bar = await mountBar({ title: "Shopping Lists", settings: true }, "/", user);
     const settings = bar.find('a[href="/settings"]');
-    expect(settings.find(".invite-badge").text()).toBe("2");
+    expect(settings.find('span[aria-hidden="true"]').text()).toBe("2");
     // The screen reader hears the full state, not just the number.
     expect(settings.text()).toContain("2 pending invitations");
   });
@@ -70,7 +70,7 @@ describe("AppBar", () => {
   it("leaves the Settings action unmarked when the inbox is empty", async () => {
     pendingInvitationCount.value = 0;
     const bar = await mountBar({ title: "Shopping Lists", settings: true }, "/", user);
-    expect(bar.find('a[href="/settings"] .invite-badge').exists()).toBe(false);
+    expect(bar.find('a[href="/settings"] span[aria-hidden="true"]').exists()).toBe(false);
   });
 
   it("shows neither account action while signed out", async () => {

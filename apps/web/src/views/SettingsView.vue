@@ -111,7 +111,7 @@ onUnmounted(() => {
       <ul>
         <li v-for="invitation in invitations" :key="invitation.id">
           <p>{{ invitation.invitedByName }} invited you to {{ invitation.listName }}</p>
-          <div class="actions">
+          <div>
             <button
               type="button"
               class="primary"
@@ -131,7 +131,7 @@ onUnmounted(() => {
     <section v-if="isAdmin" class="add-user" aria-label="Add a user">
       <h2>Add a user</h2>
       <p>Give a new household member their name, email, and password.</p>
-      <form class="add-user-form" @submit.prevent="addUser">
+      <form @submit.prevent="addUser">
         <label>
           Name
           <input v-model="form.name" name="add-user-name" />
@@ -158,24 +158,26 @@ onUnmounted(() => {
 </template>
 
 <style scoped>
-.invitations li {
+ul li {
   display: grid;
   gap: var(--space-2);
   padding-block: var(--space-3);
   border-bottom: 1px solid var(--color-rule);
-}
 
-.invitations li:last-child {
-  border-bottom: none;
-}
+  &:last-child {
+    border-bottom: none;
+  }
 
-.actions {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--space-2);
-}
+  /* The Accept / Decline pair rides under the invitation's text, sharing its
+     width. */
+  div {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-2);
+  }
 
-.actions button {
-  flex: 1;
+  div button {
+    flex: 1;
+  }
 }
 </style>

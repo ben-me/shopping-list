@@ -98,7 +98,7 @@ describe("SettingsView", () => {
     await wrapper.find('input[name="add-user-name"]').setValue("Partner");
     await wrapper.find('input[name="add-user-email"]').setValue("partner@example.com");
     await wrapper.find('input[name="add-user-password"]').setValue("password-123");
-    await wrapper.find("form.add-user-form").trigger("submit");
+    await wrapper.find("form").trigger("submit");
     await flushPromises();
     await settle();
 

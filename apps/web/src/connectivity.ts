@@ -5,13 +5,34 @@ import { ignoreRejection } from "./utils/fireAndForget";
 
 export const online = ref(true);
 
+/**
+ * What a Sync pass refreshes. `global` (the default) reconciles the whole
+ * device — the Lists index and the pending-invitation inbox — then fans out
+ * to every per-view sync. `list` is the lighter pull a List screen needs: it
+ * still drains the outbox first (the ordering invariant) and fans out, but
+ * skips the app-wide Lists and invitation state the screen does not render,
+ * so opening or switching a List never drags the global endpoints along.
+ */
+export type SyncScope = "global" | "list";
+
 /** A per-view sync that runs after the shared part of every pass. */
 type ViewSync = (db: ShoppingDb) => Promise<void>;
-const viewSyncs = new Set<ViewSync>();
-export function onSyncPass(viewSync: ViewSync): () => void {
-  viewSyncs.add(viewSync);
+interface ViewSyncEntry {
+  handler: ViewSync;
+  /** Read app-wide state (Lists index, invitation inbox): skipped by list-scoped passes. */
+  globalOnly: boolean;
+}
+const viewSyncs = new Set<ViewSyncEntry>();
+/**
+ * Subscribe a per-view sync to every pass. Mark `globalOnly` for syncs that
+ * read app-wide state — the Lists index, the invitation inbox — so they run
+ * in global passes only and not in the lighter passes List screens start.
+ */
+export function onSyncPass(viewSync: ViewSync, opts?: { globalOnly?: boolean }): () => void {
+  const entry: ViewSyncEntry = { handler: viewSync, globalOnly: opts?.globalOnly ?? false };
+  viewSyncs.add(entry);
   return () => {
-    viewSyncs.delete(viewSync);
+    viewSyncs.delete(entry);
   };
 }
 
@@ -20,8 +41,8 @@ export function onSyncPass(viewSync: ViewSync): () => void {
  * outbox drains BEFORE anything is pulled, so a pull can never overwrite the
  * local state that queued writes describe. A successful drain is followed by
  * pruning synced outbox rows past the retention window, bounding the table.
- * After the shared Lists pull, every
- * registered per-view sync runs in turn.
+ * Then the Lists index is pulled (global passes only — see {@link SyncScope})
+ * and every registered per-view sync runs in turn.
  *
  * A pass already in flight wins: concurrent triggers (the browser firing
  * `online` twice, a reconnect racing a visibility change) collapse into the
@@ -37,47 +58,77 @@ let currentPass: Promise<void> | null = null;
  * race. Bounded: any number of in-flight collapsers queue at most one rerun.
  */
 let rerunRequested = false;
-export function runSyncPass(db: ShoppingDb): Promise<void> {
+/** The scope the queued rerun runs at; widened to `global` by any global caller. */
+let rerunScope: SyncScope = "global";
+export function runSyncPass(db: ShoppingDb, scope: SyncScope = "global"): Promise<void> {
   if (currentPass) {
     rerunRequested = true;
+    // A global request widens the queued rerun; a list request never narrows it.
+    if (scope === "global") {
+      rerunScope = "global";
+    }
     // Await the running pass *and* its queued rerun, so callers that await
     // (an accept, an explicit refresh) observe the post-action state.
     return currentPass;
   }
-  currentPass = runPassLoop(db).finally(() => {
+  currentPass = runPassLoop(db, scope).finally(() => {
     currentPass = null;
   });
   return currentPass;
 }
 
-async function runPassLoop(db: ShoppingDb): Promise<void> {
+async function runPassLoop(db: ShoppingDb, scope: SyncScope): Promise<void> {
   do {
     rerunRequested = false;
     await syncOutbox(db);
     await ignoreRejection(db.pruneSyncedOutbox());
-    await syncFromServer(db);
-    for (const viewSync of viewSyncs) {
-      await ignoreRejection(viewSync(db));
+    if (scope === "global") {
+      await syncFromServer(db);
+    }
+    for (const entry of viewSyncs) {
+      if (entry.globalOnly && scope !== "global") {
+        continue;
+      }
+      await ignoreRejection(entry.handler(db));
+    }
+    if (rerunRequested) {
+      scope = rerunScope;
+      rerunScope = "global";
     }
   } while (rerunRequested);
 }
 
 /**
+ * How often the open app re-syncs without any user action: changes that
+ * happened elsewhere while this device stayed online — a new Invitation, a
+ * List renamed, a Membership revoked — arrive within this window even when
+ * the user sits on a List screen the whole time. Visibility-gated below, so
+ * a hidden tab never polls.
+ */
+export const SYNC_POLL_MS = 60_000;
+
+/**
  * Keep the device in sync without user action. Installs listeners that:
  *
- * - mirror the browser's connection state into {@link online}; and
+ * - mirror the browser's connection state into {@link online};
  * - run one {@link runSyncPass} when the connection returns or the app
  *   becomes visible again while online (the classic mobile "walked back
  *   into signal" moment — mobile browsers do not always fire `online`
- *   reliably, and the event can fire while the app is hidden).
+ *   reliably, and the event can fire while the app is hidden); and
+ * - poll once per {@link SYNC_POLL_MS} while online and visible, so unseen
+ *   changes arrive without waiting for a reconnect or a navigation.
  *
  * This watcher is the only reconnect trigger in the app; views subscribe
  * with {@link onSyncPass} rather than listening for `online` themselves, so
  * a reconnect drains the outbox exactly once. Every sync failure is
  * swallowed — being offline is normal, and the outbox retries on the next
- * trigger. Returns a cleanup that removes the listeners.
+ * trigger. The poll collapses into any pass already in flight (the shared
+ * guard), so it can never stack with a reconnect or a view's own pass.
+ * Returns a cleanup that removes the listeners and the poll.
+ *
+ * `pollMs` exists so tests can shorten the sweep; callers keep the default.
  */
-export function startSyncWatcher(db: ShoppingDb): () => void {
+export function startSyncWatcher(db: ShoppingDb, pollMs: number = SYNC_POLL_MS): () => void {
   const markOffline = () => {
     online.value = false;
   };
@@ -95,10 +146,16 @@ export function startSyncWatcher(db: ShoppingDb): () => void {
   window.addEventListener("online", markOnlineAndSync);
   window.addEventListener("offline", markOffline);
   document.addEventListener("visibilitychange", syncIfOnline);
+  const pollTimer = setInterval(() => {
+    if (online.value && document.visibilityState === "visible") {
+      void ignoreRejection(runSyncPass(db));
+    }
+  }, pollMs);
 
   return () => {
     window.removeEventListener("online", markOnlineAndSync);
     window.removeEventListener("offline", markOffline);
     document.removeEventListener("visibilitychange", syncIfOnline);
+    clearInterval(pollTimer);
   };
 }

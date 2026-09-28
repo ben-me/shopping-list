@@ -79,7 +79,7 @@ async function recordPayment(amount: string, date: string) {
   await flushPromises();
   await wrapper.find('input[name="payment-amount"]').setValue(amount);
   await wrapper.find('input[name="payment-date"]').setValue(date);
-  await wrapper.find("form.payments-form").trigger("submit");
+  await wrapper.find("form").trigger("submit");
   await flushPromises();
   await settle();
   return wrapper;
@@ -124,8 +124,8 @@ describe("PaymentsView", () => {
     expect(paymentsTab.text()).toBe("Payments");
 
     // The Payments screen is not rendered on the Items screen at all.
-    expect(wrapper.find("form.payments-form").exists()).toBe(false);
-    expect(wrapper.find(".payment-list").exists()).toBe(false);
+    expect(wrapper.find('input[name="payment-amount"]').exists()).toBe(false);
+    expect(wrapper.find(".total-paid").exists()).toBe(false);
   });
 
   it("records a Payment with an amount and a date, and it survives a reload", async () => {
@@ -185,7 +185,7 @@ describe("PaymentsView", () => {
     await flushPromises();
 
     const rowByAmount = (amount: string) =>
-      wrapper.findAll(".payments li").filter((row) => row.text().includes(amount))[0];
+      wrapper.findAll("ul li").filter((row) => row.text().includes(amount))[0];
     const mine = rowByAmount("12,50");
     const theirs = rowByAmount("7,0");
     expect(mine).toBeDefined();
@@ -202,7 +202,7 @@ describe("PaymentsView", () => {
     await flushPromises();
     await wrapper.find('input[name="edit-amount"]').setValue("9.90");
     await wrapper.find('input[name="edit-date"]').setValue("2026-02-03");
-    await wrapper.find("form.edit-payment-form").trigger("submit");
+    await wrapper.find('form[aria-label="Edit payment"]').trigger("submit");
     await flushPromises();
     await settle();
 
@@ -221,7 +221,83 @@ describe("PaymentsView", () => {
     expect(remaining.map((p) => p.id)).toEqual(["pay-theirs"]);
   });
 
-  it("shows the running total and each Member's share and Owed under the equal Split", async () => {
+  it("keeps the running total in the foot of the screen", async () => {
+    stubRoutes(() => new Response(null, { status: 503 }));
+    await db.putPayment({
+      id: "pay-1",
+      listId: list.id,
+      memberId: user.id,
+      amountInCents: 1250,
+      paidAt: "2026-02-01T10:00:00.000Z",
+      createdAt: "2026-02-01T09:00:00.000Z",
+      updatedAt: "2026-02-01T10:00:00.000Z",
+    });
+
+    const wrapper = await mountPayments();
+    await flushPromises();
+
+    expect(wrapper.find("footer .total-paid").text()).toContain("12,50");
+  });
+
+  it("names the Member who paid on every row of the ledger", async () => {
+    stubRoutes((url) => {
+      if (url.endsWith("/api/lists")) {
+        return jsonResponse({ lists: [list] });
+      }
+      if (url.endsWith(`/api/lists/${list.id}/items`)) {
+        return jsonResponse({ items: [] });
+      }
+      // The queued Payment writes drain through the outbox before the pull.
+      if (url.startsWith(`/api/lists/${list.id}/payments/`)) {
+        return jsonResponse({});
+      }
+      if (url.endsWith(`/api/lists/${list.id}/payments`)) {
+        return jsonResponse({ payments: [] });
+      }
+      if (url.endsWith(`/api/lists/${list.id}/members`)) {
+        return jsonResponse({
+          members: [
+            { memberId: user.id, name: "Test User", joinedAt: list.createdAt },
+            { memberId: "user-2", name: "Two", joinedAt: "2026-01-01T00:00:00.000Z" },
+          ],
+        });
+      }
+      return new Response(null, { status: 503 });
+    });
+    await db.putPayment({
+      id: "pay-1",
+      listId: list.id,
+      memberId: user.id,
+      amountInCents: 1250,
+      paidAt: "2026-02-01T10:00:00.000Z",
+      createdAt: "2026-02-01T09:00:00.000Z",
+      updatedAt: "2026-02-01T10:00:00.000Z",
+    });
+    await db.putPayment({
+      id: "pay-2",
+      listId: list.id,
+      memberId: "user-2",
+      amountInCents: 700,
+      paidAt: "2026-02-02T10:00:00.000Z",
+      createdAt: "2026-02-02T09:00:00.000Z",
+      updatedAt: "2026-02-02T10:00:00.000Z",
+    });
+
+    const wrapper = await mountPayments();
+    await flushPromises();
+    // Names are server-only: the mount's Sync pass is what labels the rows.
+    await runSyncPass(db);
+    await flushPromises();
+
+    const rowByAmount = (amount: string) =>
+      wrapper.findAll("ul li").filter((row) => row.text().includes(amount))[0]!;
+    // Your own Payment reads "You"; another Member's carries their name.
+    expect(rowByAmount("12,50").find("span").text()).toBe("You");
+    expect(rowByAmount("7,00").find("span").text()).toBe("Two");
+    expect(rowByAmount("7,00").text()).not.toContain("user-2");
+  });
+
+  it("keeps your own net in the foot of the screen, under the running total", async () => {
     stubRoutes((url) => {
       if (url.endsWith("/api/lists")) {
         return jsonResponse({ lists: [list] });
@@ -273,41 +349,15 @@ describe("PaymentsView", () => {
     await runSyncPass(db);
     await flushPromises();
 
-    // Running total and the equal share, exactly as computeOwed figures them.
+    // Running total and your own net, exactly as computeOwed figures them.
     expect(wrapper.find(".total-paid").text()).toContain("4,00");
-    const rows = wrapper.findAll(".standing-member");
-    expect(rows).toHaveLength(2);
+    const own = wrapper.find(".own-standing");
+    expect(own.text()).toContain("You are owed");
+    expect(own.text()).toContain("1,00");
+    expect(own.classes()).toContain("owed"); // green: the group owes you
 
-    const you = rows[0]!;
-    expect(you.text()).toContain("You");
-    expect(you.text()).toContain("share 2,00");
-    expect(you.text()).toContain("is owed 1,00");
-    expect(you.classes()).toContain("owed"); // green: the group owes them
-
-    const other = rows[1]!;
-    // Labelled with the name from the server, never the raw Member id.
-    expect(other.text()).toContain("Two");
-    expect(other.text()).not.toContain("user-2");
-    expect(other.text()).toContain("share 2,00");
-    expect(other.text()).toContain("owes 1,00");
-    expect(other.classes()).toContain("owes"); // red: they owe the group
-  });
-
-  it("labels a Member it cannot name by role, not by their raw id", async () => {
-    stubRoutes(() => new Response(null, { status: 503 }));
-    await db.syncMembership({
-      listId: list.id,
-      memberId: "user-2",
-      joinedAt: "2026-01-01T00:00:00.000Z",
-    });
-
-    const wrapper = await mountPayments();
-    await flushPromises();
-    await settle();
-
-    const other = wrapper.findAll(".standing-member")[1]!;
-    expect(other.text()).toContain("Member");
-    expect(other.text()).not.toContain("user-2");
+    // The per-Member table lives on the Members panel, not here.
+    expect(wrapper.find(".standing-member").exists()).toBe(false);
   });
 
   it("shows only the running total on a lone-Member List — never a Share or an Owed figure", async () => {
@@ -326,14 +376,13 @@ describe("PaymentsView", () => {
     await flushPromises();
 
     expect(wrapper.find(".total-paid").text()).toContain("14,00");
-    expect(wrapper.findAll(".standing-member")).toHaveLength(0);
-    const standing = wrapper.find(".standing").text();
-    expect(standing).not.toContain("share");
-    expect(standing).not.toContain("owes");
-    expect(standing).not.toContain("owed");
+    expect(wrapper.find(".own-standing").exists()).toBe(false);
+    expect(wrapper.text()).not.toContain("share");
+    expect(wrapper.text()).not.toContain("owes");
+    expect(wrapper.text()).not.toContain("owed");
   });
 
-  it("recomputes the standing live as a Payment is added, edited, and deleted", async () => {
+  it("recomputes your own net live as a Payment is added, edited, and deleted", async () => {
     stubRoutes(() => new Response(null, { status: 503 }));
     await db.syncMembership({
       listId: list.id,
@@ -343,27 +392,22 @@ describe("PaymentsView", () => {
 
     const wrapper = await recordPayment("12.50", "2026-02-01");
 
-    const rowText = (index: number) => wrapper.findAll(".standing-member")[index]!.text();
-
-    // Record a Payment: the standing re-divides immediately.
+    // Record a Payment: your net re-divides immediately.
     expect(wrapper.find(".total-paid").text()).toContain("12,50");
-    expect(wrapper.findAll(".standing-member")).toHaveLength(2);
-    expect(rowText(0)).toContain("share 6,25");
-    expect(rowText(0)).toContain("is owed 6,25");
-    expect(rowText(1)).toContain("owes 6,25");
+    expect(wrapper.find(".own-standing").text()).toContain("You are owed");
+    expect(wrapper.find(".own-standing").text()).toContain("6,25");
 
     // Edit the Payment down: the figures follow the new amount.
     await wrapper.find('button[name="edit-payment"]').trigger("click");
     await flushPromises();
     await wrapper.find('input[name="edit-amount"]').setValue("9.90");
-    await wrapper.find("form.edit-payment-form").trigger("submit");
+    await wrapper.find('form[aria-label="Edit payment"]').trigger("submit");
     await flushPromises();
     await settle();
 
     expect(wrapper.find(".total-paid").text()).toContain("9,90");
-    expect(rowText(0)).toContain("share 4,95");
-    expect(rowText(0)).toContain("is owed 4,95");
-    expect(rowText(1)).toContain("owes 4,95");
+    expect(wrapper.find(".own-standing").text()).toContain("You are owed");
+    expect(wrapper.find(".own-standing").text()).toContain("4,95");
 
     // Delete it: the two Members settle at zero.
     await wrapper.find('button[name="delete-payment"]').trigger("click");
@@ -371,12 +415,10 @@ describe("PaymentsView", () => {
     await settle();
 
     expect(wrapper.find(".total-paid").text()).toContain("0,00");
-    expect(wrapper.findAll(".standing-member")).toHaveLength(2);
-    expect(rowText(0)).toContain("settled");
-    expect(rowText(1)).toContain("settled");
+    expect(wrapper.find(".own-standing").text()).toContain("Settled up");
   });
 
-  it("re-divides the standing when Membership changes arrive on Sync", async () => {
+  it("re-divides your own net when Membership changes arrive on Sync", async () => {
     stubRoutes((url) => {
       if (url === "/api/lists") {
         // The server still returns the List (Sync prunes local Lists the
@@ -410,11 +452,10 @@ describe("PaymentsView", () => {
     await flushPromises();
     await settle();
 
-    // Two Members split the pot: You paid it all, the other Member owes half.
-    expect(wrapper.findAll(".standing-member")).toHaveLength(2);
+    // Two Members split the pot: You paid it all, so the group owes you half.
     expect(wrapper.find(".total-paid").text()).toContain("12,00");
-    expect(wrapper.findAll(".standing-member")[0]!.text()).toContain("is owed 6,00");
-    expect(wrapper.findAll(".standing-member")[1]!.text()).toContain("owes 6,00");
+    expect(wrapper.find(".own-standing").text()).toContain("You are owed");
+    expect(wrapper.find(".own-standing").text()).toContain("6,00");
 
     // A third Member joins; the next Sync pass re-divides the same pot.
     await db.syncMembership({
@@ -425,11 +466,8 @@ describe("PaymentsView", () => {
     await runSyncPass(db);
     await flushPromises();
 
-    const rows = wrapper.findAll(".standing-member");
-    expect(rows).toHaveLength(3);
     expect(wrapper.find(".total-paid").text()).toContain("12,00");
-    expect(rows[0]!.text()).toContain("is owed 8,00");
-    expect(rows[1]!.text()).toContain("owes 4,00");
-    expect(rows[2]!.text()).toContain("owes 4,00");
+    expect(wrapper.find(".own-standing").text()).toContain("You are owed");
+    expect(wrapper.find(".own-standing").text()).toContain("8,00");
   });
 });

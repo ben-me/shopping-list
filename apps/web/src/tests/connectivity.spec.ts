@@ -47,8 +47,8 @@ function stubServer(
 
 let stopWatch: (() => void) | null = null;
 
-function watch(): () => void {
-  stopWatch = startSyncWatcher(db);
+function watch(pollMs?: number): () => void {
+  stopWatch = startSyncWatcher(db, pollMs);
   return stopWatch;
 }
 
@@ -178,6 +178,75 @@ describe("startSyncWatcher", () => {
     const get = requests.find((r) => r.init?.method === undefined || r.init?.method === "GET");
     expect(get?.url).toBe("/api/lists");
     stopViewSync();
+  });
+
+  it("a list-scoped pass drains and fans out but skips the app-wide Lists pull", async () => {
+    const { requests } = stubServer((url) =>
+      url === "/api/lists" ? jsonResponse({ lists: [] }) : undefined,
+    );
+    let viewSyncCalls = 0;
+    let globalSyncCalls = 0;
+    const stopViewSync = onSyncPass(async () => {
+      viewSyncCalls += 1;
+    });
+    const stopGlobalSync = onSyncPass(
+      async () => {
+        globalSyncCalls += 1;
+      },
+      { globalOnly: true },
+    );
+
+    await runSyncPass(db, "list");
+
+    expect(requests.some((r) => r.url === "/api/lists")).toBe(false);
+    expect(viewSyncCalls).toBe(1);
+    expect(globalSyncCalls).toBe(0);
+    stopViewSync();
+    stopGlobalSync();
+  });
+
+  it("widens a queued rerun to global when a global pass waits behind a list pass", async () => {
+    // A gate keeps the first (list-scoped) pass in flight until released.
+    let release: (() => void) | undefined;
+    const gate = new Promise<void>((resolve) => (release = resolve));
+    const { requests } = stubServer(async () => {
+      await gate;
+      return jsonResponse({ lists: [] });
+    });
+
+    const first = runSyncPass(db, "list");
+    await new Promise((resolve) => setTimeout(resolve, 10));
+
+    const second = runSyncPass(db); // global: must widen the queued rerun
+    release?.();
+    await Promise.all([first, second]);
+
+    // The rerun ran as a global pass: the Lists index was pulled at least once.
+    expect(requests.filter((r) => r.url === "/api/lists")).toHaveLength(1);
+  });
+
+  it("polls the server periodically while online and visible, with no user action", async () => {
+    const { requests } = stubServer((url) =>
+      url === "/api/lists" ? jsonResponse({ lists: [] }) : undefined,
+    );
+    watch(20); // shorten the sweep; production uses SYNC_POLL_MS
+
+    await vi.waitFor(() => {
+      expect(requests.some((r) => r.url === "/api/lists")).toBe(true);
+    });
+  });
+
+  it("does not poll while offline", async () => {
+    const { requests } = stubServer((url) =>
+      url === "/api/lists" ? jsonResponse({ lists: [] }) : undefined,
+    );
+    watch(20);
+    // Drop the connection after the watcher mirrored navigator.onLine.
+    online.value = false;
+
+    await new Promise((resolve) => setTimeout(resolve, 60));
+
+    expect(requests.some((r) => r.url === "/api/lists")).toBe(false);
   });
 
   it("collapses concurrent reconnect triggers into one pass — the outbox drains once", async () => {

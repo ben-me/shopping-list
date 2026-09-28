@@ -1,11 +1,10 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref } from "vue";
 import { useRoute } from "vue-router";
-import type { List, Payment } from "@shopping-list/api/domain";
+import type { Payment } from "@shopping-list/api/domain";
 import ListScreen from "../components/ListScreen.vue";
 import PaymentRow from "../components/PaymentRow.vue";
 import { onSyncPass, runSyncPass } from "../connectivity";
-import { currentList, loadList } from "../current-list";
 import { db } from "../db";
 import { syncOutbox } from "../lists";
 import { memberIdsOf, syncMembershipsFromServer } from "../members";
@@ -17,7 +16,6 @@ import { ignoreRejection, logRejection } from "../utils/fireAndForget";
 
 const route = useRoute();
 const listId = computed(() => String(route.params.listId ?? ""));
-const list = ref<List | null>(currentList(listId.value));
 const members = ref<string[]>([]);
 const payments = ref<Payment[]>([]);
 const memberNames = ref<Record<string, string>>({});
@@ -40,30 +38,26 @@ const memberLabel = (memberId: string) => {
   return memberNames.value[memberId] ?? "Member";
 };
 
-/** The Owed wording and colour for one Member: red owes the group, green the group owes. */
-const owedPresentation = (amountInCents: number) =>
-  amountInCents > 0
-    ? { label: `owes ${formatEuro(amountInCents)}`, className: "owes" }
-    : amountInCents < 0
-      ? { label: `is owed ${formatEuro(-amountInCents)}`, className: "owed" }
-      : { label: "settled", className: "settled" };
-
-const standingRows = computed(() => {
-  const { shareInCents, owed } = standing.value;
-  if (shareInCents === null) {
-    return [];
+/** The Owed wording for your own net: what you hand over, or what you're owed. */
+const myStanding = computed(() => {
+  const id = session.user?.id;
+  const figure = id ? standing.value.owed.find((owed) => owed.memberId === id) : undefined;
+  if (!figure) {
+    return null;
   }
-  return owed.map((figure) => ({
-    memberId: figure.memberId,
-    name: memberLabel(figure.memberId),
-    share: `share ${formatEuro(shareInCents)}`,
-    ...owedPresentation(figure.amountInCents),
-  }));
+  if (figure.amountInCents > 0) {
+    return { label: "You owe", figure: formatEuro(figure.amountInCents), className: "owes" };
+  }
+  if (figure.amountInCents < 0) {
+    return { label: "You are owed", figure: formatEuro(-figure.amountInCents), className: "owed" };
+  }
+  return { label: "Settled up", figure: null, className: "settled" };
 });
 
-async function loadTheList() {
-  list.value = await loadList(db, listId.value);
-  members.value = list.value ? await memberIdsOf(db, list.value) : [];
+/** The Owner always counts as a Member, so the split needs the List row. */
+async function loadMembers() {
+  const list = await db.getList(listId.value);
+  members.value = list ? await memberIdsOf(db, list) : [];
 }
 
 async function loadPayments() {
@@ -114,17 +108,19 @@ async function onDeletePayment(payment: Payment) {
 let stopSyncPass: (() => void) | null = null;
 
 onMounted(() => {
-  logRejection(loadTheList(), "Loading the list");
+  logRejection(loadMembers(), "Loading the members");
   logRejection(loadPayments(), "Loading the payments");
   stopSyncPass = onSyncPass(async (db) => {
     await ignoreRejection(syncPaymentsFromServer(db, listId.value));
     // Members change only through the online invite flow; pull the server
     // truth so an accepted Invitation redivides the standing on every device.
     await ignoreRejection(syncMembers(db));
-    await logRejection(loadTheList(), "Loading the list");
+    await logRejection(loadMembers(), "Loading the members");
     await logRejection(loadPayments(), "Loading the payments");
   });
-  void ignoreRejection(runSyncPass(db));
+  // A list-scoped pass: this screen drains the outbox and pulls its own
+  // Payments and Memberships, but not the app-wide Lists index or inbox.
+  void ignoreRejection(runSyncPass(db, "list"));
 });
 
 onUnmounted(() => {
@@ -134,9 +130,9 @@ onUnmounted(() => {
 </script>
 
 <template>
-  <ListScreen :title="list?.name ?? 'List'" :list-id="listId">
+  <ListScreen>
     <template #entry>
-      <form class="payments-form" @submit.prevent="onRecordPayment">
+      <form @submit.prevent="onRecordPayment">
         <input
           v-model="paymentForm.amount"
           name="payment-amount"
@@ -151,115 +147,104 @@ onUnmounted(() => {
       <p v-if="paymentForm.error" class="error">{{ paymentForm.error }}</p>
     </template>
 
-    <section class="standing" aria-label="Money standing">
+    <ul class="rows">
+      <PaymentRow
+        v-for="payment in payments"
+        :key="payment.id"
+        :payment="payment"
+        :who="memberLabel(payment.memberId)"
+        :own="isOwn(payment)"
+        :format="formatEuro"
+        :save="onSaveEdit"
+        :remove="onDeletePayment"
+      />
+    </ul>
+    <p v-if="payments.length === 0" class="empty">No payments recorded yet.</p>
+
+    <template #footer>
       <p class="total">
         <span class="total-label">Total paid</span>
         <span class="total-paid">{{ formatEuro(standing.totalInCents) }}</span>
       </p>
-      <p v-if="standingRows.length === 0" class="empty">
-        Only you so far. Invite your household from Members.
+      <p v-if="myStanding" class="own-standing" :class="myStanding.className">
+        <span class="own-standing-label">{{ myStanding.label }}</span>
+        <span v-if="myStanding.figure" class="own-standing-figure">{{ myStanding.figure }}</span>
       </p>
-      <ul v-else class="rows standing-members">
-        <li
-          v-for="row in standingRows"
-          :key="row.memberId"
-          class="standing-member"
-          :class="row.className"
-        >
-          <span class="member-name">{{ row.name }}</span>
-          <span class="member-share">{{ row.share }}</span>
-          <span class="member-owed">{{ row.label }}</span>
-        </li>
-      </ul>
-    </section>
-
-    <ul class="rows payment-list payments">
-      <li v-for="payment in payments" :key="payment.id">
-        <PaymentRow
-          :payment="payment"
-          :own="isOwn(payment)"
-          :format="formatEuro"
-          :save="onSaveEdit"
-          :remove="onDeletePayment"
-        />
-      </li>
-    </ul>
-    <p v-if="payments.length === 0" class="empty">No payments recorded yet.</p>
+    </template>
   </ListScreen>
 </template>
 
 <style scoped>
 /* Amount first, then the date: the date field needs its intrinsic width, the
-   amount takes whatever is left. */
-.entry input[name="payment-amount"] {
-  flex: 1 1 3rem;
+   amount takes whatever is left. Three controls on one line is tight on a
+   phone: the bar closes the gaps between them and stops the button from
+   spending width on its own padding. */
+form {
+  gap: var(--space-1);
+
+  input[name="payment-amount"] {
+    flex: 1 1 3rem;
+  }
+
+  input[name="payment-date"] {
+    flex: 1 1 8.75rem;
+  }
+
+  button {
+    flex: none;
+    padding-inline: var(--space-2);
+  }
 }
 
-.entry input[name="payment-date"] {
-  flex: 1 1 8.75rem;
-}
-
-.total {
+/* Label on the left, the figure on the right; on a very narrow screen a long
+   figure wraps under its label rather than pushing it off the bar. */
+.total,
+.own-standing {
   display: flex;
+  flex-wrap: wrap;
   align-items: baseline;
   justify-content: space-between;
-  gap: var(--space-3);
+  gap: var(--space-1) var(--space-3);
+}
+
+/* Both labels ride in the ink bar beside their figure, so they are set in
+   paper; the size difference is what keeps the running total the louder of the
+   two. */
+.total-label,
+.own-standing-label {
+  color: var(--color-paper);
+  font-weight: 600;
 }
 
 .total-label {
-  color: var(--color-ink-muted);
+  font-size: var(--fs-h2);
+}
+
+.own-standing-label {
   font-size: var(--fs-small);
-  font-weight: 600;
 }
 
 /* The one big figure on the screen: wide, heavy, lining up in columns. */
 .total-paid {
+  color: var(--color-paper);
   font-size: var(--fs-h2);
   font-weight: 700;
   font-stretch: 115%;
   font-variant-numeric: tabular-nums;
 }
 
-/* A long name wraps onto its own line and breaks mid-word rather than pushing
-   the figures past the sheet edge — on a phone the name simply takes the row
-   and the money lines up under it. */
-.standing-members > li {
-  flex-wrap: wrap;
-  justify-content: space-between;
-  overflow-wrap: anywhere;
-}
-
-.member-name {
-  min-width: 0;
-  font-weight: 600;
-}
-
-.member-share {
-  color: var(--color-ink-muted);
+.own-standing-figure {
   font-size: var(--fs-small);
-}
-
-.member-owed {
-  margin-inline-start: auto;
+  font-weight: 700;
   font-variant-numeric: tabular-nums;
-  font-weight: 600;
 }
 
-/* Red: this Member owes the group. Green: the group owes them. */
-.standing-member.owes .member-owed {
-  color: var(--color-owes);
+/* Green: the group owes you. Red: you owe the group. */
+.own-standing.owed .own-standing-figure {
+  color: var(--color-owed-on-ink);
 }
 
-.standing-member.owed .member-owed {
-  color: var(--color-owed);
-}
-
-.standing-member.settled .member-owed {
-  color: var(--color-ink-muted);
-}
-
-.payment-list > li {
-  flex-wrap: wrap;
-  padding-block: var(--space-3);
+.own-standing.owes .own-standing-figure {
+  color: var(--color-owes-on-ink);
 }
 </style>
