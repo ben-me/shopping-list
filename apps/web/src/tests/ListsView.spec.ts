@@ -87,3 +87,22 @@ describe("ListsView", () => {
     expect(wrapper.text()).toContain("Sign in");
   });
 });
+
+describe("switching between Lists", () => {
+  it("paints the second List's chrome, not the first one's", async () => {
+    const other: List = { ...list, id: "list-2", name: "Hardware store" };
+    await db.putList(list);
+    await db.putList(other);
+    stubApi({}, { user, fallback: serverDown });
+
+    const { wrapper, router } = await mountApp(`/list/${list.id}`);
+    await flushPromises();
+    expect(wrapper.find("h1").text()).toBe("Household");
+
+    // The layout route record is reused: only its params change.
+    await router.push(`/list/${other.id}`);
+    await flushPromises();
+
+    expect(wrapper.find("h1").text()).toBe("Hardware store");
+  });
+});

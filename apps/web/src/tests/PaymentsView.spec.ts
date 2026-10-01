@@ -83,15 +83,15 @@ describe("PaymentsView", () => {
   it("keeps the List's name painted when switching between Items and Payments", async () => {
     stubOfflineServer();
 
-    const items = await mountList();
+    const { wrapper, router } = await mountApp(`/list/${list.id}`);
     await flushPromises();
-    expect(items.find("h1").text()).toBe("Household");
-    items.unmount();
+    expect(wrapper.find("h1").text()).toBe("Household");
 
-    // Mounting is enough: the name is already there, so the app bar does not
-    // flash an empty title while the Store read is in flight.
-    const payments = await mountPayments();
-    expect(payments.find("h1").text()).toBe("Household");
+    // The layout outlives its screens, so switching sections never reads the
+    // List again and the app bar cannot flash an empty title.
+    await router.push(`/list/${list.id}/payments`);
+    await flushPromises();
+    expect(wrapper.find("h1").text()).toBe("Household");
   });
 
   it("hangs off the List's navigation rather than living under the Items", async () => {
