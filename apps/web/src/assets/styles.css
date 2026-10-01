@@ -156,18 +156,6 @@ a {
   border: 0;
 }
 
-/* Tappable things act on the first tap. Without this a second tap on a touch
-   screen is claimed as a double-tap-to-zoom gesture and never reaches the page
-   (Firefox on touch; a mouse is unaffected). Pinch zoom still works. */
-a,
-button,
-label,
-input,
-select,
-textarea {
-  touch-action: manipulation;
-}
-
 /* Controls: one quiet secondary style; a submit is the commit. */
 button {
   display: inline-flex;
