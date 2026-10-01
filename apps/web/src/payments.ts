@@ -4,8 +4,7 @@ import type { ShoppingDb } from "./store";
 import now from "./utils/now";
 
 // The value is a plain number as typed (a comma or a dot may separate the
-// decimals). The euro sign is a frontend concern only, never part of the
-// value, so there is no sign handling here.
+// decimals); the euro sign is a frontend concern and never part of the value.
 function eurosToCents(amountInEur: string): number {
   const match = /^(\d+)(?:[.,](\d+))?$/.exec(amountInEur.trim());
   const cents = match === null ? 0 : Number(match[1] + (match[2] ?? "").slice(0, 2).padEnd(2, "0"));
@@ -40,31 +39,24 @@ export async function addPayment(
   return payment;
 }
 
-/**
- * Edit a Payment's amount (the euro string as the user typed it) and/or date.
- * The edit is queued as a whole-row put of the Payment's new state; the server
- * reconciles it last-write-wins against any concurrent edit (ADR 0001).
- */
+/** Edit a Payment's amount (the euro string as typed) and/or date. */
 export async function updatePayment(
   db: ShoppingDb,
-  payment: Payment,
+  id: string,
+  listId: string,
   patch: { amountInEur?: string; paidAt?: string },
 ): Promise<Payment> {
-  let amountInCents = payment.amountInCents;
+  const edit: { amountInCents?: number; paidAt?: string } = {};
   if (patch.amountInEur !== undefined) {
-    amountInCents = eurosToCents(patch.amountInEur);
+    edit.amountInCents = eurosToCents(patch.amountInEur);
   }
-  if (patch.paidAt !== undefined && !patch.paidAt.trim()) {
-    throw new Error("Give the payment a date");
+  if (patch.paidAt !== undefined) {
+    if (!patch.paidAt.trim()) {
+      throw new Error("Give the payment a date");
+    }
+    edit.paidAt = patch.paidAt.trim();
   }
-  const updated: Payment = {
-    ...payment,
-    amountInCents,
-    paidAt: patch.paidAt !== undefined ? patch.paidAt.trim() : payment.paidAt,
-    updatedAt: now(),
-  };
-  await db.putPayment(updated);
-  return updated;
+  return db.updatePayment(id, listId, edit);
 }
 
 export async function removePayment(db: ShoppingDb, payment: Payment): Promise<void> {

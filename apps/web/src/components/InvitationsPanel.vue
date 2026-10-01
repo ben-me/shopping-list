@@ -2,14 +2,10 @@
 import { computed } from "vue";
 import type { ListInvitation } from "@shopping-list/api/domain";
 
-/**
- * The Owner's corner of the Members screen: who has been invited, what can
- * still be revoked, and the form that invites somebody new. The screen owns
- * the data and the calls; this owns only the wording and the layout, so the
- * screen's own template stays about the standing table.
- */
+/* The Owner's corner of the Members screen. The screen owns the data and the
+   calls; this owns the wording and the layout. */
 const props = defineProps<{
-  /** Every Invitation on the List, accepted ones included. */
+  /** Accepted ones included: the panel hides them, not the caller. */
   invitations: ListInvitation[];
   email: string;
   submitting: boolean;
@@ -34,7 +30,7 @@ const statusLabel = (status: ListInvitation["status"]) =>
   <section>
     <h2>Invitations</h2>
     <p v-if="invitations.length === 0" class="empty">Nobody invited yet.</p>
-    <ul v-else class="invitations">
+    <ul v-else>
       <li v-for="invitation in openInvitations" :key="invitation.id">
         <span>{{ invitation.email }}</span>
         <span class="invitation-status">({{ statusLabel(invitation.status) }})</span>
@@ -49,7 +45,7 @@ const statusLabel = (status: ListInvitation["status"]) =>
         </button>
       </li>
     </ul>
-    <form class="invite-form" @submit.prevent="emit('invite')">
+    <form @submit.prevent="emit('invite')">
       <label>
         Email
         <input
@@ -65,9 +61,8 @@ const statusLabel = (status: ListInvitation["status"]) =>
 </template>
 
 <style scoped>
-/* Invitations sit below the Members, one row each with the revoke on the
-   right edge. */
-.invitations {
+/* One row each, revoke on the right edge. */
+ul {
   li {
     display: flex;
     align-items: center;

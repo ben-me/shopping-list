@@ -4,11 +4,9 @@ import { WEB_ORIGIN } from "../playwright.config";
 
 /**
  * Shared helpers for the e2e specs: provision a user through the admin route,
- * sign them in, create a List, add, tick, and remove Items.
+ * sign them in, create a List, add, tick and remove Items.
  *
- * Accounts are provisioned, not self-created (ADR 0003): `00-bootstrap` signs
- * up once on the empty database (that account becomes the Admin) and every
- * later account is created through the admin route with a unique email.
+ * Accounts are provisioned, not self-created (ADR 0003).
  */
 
 export const PASSWORD = "e2e-secret-123";
@@ -24,10 +22,7 @@ export function input(page: Page, formName: string) {
   return page.locator(`input[name="${formName}"]`);
 }
 
-/**
- * Sign the Admin in over the API and return the session cookie. A fresh
- * sign-in needs a fresh cookie, so sign out any stale session first.
- */
+/* Sign the Admin in over the API and return the session cookie. */
 export async function adminCookie(request: APIRequestContext): Promise<string> {
   await request.post("/api/auth/sign-out", {
     headers: { origin: TRUSTED_ORIGIN },
@@ -114,6 +109,11 @@ export function itemRow(page: Page, name: string) {
   return page.getByRole("listitem").filter({ hasText: name });
 }
 
+/* An Invitation row: found by role and text, the email being unique to it. */
+export function invitationRow(page: Page, text: string) {
+  return page.getByRole("listitem").filter({ hasText: text });
+}
+
 export function paymentRow(page: Page, amount: string) {
   return page.locator("main ul li").filter({ hasText: amount });
 }
@@ -124,11 +124,8 @@ export async function addItem(page: Page, name: string) {
   await expect(itemRow(page, name)).toBeVisible();
 }
 
-/**
- * Waits until the local Store reflects the expected Item state and the outbox
- * has drained, so a reload is guaranteed to show the same state. `checked:
- * null` waits for the Item to be gone.
- */
+/* Waits until the Store holds the expected Item state and the outbox has
+   drained, so a reload shows the same thing. `checked: null` waits for gone. */
 export function itemSettled(page: Page, name: string, checked: boolean | null) {
   const listId = new URL(page.url()).pathname.split("/").pop() ?? "";
   // Runs in the page: imports the app's own Store module and inspects its state.

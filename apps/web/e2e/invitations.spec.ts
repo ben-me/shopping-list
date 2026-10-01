@@ -3,19 +3,15 @@ import {
   addItem,
   createList,
   input,
+  invitationRow,
   openMembers,
   provisionUser,
   signInAsUser,
   signOut,
 } from "./support";
 
-/**
- * The in-app Invitation flow (ADR 0003): the Owner invites an existing user
- * by email, the invitee sees the pending Invitation when signed in (Owner's
- * name + List name) and accepts or declines; a decline maps to `revoked`,
- * so it leaves both pending lists. No email is ever sent — the whole flow
- * lives inside the app.
- */
+/* The in-app Invitation flow (ADR 0003): invite by email, accept or decline.
+   A decline maps to `revoked`, so it leaves both pending lists. */
 
 test("the Owner invites a user who accepts in-app and gets equal edit rights", async ({
   page,
@@ -30,9 +26,7 @@ test("the Owner invites a user who accepts in-app and gets equal edit rights", a
     await openMembers(page);
     await input(page, "invite-email").fill(invitee.email);
     await page.getByRole("button", { name: "Invite a member" }).click();
-    await expect(page.locator(".invitations li").filter({ hasText: invitee.email })).toContainText(
-      "invited",
-    );
+    await expect(invitationRow(page, invitee.email)).toContainText("invited");
   });
 
   await test.step("inviting a non-existent account is rejected with an actionable error", async () => {
@@ -63,10 +57,8 @@ test("the Owner invites a user who accepts in-app and gets equal edit rights", a
     await expect(page.getByRole("heading", { name: "Weekend shop" })).toBeVisible();
     await addItem(page, "Olive oil");
 
-    // The invitee is a Member with equal edit rights, and every device now
-    // knows both Members — the standing re-divides for the real group. A lone
-    // Member would get no standing at all; the invitee, who paid nothing,
-    // reads as settled, which only the two-Member split can say.
+    // The invitee is a Member with equal edit rights, and the standing
+    // re-divides: only a two-Member split can read as settled.
     await page.getByRole("link", { name: "Payments" }).click();
     await expect(page.locator(".own-standing.settled")).toContainText("Settled up");
   });
@@ -85,7 +77,7 @@ test("a declined invitation closes for both sides; the Owner can also revoke", a
     await openMembers(page);
     await input(page, "invite-email").fill(invitee.email);
     await page.getByRole("button", { name: "Invite a member" }).click();
-    const row = page.locator(".invitations li").filter({ hasText: invitee.email });
+    const row = invitationRow(page, invitee.email);
     await expect(row).toContainText("invited");
 
     await row.getByRole("button", { name: "Revoke" }).click();
@@ -95,12 +87,7 @@ test("a declined invitation closes for both sides; the Owner can also revoke", a
   await test.step("a closed Invitation can be sent again, and the invitee declines it", async () => {
     await input(page, "invite-email").fill(invitee.email);
     await page.getByRole("button", { name: "Invite a member" }).click();
-    await expect(
-      page
-        .locator(".invitations li")
-        .filter({ hasText: invitee.email })
-        .filter({ hasText: "invited" }),
-    ).toBeVisible();
+    await expect(invitationRow(page, invitee.email).filter({ hasText: "invited" })).toBeVisible();
 
     await page.goto("/");
     await signOut(page);
@@ -120,7 +107,7 @@ test("a declined invitation closes for both sides; the Owner can also revoke", a
     await expect(page.getByRole("heading", { name: "Holiday shop" })).toBeVisible();
     await openMembers(page);
     // Both the Owner-revoked and the declined invitations are closed.
-    const closed = page.locator(".invitations li").filter({ hasText: "closed" });
+    const closed = invitationRow(page, "closed");
     await expect(closed).toHaveCount(2);
   });
 });

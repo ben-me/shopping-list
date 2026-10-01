@@ -97,6 +97,51 @@ describe("syncOutbox", () => {
     );
     expect(await db.pendingOutboxEntries()).toHaveLength(0);
   });
+
+  it("keeps one send at a time and picks up what was queued during it", async () => {
+    const sent: string[] = [];
+    let concurrent = 0;
+    let mostConcurrent = 0;
+    let releaseFirst: () => void = () => {};
+    const firstInFlight = new Promise<void>((resolve) => {
+      releaseFirst = resolve;
+    });
+    const fetchImpl = vi.fn<typeof fetch>(async (input) => {
+      const url = String(input);
+      concurrent += 1;
+      mostConcurrent = Math.max(mostConcurrent, concurrent);
+      sent.push(url);
+      if (sent.length === 1) {
+        await firstInFlight;
+      }
+      concurrent -= 1;
+      return jsonResponse({ list: { ...list } });
+    });
+    vi.stubGlobal("fetch", fetchImpl);
+    const list: List = {
+      id: "list-1",
+      ownerId: "user-1",
+      name: "Household",
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    };
+    await db.putList(list);
+
+    const first = syncOutbox(db);
+    while (sent.length === 0) {
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    }
+
+    // Queued mid-send: a second send here would race the first to the server.
+    await db.putList({ ...list, name: "Renamed" });
+    const second = syncOutbox(db);
+    releaseFirst();
+    await Promise.all([first, second]);
+
+    expect(mostConcurrent).toBe(1);
+    expect(sent).toEqual([`/api/lists/${list.id}`, `/api/lists/${list.id}`]);
+    expect(await db.pendingOutboxEntries()).toHaveLength(0);
+  });
 });
 
 describe("syncFromServer", () => {

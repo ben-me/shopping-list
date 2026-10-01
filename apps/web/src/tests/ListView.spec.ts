@@ -37,6 +37,7 @@ beforeEach(async () => {
 
 afterEach(() => {
   vi.unstubAllGlobals();
+  vi.restoreAllMocks();
 });
 
 describe("ListView", () => {
@@ -126,6 +127,68 @@ describe("ListView", () => {
     expect(stored).toBeDefined();
     expect(stored?.checked).toBe(false);
     expect(stored?.checkedAt).toBeUndefined();
+  });
+
+  it("marks the row done from the tap itself", async () => {
+    stubOfflineServer();
+
+    const wrapper = await mountList();
+    await flushPromises();
+    await wrapper.find('input[name="item"]').setValue("Milk");
+    await wrapper.find("form").trigger("submit");
+    await flushPromises();
+    await settle();
+
+    await wrapper.find('input[type="checkbox"]').setValue();
+    await flushPromises();
+    await settle();
+
+    expect(wrapper.find("li").classes()).toContain("done");
+    expect(wrapper.find("label span:last-child").classes()).not.toContain("done");
+  });
+
+  it("takes two taps in a row at face value instead of undoing the first", async () => {
+    stubOfflineServer();
+
+    const wrapper = await mountList();
+    await flushPromises();
+    await wrapper.find('input[name="item"]').setValue("Milk");
+    await wrapper.find("form").trigger("submit");
+    await flushPromises();
+    await settle();
+
+    const checkbox = () => wrapper.find('input[type="checkbox"]');
+    // Both taps in one go, with nothing awaited between them.
+    (checkbox().element as HTMLInputElement).checked = true;
+    await checkbox().trigger("change");
+    (checkbox().element as HTMLInputElement).checked = false;
+    await checkbox().trigger("change");
+    await flushPromises();
+    await settle();
+
+    expect((await db.getItems(list.id))[0]?.checked).toBe(false);
+    expect(wrapper.find("li").classes()).not.toContain("done");
+  });
+
+  it("puts the tick back when the local write fails", async () => {
+    stubOfflineServer();
+
+    const wrapper = await mountList();
+    await flushPromises();
+    await wrapper.find('input[name="item"]').setValue("Milk");
+    await wrapper.find("form").trigger("submit");
+    await flushPromises();
+    await settle();
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    vi.spyOn(db, "setItemChecked").mockRejectedValue(new Error("storage is full"));
+
+    const checkbox = () => wrapper.find('input[type="checkbox"]');
+    await checkbox().setValue();
+    await flushPromises();
+    await settle();
+
+    expect((checkbox().element as HTMLInputElement).checked).toBe(false);
+    expect(wrapper.find("li").classes()).not.toContain("done");
   });
 
   it("removes an Item from the List", async () => {

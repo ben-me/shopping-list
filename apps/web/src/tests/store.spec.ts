@@ -1,6 +1,6 @@
 import "fake-indexeddb/auto";
 
-import { OUTBOX_RETENTION_MS, ShoppingDb } from "../store";
+import { OUTBOX_RETENTION_MS, ShoppingDb, type OutboxEntry } from "../store";
 import type { Item, List, Membership, Payment } from "@shopping-list/api/domain";
 import now from "@/utils/now";
 
@@ -135,6 +135,82 @@ describe("ShoppingDb", () => {
     expect(await db.getItem("item-nope")).toBeUndefined();
   });
 
+  it("ticks and un-ticks an Item and nothing money-related happens", async () => {
+    await db.putItem(milk);
+
+    const ticked = await db.setItemChecked(milk.id, list.id, true);
+    expect(ticked).toMatchObject({ name: "Milk", checked: true });
+    expect(ticked.checkedAt).toBeTruthy();
+
+    const unticked = await db.setItemChecked(milk.id, list.id, false);
+    expect(unticked).toMatchObject({ name: "Milk", checked: false, checkedAt: undefined });
+
+    expect(await db.getItems(list.id)).toEqual([unticked]);
+    expect((await db.pendingOutboxEntries()).map((e) => e.targetType)).toEqual([
+      "item",
+      "item",
+      "item",
+    ]);
+    expect(await db.getPayments(list.id)).toHaveLength(0);
+  });
+
+  it("reads the row fresh, so two taps in a row both land instead of undoing each other", async () => {
+    await db.putItem(milk);
+
+    // No await in between, so the second has no copy of the Item to build on.
+    const ticked = db.setItemChecked(milk.id, list.id, true);
+    const unticked = db.setItemChecked(milk.id, list.id, false);
+    await Promise.all([ticked, unticked]);
+
+    const stored = await db.getItem(milk.id);
+    expect(stored?.checked).toBe(false);
+    expect(stored?.checkedAt).toBeUndefined();
+  });
+
+  it("refuses to tick an Item that is not in this List", async () => {
+    await db.putItem(milk);
+
+    await expect(db.setItemChecked(milk.id, "list-other", true)).rejects.toThrow(
+      `No Item ${milk.id} in List list-other`,
+    );
+    expect((await db.getItem(milk.id))?.checked).toBe(false);
+    expect(await db.pendingOutboxEntries()).toHaveLength(1);
+  });
+
+  it("edits a Payment's amount without touching its date or id", async () => {
+    await db.putPayment(pay1);
+
+    const edited = await db.updatePayment(pay1.id, list.id, { amountInCents: 990 });
+
+    expect(edited).toMatchObject({
+      id: pay1.id,
+      listId: list.id,
+      memberId: pay1.memberId,
+      paidAt: pay1.paidAt,
+      amountInCents: 990,
+    });
+    expect(await db.pendingOutboxEntries()).toHaveLength(2);
+  });
+
+  it("takes two Payment edits in a row at face value instead of undoing the first", async () => {
+    await db.putPayment(pay1);
+
+    const first = db.updatePayment(pay1.id, list.id, { amountInCents: 500 });
+    const second = db.updatePayment(pay1.id, list.id, { amountInCents: 990 });
+    await Promise.all([first, second]);
+
+    expect((await db.getPayment(pay1.id))?.amountInCents).toBe(990);
+  });
+
+  it("refuses to edit a Payment that is not in this List", async () => {
+    await db.putPayment(pay1);
+
+    await expect(db.updatePayment(pay1.id, "list-other", { amountInCents: 990 })).rejects.toThrow(
+      `No Payment ${pay1.id} in List list-other`,
+    );
+    expect((await db.getPayment(pay1.id))?.amountInCents).toBe(pay1.amountInCents);
+  });
+
   it("drains captured outbox entries through a transport and clears them", async () => {
     await db.putItem(item("item-1", "Milk"));
     const transport = vi.fn<() => Promise<void>>(async () => {});
@@ -156,6 +232,59 @@ describe("ShoppingDb", () => {
 
     expect(await db.pendingOutboxEntries()).toHaveLength(1);
     expect((await db.pendingOutboxEntries())[0]?.syncedAt).toBeNull();
+  });
+
+  it("sends one write when several queued writes act on the same Item", async () => {
+    // Five taps queue five rows that all carry the same current state.
+    for (let i = 0; i < 5; i += 1) {
+      await db.putItem({ ...milk, checked: i % 2 === 0 });
+    }
+    const transport = vi.fn<(entry: OutboxEntry) => Promise<void>>(async () => {});
+
+    const drained = await db.drainOutbox(transport);
+
+    expect(transport).toHaveBeenCalledTimes(1);
+    expect(drained).toHaveLength(5);
+    expect(await db.pendingOutboxEntries()).toEqual([]);
+  });
+
+  it("retries every queued write to one Item together when the send fails", async () => {
+    await db.putItem(milk);
+    await db.putItem({ ...milk, checked: true });
+    const transport = vi.fn<() => Promise<void>>(async () => {
+      throw new Error("no connection");
+    });
+
+    await expect(db.drainOutbox(transport)).rejects.toThrow("no connection");
+
+    expect(transport).toHaveBeenCalledTimes(1);
+    expect(await db.pendingOutboxEntries()).toHaveLength(2);
+  });
+
+  it("sends queued writes to different Items oldest first", async () => {
+    await db.putItem(bread);
+    await db.putItem(milk);
+    const sent: string[] = [];
+    const transport = vi.fn<(entry: OutboxEntry) => Promise<void>>(async (entry) => {
+      sent.push(entry.targetId);
+    });
+
+    await db.drainOutbox(transport);
+
+    expect(sent).toEqual([bread.id, milk.id]);
+  });
+
+  it("keeps an update and a delete of the same Item as separate sends, in order", async () => {
+    await db.putItem(milk);
+    await db.deleteItem(milk.id, list.id);
+    const sent: string[] = [];
+    const transport = vi.fn<(entry: OutboxEntry) => Promise<void>>(async (entry) => {
+      sent.push(entry.operation);
+    });
+
+    await db.drainOutbox(transport);
+
+    expect(sent).toEqual(["update", "delete"]);
   });
 
   it("prunes synced outbox rows past the retention window, keeping pending and fresh synced rows", async () => {
@@ -196,8 +325,7 @@ describe("ShoppingDb", () => {
     await db.putItem(milk);
     await db.deleteItem(milk.id, list.id);
 
-    // A pull that was in flight when the Item was removed comes back with the
-    // server's copy — it must not undo the local delete.
+    // A pull in flight when the Item was removed must not undo the delete.
     await db.syncItem(milk);
 
     expect(await db.getItem(milk.id)).toBeUndefined();
@@ -215,8 +343,7 @@ describe("ShoppingDb", () => {
     };
     await db.putItem({ ...newerLocalEdit });
 
-    // A pull issued before the tick (and still holding the old server state)
-    // must not overwrite the newer local edit that is queued for Sync.
+    // A pull issued before the tick must not overwrite the queued edit.
     await db.syncItem(olderServerCopy);
 
     expect(await db.getItem(milk.id)).toMatchObject({

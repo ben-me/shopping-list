@@ -125,7 +125,7 @@ describe("MembersView", () => {
     expect(wrapper.text()).toContain("Nobody invited yet.");
 
     await wrapper.find('input[name="invite-email"]').setValue("partner@example.com");
-    await wrapper.find("form.invite-form").trigger("submit");
+    await wrapper.find("form").trigger("submit");
     await flushPromises();
     await settle();
 
@@ -226,7 +226,7 @@ describe("MembersView", () => {
     const wrapper = await mountMembers();
     await settle();
 
-    const rows = wrapper.findAll(".member-standing");
+    const rows = wrapper.findAll("ul.rows > li");
     expect(rows).toHaveLength(2);
 
     const you = rows[0]!;
@@ -267,7 +267,7 @@ describe("MembersView", () => {
     const wrapper = await mountMembers();
     await settle();
 
-    const rows = wrapper.findAll(".member-standing");
+    const rows = wrapper.findAll("ul.rows > li");
     expect(rows).toHaveLength(1);
     expect(rows[0]!.text()).toContain("Test User (you)");
     expect(wrapper.find(".member-owed").exists()).toBe(false);

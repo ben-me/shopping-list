@@ -93,7 +93,10 @@ async function onRecordPayment() {
 
 /** Rejects on an invalid amount or date; the row shows the message. */
 async function onSaveEdit(payment: Payment, amount: string, date: string) {
-  await updatePayment(db, payment, { amountInEur: amount, paidAt: isoFromDate(date) });
+  await updatePayment(db, payment.id, payment.listId, {
+    amountInEur: amount,
+    paidAt: isoFromDate(date),
+  });
   await logRejection(loadPayments(), "Loading the payments");
   ignoreRejection(syncOutbox(db));
 }
@@ -106,8 +109,7 @@ async function onDeletePayment(payment: Payment) {
 
 useSyncPass(async (db) => {
   await ignoreRejection(syncPaymentsFromServer(db, listId.value));
-  // Members change only through the online invite flow; pull the server
-  // truth so an accepted Invitation redivides the standing on every device.
+  // An accepted Invitation redivides the standing, so re-pull the Members.
   await ignoreRejection(syncMembers(db));
   await logRejection(loadMembers(), "Loading the members");
   await logRejection(loadPayments(), "Loading the payments");
@@ -222,7 +224,6 @@ form {
   color: var(--color-paper);
   font-size: var(--fs-h2);
   font-weight: 700;
-  font-stretch: 115%;
   font-variant-numeric: tabular-nums;
 }
 

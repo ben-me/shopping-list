@@ -17,8 +17,7 @@ const creating = ref(false);
 
 async function loadLists() {
   lists.value = await db.getLists();
-  // Hand the names to the List screens, which paint their app bar from there
-  // rather than flashing an empty title while the Store read is in flight.
+  // The List screens paint their app bar from this, so no empty title flash.
   rememberLists(lists.value);
 }
 
@@ -50,10 +49,7 @@ onMounted(() => {
   // Paint the local state right away, then reconcile with the server.
   void logRejection(loadLists(), "Loading the lists");
   stopSyncPass = onSyncPass(async () => {
-    // A sync pass may have pulled in Lists that appeared only on the server
-    // since this view mounted — e.g. an accepted invitation or a device
-    // hand-over where sign-in wiped the local Store. Re-read so the home is
-    // never stale.
+    // A pass may have pulled in Lists that only exist on the server.
     await logRejection(loadLists(), "Loading the lists");
   });
   void ignoreRejection(runSyncPass(db));
@@ -80,7 +76,7 @@ onUnmounted(() => {
         </li>
       </ul>
     </section>
-    <section class="new-list" aria-label="Create a list">
+    <section aria-label="Create a list">
       <h2>Create a list</h2>
       <form @submit.prevent="onCreate">
         <label>
@@ -103,7 +99,7 @@ ul > li {
     content: "";
     width: 0.375rem;
     height: 1.625rem;
-    border-radius: 2px;
+    border-radius: var(--radius-sm);
     background-color: var(--list-accent);
   }
 
@@ -117,7 +113,7 @@ ul > li {
     text-decoration: none;
   }
 
-  /* The chevron: the link's decorative span, hidden from the screen reader. */
+  /* The chevron, decorative only. */
   a span[aria-hidden="true"] {
     margin-inline-start: auto;
     color: var(--color-ink-muted);

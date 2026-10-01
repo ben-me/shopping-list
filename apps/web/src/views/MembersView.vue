@@ -37,11 +37,8 @@ const owedPresentation = (amountInCents: number) =>
       ? { label: `is owed ${formatEuro(-amountInCents)}`, className: "owed" }
       : { label: "settled", className: "settled" };
 
-/**
- * The access list doubles as the standing table: each Member carries their
- * Share and their Owed figure beside their name. A lone Member has no Share
- * and no Owed figure — the screen shows the running total instead.
- */
+/* The access list doubles as the standing table: each Member carries their Share
+   and Owed figure. A lone Member has neither; the screen shows the total. */
 const memberRows = computed(() => {
   const { shareInCents, owed } = standing.value;
   const figures = new Map(owed.map((figure) => [figure.memberId, figure.amountInCents]));
@@ -118,11 +115,7 @@ async function onRevoke(invitation: ListInvitation) {
   await logRejection(loadInvitations(), "Loading the invitations");
 }
 
-/**
- * A Member departs (ADR 0003), online-only like the invite flow. The server
- * drops the Membership first, then the local List goes; the Lists home re-reads
- * the Store on navigation, so the left List is gone from there too.
- */
+/* Online-only, like the invite flow: the server drops the Membership first. */
 async function onLeave() {
   error.value = null;
   leavePending.value = true;
@@ -145,13 +138,8 @@ useSyncPass(async () => {
 });
 
 onMounted(() => {
-  // Mount reads the server state this screen needs directly (members and
-  // invitations) and Payments locally, so it deliberately starts no Sync
-  // pass of its own — a pass would re-pull the same members and invitations
-  // after `loadPanel` and drag in the app-wide Lists and inbox pulls, which
-  // this screen does not render. The screen stays subscribed to passes
-  // started elsewhere (a reconnect, an accepted Invitation), so the access
-  // list and standing are never stale while it is open.
+  // No Sync pass of its own: loadPanel reads what this screen renders, and a
+  // pass would re-pull it plus the app-wide Lists and inbox it does not show.
   logRejection(loadPanel(), "Loading the members");
 });
 </script>
@@ -163,12 +151,7 @@ onMounted(() => {
       <!-- The access list doubles as the standing table: each Member's name,
            Share and Owed figure, ruled off like the other screens' rows. -->
       <ul class="rows">
-        <li
-          v-for="row in memberRows"
-          :key="row.memberId"
-          class="member-standing"
-          :class="row.className"
-        >
+        <li v-for="row in memberRows" :key="row.memberId" :class="row.className">
           <span class="member-name">{{ row.name }}</span>
           <span v-if="row.share" class="member-share">{{ row.share }}</span>
           <span v-if="row.owed" class="member-owed">{{ row.owed }}</span>
@@ -192,7 +175,7 @@ onMounted(() => {
     <p v-else-if="loaded" class="leave-row">
       <button
         type="button"
-        class="danger leave-list"
+        class="danger"
         name="leave-list"
         :disabled="leavePending"
         @click="onLeave"
@@ -206,10 +189,9 @@ onMounted(() => {
 </template>
 
 <style scoped>
-/* The standing table: the name on the left, the Share and the Owed figure on
-   the right, the money in one column. The figures sit on the row's baseline so
-   amounts read as a table even when a name wraps. */
-li.member-standing {
+/* Name left, figures right. They share the row's baseline so amounts read as a
+   table even when a name wraps. */
+li {
   align-items: baseline;
 
   .member-name {

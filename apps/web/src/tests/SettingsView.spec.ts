@@ -64,7 +64,7 @@ describe("SettingsView", () => {
     await flushPromises();
     await settle();
 
-    expect(wrapper.find("section.add-user").exists()).toBe(true);
+    expect(wrapper.find('section[aria-label="Add a user"]').exists()).toBe(true);
 
     await wrapper.find('input[name="add-user-name"]').setValue("Partner");
     await wrapper.find('input[name="add-user-email"]').setValue("partner@example.com");
@@ -94,8 +94,8 @@ describe("SettingsView", () => {
     await settle();
 
     expect(router.currentRoute.value.name).toBe("settings");
-    expect(wrapper.find("section.add-user").exists()).toBe(false);
-    expect(wrapper.find("section.invitations").exists()).toBe(false);
+    expect(wrapper.find('section[aria-label="Add a user"]').exists()).toBe(false);
+    expect(wrapper.find('section[aria-label="Invitations for you"]').exists()).toBe(false);
   });
 
   it("shows the Lists the user joined on the home; leaving lives in the List", async () => {

@@ -22,16 +22,13 @@ const form = ref({
   createdName: null as string | null,
 });
 
-/** The inbox is the only place Invitations are seen; the badge reads the same count. */
+/* The badge reads this same inbox count. */
 async function loadInvitations() {
   invitations.value = await pendingInvitations();
   pendingInvitationCount.value = invitations.value.length;
 }
 
-/**
- * Accept makes the invitee a Member; a Sync pass then pulls the new List in,
- * so it appears on the Lists home without a reload. Decline closes the Invitation.
- */
+/* Accept makes the invitee a Member; the Sync pass then pulls the new List in. */
 async function onAccept(invitation: PendingInvitation) {
   inviteError.value = null;
   try {
@@ -40,8 +37,8 @@ async function onAccept(invitation: PendingInvitation) {
     inviteError.value = err instanceof Error ? err.message : "Could not accept the invitation";
     return;
   }
-  // A member joined: pull the List down before the inbox refreshes, so the
-  // accept is visible immediately even if a mount sync was already running.
+  // Pull the List down before the inbox, so the accept shows at once even if a
+  // mount sync was already running.
   await logRejection(runSyncPass(db), "Syncing after accepting");
   await logRejection(loadInvitations(), "Loading the invitations");
 }
@@ -52,10 +49,7 @@ async function onDecline(invitation: PendingInvitation) {
   await logRejection(loadInvitations(), "Loading the invitations");
 }
 
-/**
- * Only the Admin creates accounts (ADR 0003): this section is admin-only, and
- * the API route still rejects anyone else with a 403.
- */
+/* Admin-only (ADR 0003); the API rejects anyone else with a 403. */
 async function addUser() {
   form.value.error = null;
   form.value.submitting = true;
@@ -89,8 +83,7 @@ async function reloadAll() {
 useSyncPass(reloadAll);
 
 onMounted(() => {
-  // Paint the local state right away, then reconcile with the server so the
-  // inbox is fresh before it is offered for accepting or declining.
+  // Paint local state first, then reconcile with the server.
   ignoreRejection(loadInvitations());
   void ignoreRejection(runSyncPass(db));
 });
@@ -100,7 +93,7 @@ onMounted(() => {
   <AppBar title="Settings" :back="{ name: 'lists' }" />
   <main class="page">
     <p v-if="session.user" class="muted">Signed in as {{ session.user.name }}</p>
-    <section v-if="invitations.length > 0" class="invitations" aria-label="Invitations for you">
+    <section v-if="invitations.length > 0" aria-label="Invitations for you">
       <h2>Invitations</h2>
       <ul>
         <li v-for="invitation in invitations" :key="invitation.id">
@@ -122,7 +115,7 @@ onMounted(() => {
       </ul>
       <p v-if="inviteError" class="error">{{ inviteError }}</p>
     </section>
-    <section v-if="isAdmin" class="add-user" aria-label="Add a user">
+    <section v-if="isAdmin" aria-label="Add a user">
       <h2>Add a user</h2>
       <p>Give a new household member their name, email, and password.</p>
       <form @submit.prevent="addUser">
@@ -156,14 +149,13 @@ ul li {
   display: grid;
   gap: var(--space-2);
   padding-block: var(--space-3);
-  border-bottom: 1px solid var(--color-rule);
+  border-bottom: var(--hairline) solid var(--color-rule);
 
   &:last-child {
     border-bottom: none;
   }
 
-  /* The Accept / Decline pair rides under the invitation's text, sharing its
-     width. */
+  /* Accept / Decline ride under the invitation's text, sharing its width. */
   div {
     display: flex;
     flex-wrap: wrap;

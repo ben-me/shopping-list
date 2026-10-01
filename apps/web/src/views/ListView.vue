@@ -4,22 +4,19 @@ import { useRoute } from "vue-router";
 import type { Item } from "@shopping-list/api/domain";
 import ListScreen from "../components/ListScreen.vue";
 import { runSyncPass, useSyncPass } from "../connectivity";
+import { useLiveItems } from "../composables/useLiveItems";
 import { db } from "../db";
-import { addItem, removeItem, setItemChecked, syncItemsFromServer } from "../items";
+import { addItem, removeItem, syncItemsFromServer } from "../items";
 import { syncOutbox } from "../lists";
 import { ignoreRejection, logRejection } from "../utils/fireAndForget";
 
 const route = useRoute();
 const listId = computed(() => String(route.params.listId ?? ""));
-const items = ref<Item[]>([]);
+const items = useLiveItems(listId);
 const itemForm = ref({
   name: "",
   error: null as string | null,
 });
-
-async function loadItems() {
-  items.value = await db.getItems(listId.value);
-}
 
 async function onAdd() {
   itemForm.value.error = null;
@@ -30,31 +27,44 @@ async function onAdd() {
     return;
   }
   itemForm.value.name = "";
-  await logRejection(loadItems(), "Loading the items");
   ignoreRejection(syncOutbox(db));
 }
 
-async function onToggle(item: Item, checked: boolean) {
-  await logRejection(setItemChecked(db, item, checked), "Ticking the item");
-  await logRejection(loadItems(), "Loading the items");
-  ignoreRejection(syncOutbox(db));
+/**
+ * The tick box has already flipped by the time this runs, so the new state is
+ * read from the input - `item` still holds the old one. Not awaited: the live
+ * query redraws the row when the write lands. A failed write leaves the
+ * database unchanged, so the box is put back by hand, since nothing would
+ * redraw it.
+ */
+function onToggle(item: Item, event: Event) {
+  const input = event.target as HTMLInputElement;
+  ignoreRejection(
+    db.setItemChecked(item.id, item.listId, input.checked).then(
+      () => ignoreRejection(syncOutbox(db)),
+      (err: unknown) => {
+        console.error("Ticking the item failed", err);
+        return db.getItem(item.id).then((stored) => {
+          input.checked = stored?.checked ?? false;
+        });
+      },
+    ),
+  );
 }
 
-async function onRemove(item: Item) {
-  await logRejection(removeItem(db, item), "Removing the item");
-  await logRejection(loadItems(), "Loading the items");
-  ignoreRejection(syncOutbox(db));
+function onRemove(item: Item) {
+  logRejection(
+    removeItem(db, item).then(() => ignoreRejection(syncOutbox(db))),
+    "Removing the item",
+  );
 }
 
 useSyncPass(async (db) => {
   await ignoreRejection(syncItemsFromServer(db, listId.value));
-  await logRejection(loadItems(), "Loading the items");
 });
 
+// Registered before this, so the pass below pulls this screen's Items too.
 onMounted(() => {
-  logRejection(loadItems(), "Loading the items");
-  // A list-scoped pass: this screen drains the outbox and pulls its own
-  // Items, but does not pull the app-wide Lists index or invitation inbox.
   void ignoreRejection(runSyncPass(db, "list"));
 });
 </script>
@@ -84,7 +94,7 @@ onMounted(() => {
             type="checkbox"
             name="checked"
             :checked="item.checked"
-            @change="onToggle(item, ($event.target as HTMLInputElement).checked)"
+            @change="onToggle(item, $event)"
           />
           <span aria-hidden="true"></span>
           <span>{{ item.name }}</span>
@@ -103,56 +113,54 @@ form input[name="item"] {
 ul > li {
   padding-block: var(--space-1);
 
-  /* The tick: the whole row is the label for the checkbox underneath it. */
+  /* The whole row is the label for the checkbox under it. The real checkbox
+     shares a cell with the box drawn over it, so the grid does the placing and
+     nothing needs an offset or z-index to stay in step with the row. */
   label {
-    position: relative;
-    display: flex;
-    flex: 1;
-    gap: var(--space-3);
+    display: grid;
+    grid-template-columns: auto 1fr;
     align-items: center;
+    column-gap: var(--space-3);
+    flex: 1;
     min-width: 0;
     min-height: var(--control-size);
     padding-block: var(--space-1);
     cursor: pointer;
   }
 
+  /* Both halves share one cell, and neither may grow the label's column. */
+  label input,
+  label span[aria-hidden="true"] {
+    grid-area: 1 / 1;
+    width: var(--checkbox-size);
+    height: var(--checkbox-size);
+  }
+
   label input {
-    position: absolute;
-    z-index: 1;
-    inset-inline-start: 0;
-    top: 50%;
-    width: 1.4rem;
-    height: 1.4rem;
-    margin: 0;
     opacity: 0;
-    transform: translateY(-50%);
   }
 
   /* The drawn box: the one decorative span, hidden from the screen reader. */
   label span[aria-hidden="true"] {
     display: grid;
-    flex: none;
     place-items: center;
-    width: 1.4rem;
-    height: 1.4rem;
     border: 2px solid var(--color-ink);
-    border-radius: 3px;
+    border-radius: var(--radius-sm);
     background-color: var(--color-paper);
     font-size: 0.85rem;
     font-weight: 800;
     line-height: 1;
+  }
 
-    /* The tick is drawn in the pad's pen: this Item is done, marked off in the
-       List's own colour. A pad without a pen yet falls back to the original
-       marker yellow. */
-    &::after {
-      content: "✓";
-      opacity: 0;
-    }
+  /* The tick, in the List's pen; the fallback is the original marker yellow. */
+  label span[aria-hidden="true"]::after {
+    content: "✓";
+    opacity: 0;
   }
 
   /* The name trails the box inside the label. */
   label span:last-child {
+    grid-area: 1 / 2;
     min-width: 0;
     font-weight: 500;
     overflow-wrap: anywhere;
@@ -171,8 +179,7 @@ ul > li {
     outline-offset: 2px;
   }
 
-  /* This Item is done: the row takes the pen's soft wash, the name goes quiet
-     and struck through. */
+  /* Done: the row takes the pen's soft wash, the name goes quiet. */
   &.done {
     background-color: var(--list-accent-soft, var(--color-marker-soft));
   }

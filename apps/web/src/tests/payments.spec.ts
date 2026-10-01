@@ -160,7 +160,7 @@ describe("Payments on a List", () => {
     const payment = await addPayment(db, list.id, "user-1", "12.5", "2026-02-01T10:00:00.000Z");
 
     // "20.84" euros must land on exactly 2084 cents.
-    const updated = await updatePayment(db, payment, {
+    const updated = await updatePayment(db, payment.id, list.id, {
       amountInEur: "20.84",
       paidAt: "2026-02-03T18:30:00.000Z",
     });
@@ -192,15 +192,16 @@ describe("Payments on a List", () => {
   it("syncs a queued Payment to the server when the connection returns", async () => {
     const { requests } = stubServer();
     const payment = await addPayment(db, list.id, "user-1", "12.5", "2026-02-01T10:00:00.000Z");
-    await updatePayment(db, payment, { amountInEur: "9.9" });
+    await updatePayment(db, payment.id, list.id, { amountInEur: "9.9" });
 
     await syncOutbox(db);
     await flushPromises();
 
+    // Create-then-edit queues two writes on the same Payment, sent as one.
     const puts = requests.filter((r) => r.init?.method === "PUT");
-    expect(puts).toHaveLength(2);
-    expect(puts[1]?.url).toBe(`/api/lists/${list.id}/payments/${payment.id}`);
-    expect(JSON.parse((puts[1]?.init?.body as string) ?? "{}")).toMatchObject({
+    expect(puts).toHaveLength(1);
+    expect(puts[0]?.url).toBe(`/api/lists/${list.id}/payments/${payment.id}`);
+    expect(JSON.parse((puts[0]?.init?.body as string) ?? "{}")).toMatchObject({
       amountInCents: 990,
       paidAt: "2026-02-01T10:00:00.000Z",
     });
