@@ -8,6 +8,7 @@
 :root {
   /* Color */
   --color-ink: #191b1c;
+  --color-ink-hover: #333435; /* the ink one step up: hovering a dark control */
   --color-ink-muted: #6b7071;
   --color-paper: #fff;
   --color-rule: #dee0db;
@@ -143,19 +144,6 @@ a {
   color: var(--color-ink-muted);
 }
 
-/* Text only a screen reader hears: the disc itself says just the number. */
-.visually-hidden {
-  position: absolute;
-  width: 1px;
-  height: 1px;
-  padding: 0;
-  margin: -1px;
-  overflow: hidden;
-  clip-path: inset(50%);
-  white-space: nowrap;
-  border: 0;
-}
-
 /* Controls: one quiet secondary style; a submit is the commit. */
 button {
   display: inline-flex;
@@ -180,26 +168,14 @@ button:hover:not(:disabled) {
   border-color: var(--color-ink-muted);
 }
 
-button[type="submit"],
-button.primary {
+button[type="submit"] {
   border-color: var(--color-ink);
   background-color: var(--color-ink);
   color: var(--color-paper);
 }
 
-button[type="submit"]:hover:not(:disabled),
-button.primary:hover:not(:disabled) {
-  background-color: #333435;
-}
-
-button.danger {
-  border-color: transparent;
-  background-color: transparent;
-  color: var(--color-owes);
-}
-
-button.danger:hover:not(:disabled) {
-  background-color: var(--color-danger-soft);
+button[type="submit"]:hover:not(:disabled) {
+  background-color: var(--color-ink-hover);
 }
 
 input:not([type="checkbox"], [type="radio"]),
@@ -228,16 +204,9 @@ form label {
   font-weight: 600;
 }
 
-/* The input bar above the scrolling rows: full-width rule, contents on the sheet. */
-.entry {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr);
-  justify-items: center;
-  padding: var(--space-2) var(--space-3);
-  border-bottom: 1px solid var(--color-rule);
-  background-color: var(--color-paper);
-}
-
+/* The entry bar above the scrolling rows and the foot bar below it are drawn by
+   ListScreen, which styles its own markup — but the rules below reach the
+   contents its slots are handed, which the screens own, so they stay here. */
 .entry > * {
   width: 100%;
   max-width: calc(var(--sheet-width) - var(--space-3) * 2);
@@ -299,37 +268,8 @@ textarea:focus {
   list-style: none;
 }
 
-/* The bars stay put, only the rows below them move. The sheet is pinned to row
-   two so a screen with no entry bar does not pull its rows up into that row. */
-.screen {
-  display: grid;
-  grid-template-rows: auto minmax(0, 1fr) auto;
-  grid-template-columns: minmax(0, 1fr);
-  flex: 1 1 0;
-  min-height: 0;
-}
-
-.screen > main {
-  grid-row: 2;
-  overflow-y: auto;
-  overscroll-behavior: contain;
-}
-
-/*
- * The foot bar: the one figure a screen keeps under its rows. It is a row of
- * the screen's grid rather than an overlay on the sheet, so the last row can
- * never end up hidden behind it. Set in ink, the way a submit is, so the
- * running total reads as the sum of the whole pad rather than one more row.
- */
-.screen-footer {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr);
-  justify-items: center;
-  padding: var(--space-2) var(--space-3);
-  background-color: var(--color-ink);
-  color: var(--color-paper);
-}
-
+/* The one figure a screen keeps under its rows, inset like the rest of the
+   sheet. The bar that holds it is drawn by ListScreen. */
 .screen-footer > * {
   width: 100%;
   max-width: calc(var(--sheet-width) - var(--space-3) * 2);
@@ -346,37 +286,4 @@ textarea:focus {
 
 .rows > li:last-child {
   border-bottom: none;
-}
-
-/* The screen switcher: text tabs, the current one underlined like a paper tab. */
-.tab {
-  display: inline-flex;
-  align-items: center;
-  min-height: var(--control-size);
-  padding-inline: var(--space-3);
-  border: 0;
-  border-radius: 0;
-  background: none;
-  color: var(--color-ink-muted);
-  font-size: var(--fs-small);
-  font-weight: 600;
-  text-decoration: none;
-  white-space: nowrap;
-}
-
-.tabs > .tab:first-child {
-  margin-inline-start: calc(var(--space-3) * -1);
-}
-
-.tab:hover:not(:disabled) {
-  background: none;
-  color: var(--color-ink);
-}
-
-/* The open section reads in ink against the muted tabs beside it — identity,
-   never the only marker. The underline itself is no longer a shadow on the
-   tab: ListTabs draws one line for the whole bar and glides it over to the
-   open section, in the pad's own pen. */
-.tab[aria-current="page"] {
-  color: var(--color-ink);
 }

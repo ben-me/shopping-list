@@ -64,6 +64,32 @@ watch(() => props.listId, scheduleMeasure);
 </template>
 
 <style scoped>
+/* The screen switcher: text tabs, the current one underlined like a paper tab.
+   The `tab` class stays on the links as the handle the underline measures
+   against. */
+a {
+  display: inline-flex;
+  align-items: center;
+  min-height: var(--control-size);
+  padding-inline: var(--space-3);
+  color: var(--color-ink-muted);
+  font-size: var(--fs-small);
+  font-weight: 600;
+  text-decoration: none;
+  white-space: nowrap;
+
+  &:hover {
+    color: var(--color-ink);
+  }
+
+  /* The open section reads in ink against the muted tabs beside it — identity,
+     never the only marker. The underline itself is the span below, not a shadow
+     on the tab: one line for the whole bar, gliding over in the pad's own pen. */
+  &[aria-current="page"] {
+    color: var(--color-ink);
+  }
+}
+
 /* The one span in the bar: the section underline, riding under the open tab. */
 span {
   position: absolute;
