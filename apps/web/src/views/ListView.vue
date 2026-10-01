@@ -9,21 +9,21 @@ import { db } from "../db";
 import { addItem, removeItem, syncItemsFromServer } from "../items";
 import { syncOutbox } from "../lists";
 import { ignoreRejection, logRejection } from "../utils/fireAndForget";
+import { submit } from "../utils/submit";
 
 const route = useRoute();
 const listId = computed(() => String(route.params.listId ?? ""));
 const items = useLiveItems(listId);
 const itemForm = ref({
   name: "",
-  error: null as string | null,
 });
+const itemError = ref<string | null>(null);
 
 async function onAdd() {
-  itemForm.value.error = null;
-  try {
-    await addItem(db, listId.value, itemForm.value.name);
-  } catch (err) {
-    itemForm.value.error = err instanceof Error ? err.message : "Could not add the item";
+  const added = await submit({ error: itemError }, "Could not add the item", () =>
+    addItem(db, listId.value, itemForm.value.name),
+  );
+  if (!added) {
     return;
   }
   itemForm.value.name = "";
@@ -83,7 +83,7 @@ onMounted(() => {
         />
         <button type="submit">Add</button>
       </form>
-      <p v-if="itemForm.error" class="error">{{ itemForm.error }}</p>
+      <p v-if="itemError" class="error">{{ itemError }}</p>
     </template>
 
     <p v-if="items.length === 0" class="empty">Nothing here yet.</p>

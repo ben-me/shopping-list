@@ -9,6 +9,7 @@ import { createList } from "../lists";
 import { listColors } from "../utils/listColors";
 import { session } from "../session";
 import { ignoreRejection, logRejection } from "../utils/fireAndForget";
+import { submit } from "../utils/submit";
 
 const lists = ref<List[]>([]);
 const name = ref("");
@@ -27,17 +28,15 @@ function penStyle(list: List) {
 
 async function onCreate() {
   error.value = null;
-  if (!session.user) {
+  const user = session.user;
+  if (!user) {
     return;
   }
-  creating.value = true;
-  try {
-    await createList(db, session.user.id, name.value);
-  } catch (err) {
-    error.value = err instanceof Error ? err.message : "Could not create the list";
+  const created = await submit({ error, busy: creating }, "Could not create the list", () =>
+    createList(db, user.id, name.value),
+  );
+  if (!created) {
     return;
-  } finally {
-    creating.value = false;
   }
   name.value = "";
   await logRejection(loadLists(), "Loading the lists");

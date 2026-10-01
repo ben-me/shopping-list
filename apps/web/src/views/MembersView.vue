@@ -12,6 +12,8 @@ import { session } from "../session";
 import { computeOwed } from "../utils/computeOwed";
 import { ignoreRejection, logRejection } from "../utils/fireAndForget";
 import { formatEuro } from "../utils/formatEuro";
+import { owedPresentation } from "../utils/owedPresentation";
+import { submit } from "../utils/submit";
 
 const route = useRoute();
 const router = useRouter();
@@ -29,13 +31,15 @@ const standing = computed(() =>
   ),
 );
 
-/** The Owed wording and colour for one Member: red owes the group, green the group owes. */
-const owedPresentation = (amountInCents: number) =>
-  amountInCents > 0
-    ? { label: `owes ${formatEuro(amountInCents)}`, className: "owes" }
-    : amountInCents < 0
-      ? { label: `is owed ${formatEuro(-amountInCents)}`, className: "owed" }
-      : { label: "settled", className: "settled" };
+/**
+ * How this screen words an Owed figure: a Member row names them in the third
+ * person and carries the figure inside the wording.
+ */
+const owedVoice = {
+  owes: (figureInCents: number) => `owes ${formatEuro(figureInCents)}`,
+  owed: (figureInCents: number) => `is owed ${formatEuro(figureInCents)}`,
+  settled: "settled",
+};
 
 /* The access list doubles as the standing table: each Member carries their Share
    and Owed figure. A lone Member has neither; the screen shows the total. */
@@ -48,7 +52,7 @@ const memberRows = computed(() => {
     if (shareInCents === null || amount === undefined) {
       return { memberId: member.memberId, name, share: null, owed: null, className: "" };
     }
-    const presentation = owedPresentation(amount);
+    const presentation = owedPresentation(amount, owedVoice);
     return {
       memberId: member.memberId,
       name,
@@ -65,9 +69,9 @@ const totalPaid = computed(() =>
 );
 
 const leavePending = ref(false);
+const invitePending = ref(false);
 const inviteForm = ref({
   email: "",
-  submitting: false,
 });
 
 /** The server always lists the Owner first, so the first row names them. */
@@ -96,16 +100,16 @@ async function loadPanel() {
 }
 
 async function onInvite() {
-  error.value = null;
-  inviteForm.value.submitting = true;
-  try {
-    await createInvitation(listId.value, inviteForm.value.email);
-    await logRejection(loadInvitations(), "Loading the invitations");
-  } catch (err) {
-    error.value = err instanceof Error ? err.message : "Could not send the invitation";
+  const invited = await submit(
+    { error, busy: invitePending },
+    "Could not send the invitation",
+    async () => {
+      await createInvitation(listId.value, inviteForm.value.email);
+      await logRejection(loadInvitations(), "Loading the invitations");
+    },
+  );
+  if (!invited) {
     return;
-  } finally {
-    inviteForm.value.submitting = false;
   }
   inviteForm.value.email = "";
 }
@@ -117,15 +121,11 @@ async function onRevoke(invitation: ListInvitation) {
 
 /* Online-only, like the invite flow: the server drops the Membership first. */
 async function onLeave() {
-  error.value = null;
-  leavePending.value = true;
-  try {
-    await leaveList(db, listId.value);
-  } catch (err) {
-    error.value = err instanceof Error ? err.message : "Could not leave the list";
+  const left = await submit({ error, busy: leavePending }, "Could not leave the list", () =>
+    leaveList(db, listId.value),
+  );
+  if (!left) {
     return;
-  } finally {
-    leavePending.value = false;
   }
   // The List screen itself is gone now; end on the Lists home.
   await router.push({ name: "lists" });
@@ -168,7 +168,7 @@ onMounted(() => {
       v-if="showInvitations"
       v-model:email="inviteForm.email"
       :invitations="invitations"
-      :submitting="inviteForm.submitting"
+      :submitting="invitePending"
       @invite="onInvite"
       @revoke="onRevoke"
     />

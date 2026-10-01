@@ -1,4 +1,5 @@
 import { ref } from "vue";
+import type { PendingInvitation } from "@shopping-list/api/domain";
 import { pendingInvitations } from "./invitations";
 
 /**
@@ -9,10 +10,22 @@ import { pendingInvitations } from "./invitations";
  */
 export const pendingInvitationCount = ref(0);
 
-/** Pull the inbox size into {@link pendingInvitationCount}; offline keeps the last count. */
+/**
+ * The one read of the inbox, and the only writer of the badge's count: every
+ * screen that shows the Invitations gets them from here, so the list and the
+ * count can never disagree. Rejects while offline; callers decide what that
+ * means for them.
+ */
+export async function loadPendingInvitations(): Promise<PendingInvitation[]> {
+  const invitations = await pendingInvitations();
+  pendingInvitationCount.value = invitations.length;
+  return invitations;
+}
+
+/** Refresh the badge from a fresh read; offline keeps the last count. */
 export async function refreshPendingInvitationCount(): Promise<void> {
   try {
-    pendingInvitationCount.value = (await pendingInvitations()).length;
+    await loadPendingInvitations();
   } catch {
     // Offline: the inbox cannot be read; the badge keeps its last count.
   }

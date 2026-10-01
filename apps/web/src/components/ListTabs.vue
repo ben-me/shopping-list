@@ -15,18 +15,16 @@ const route = useRoute();
  */
 const line = ref<HTMLElement | null>(null);
 const lineStyle = ref({ left: "0px", width: "0px" });
-/** False until the line has been placed under the open section for the first time. */
-const settled = ref(false);
-let measureQueued = false;
-let arming = false;
+/**
+ * False until the line has been placed under the open section for the first
+ * time. That first placement paints without a transition — the line appears
+ * under the open section, it does not draw itself in from the corner. Once
+ * that frame has committed the flag flips, and every later change glides.
+ */
+const placed = ref(false);
 
 function scheduleMeasure() {
-  if (measureQueued) {
-    return;
-  }
-  measureQueued = true;
   void nextTick(() => {
-    measureQueued = false;
     const nav = line.value?.parentElement;
     const active = nav?.querySelector<HTMLElement>('.tab[aria-current="page"]');
     if (!nav || !active) {
@@ -38,14 +36,11 @@ function scheduleMeasure() {
       left: `${tabRect.left - navRect.left}px`,
       width: `${tabRect.width}px`,
     };
-    if (!arming) {
-      arming = true;
-      // The first position paints without a transition — the line appears
-      // under the open section, it does not draw itself in from the corner.
-      // Once that frame has committed, arm the transition so every later
-      // change glides.
+    if (!placed.value) {
+      // Flip a frame later, once this first position has committed, so the
+      // transition is only ever armed for the placements after it.
       requestAnimationFrame(() => {
-        settled.value = true;
+        placed.value = true;
       });
     }
   });
@@ -60,7 +55,7 @@ watch(() => props.listId, scheduleMeasure);
   <RouterLink class="tab" :to="{ name: 'list', params: { listId } }">Items</RouterLink>
   <RouterLink class="tab" :to="{ name: 'list-payments', params: { listId } }">Payments</RouterLink>
   <RouterLink class="tab" :to="{ name: 'list-members', params: { listId } }">Members</RouterLink>
-  <span ref="line" :class="{ 'no-animate': !settled }" aria-hidden="true" :style="lineStyle"></span>
+  <span ref="line" :class="{ 'no-animate': !placed }" aria-hidden="true" :style="lineStyle"></span>
 </template>
 
 <style scoped>
@@ -101,7 +96,7 @@ span {
     left 240ms ease,
     width 240ms ease;
 
-  /* The first placement lands without the glide (see the `settled` flag). */
+  /* The first placement lands without the glide (see the `placed` flag). */
   &.no-animate {
     transition: none;
   }

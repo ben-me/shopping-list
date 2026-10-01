@@ -14,6 +14,8 @@ import type { ShoppingDb } from "../store";
 import { computeOwed } from "../utils/computeOwed";
 import { ignoreRejection, logRejection } from "../utils/fireAndForget";
 import { formatEuro } from "../utils/formatEuro";
+import { owedPresentation } from "../utils/owedPresentation";
+import { submit } from "../utils/submit";
 
 const route = useRoute();
 const listId = computed(() => String(route.params.listId ?? ""));
@@ -23,8 +25,8 @@ const memberNames = ref<Record<string, string>>({});
 const paymentForm = ref({
   amount: "",
   date: new Date().toISOString().slice(0, 10),
-  error: null as string | null,
 });
+const paymentError = ref<string | null>(null);
 
 const isoFromDate = (date: string) => new Date(`${date}T12:00:00.000Z`).toISOString();
 const isOwn = (payment: Payment) => payment.memberId === session.user?.id;
@@ -37,20 +39,17 @@ const memberLabel = (memberId: string) => {
   return memberNames.value[memberId] ?? "Member";
 };
 
+/**
+ * How this screen words your own net: it speaks to you and shows the figure
+ * beside the wording instead of inside it.
+ */
+const myOwedVoice = { owes: () => "You owe", owed: () => "You are owed", settled: "Settled up" };
+
 /** The Owed wording for your own net: what you hand over, or what you're owed. */
 const myStanding = computed(() => {
   const id = session.user?.id;
   const figure = id ? standing.value.owed.find((owed) => owed.memberId === id) : undefined;
-  if (!figure) {
-    return null;
-  }
-  if (figure.amountInCents > 0) {
-    return { label: "You owe", figure: formatEuro(figure.amountInCents), className: "owes" };
-  }
-  if (figure.amountInCents < 0) {
-    return { label: "You are owed", figure: formatEuro(-figure.amountInCents), className: "owed" };
-  }
-  return { label: "Settled up", figure: null, className: "settled" };
+  return figure ? owedPresentation(figure.amountInCents, myOwedVoice) : null;
 });
 
 /** The Owner always counts as a Member, so the split needs the List row. */
@@ -69,21 +68,21 @@ async function syncMembers(store: ShoppingDb) {
 }
 
 async function onRecordPayment() {
-  paymentForm.value.error = null;
-  if (!session.user) {
-    paymentForm.value.error = "Sign in to record a payment";
+  const user = session.user;
+  if (!user) {
+    paymentError.value = "Sign in to record a payment";
     return;
   }
-  try {
-    await addPayment(
+  const recorded = await submit({ error: paymentError }, "Could not record the payment", () =>
+    addPayment(
       db,
       listId.value,
-      session.user.id,
+      user.id,
       paymentForm.value.amount,
       isoFromDate(paymentForm.value.date),
-    );
-  } catch (err) {
-    paymentForm.value.error = err instanceof Error ? err.message : "Could not record the payment";
+    ),
+  );
+  if (!recorded) {
     return;
   }
   paymentForm.value.amount = "";
@@ -139,7 +138,7 @@ onMounted(() => {
         <input v-model="paymentForm.date" name="payment-date" aria-label="Date paid" type="date" />
         <button type="submit">Record</button>
       </form>
-      <p v-if="paymentForm.error" class="error">{{ paymentForm.error }}</p>
+      <p v-if="paymentError" class="error">{{ paymentError }}</p>
     </template>
 
     <ul class="rows">
@@ -149,7 +148,6 @@ onMounted(() => {
         :payment="payment"
         :who="memberLabel(payment.memberId)"
         :own="isOwn(payment)"
-        :format="formatEuro"
         :save="onSaveEdit"
         :remove="onDeletePayment"
       />

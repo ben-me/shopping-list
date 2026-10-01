@@ -5,10 +5,11 @@ import { apiFetch } from "../api";
 import AppBar from "../components/AppBar.vue";
 import { runSyncPass, useSyncPass } from "../connectivity";
 import { db } from "../db";
-import { acceptInvitation, declineInvitation, pendingInvitations } from "../invitations";
-import { pendingInvitationCount } from "../pending-invitations";
+import { acceptInvitation, declineInvitation } from "../invitations";
+import { loadPendingInvitations } from "../pending-invitations";
 import { session } from "../session";
 import { ignoreRejection, logRejection } from "../utils/fireAndForget";
+import { submit } from "../utils/submit";
 
 const invitations = ref<PendingInvitation[]>([]);
 const inviteError = ref<string | null>(null);
@@ -17,24 +18,22 @@ const form = ref({
   name: "",
   email: "",
   password: "",
-  error: null as string | null,
-  submitting: false,
   createdName: null as string | null,
 });
+const formError = ref<string | null>(null);
+const formPending = ref(false);
 
-/* The badge reads this same inbox count. */
+/* The badge reads this same inbox count, which only this read writes. */
 async function loadInvitations() {
-  invitations.value = await pendingInvitations();
-  pendingInvitationCount.value = invitations.value.length;
+  invitations.value = await loadPendingInvitations();
 }
 
 /* Accept makes the invitee a Member; the Sync pass then pulls the new List in. */
 async function onAccept(invitation: PendingInvitation) {
-  inviteError.value = null;
-  try {
-    await acceptInvitation(invitation.id);
-  } catch (err) {
-    inviteError.value = err instanceof Error ? err.message : "Could not accept the invitation";
+  const accepted = await submit({ error: inviteError }, "Could not accept the invitation", () =>
+    acceptInvitation(invitation.id),
+  );
+  if (!accepted) {
     return;
   }
   // Pull the List down before the inbox, so the accept shows at once even if a
@@ -51,24 +50,23 @@ async function onDecline(invitation: PendingInvitation) {
 
 /* Admin-only (ADR 0003); the API rejects anyone else with a 403. */
 async function addUser() {
-  form.value.error = null;
-  form.value.submitting = true;
-  try {
-    await apiFetch("/api/auth/admin/create-user", {
-      method: "POST",
-      body: {
-        name: form.value.name,
-        email: form.value.email,
-        password: form.value.password,
-        role: "user",
-        data: { emailVerified: true },
-      },
-    });
-  } catch (err) {
-    form.value.error = err instanceof Error ? err.message : "Could not create the account";
+  const created = await submit(
+    { error: formError, busy: formPending },
+    "Could not create the account",
+    () =>
+      apiFetch("/api/auth/admin/create-user", {
+        method: "POST",
+        body: {
+          name: form.value.name,
+          email: form.value.email,
+          password: form.value.password,
+          role: "user",
+          data: { emailVerified: true },
+        },
+      }),
+  );
+  if (!created) {
     return;
-  } finally {
-    form.value.submitting = false;
   }
   form.value.createdName = form.value.name;
   form.value.name = "";
@@ -136,9 +134,9 @@ onMounted(() => {
             autocomplete="new-password"
           />
         </label>
-        <button type="submit" :disabled="form.submitting">Add user</button>
+        <button type="submit" :disabled="formPending">Add user</button>
       </form>
-      <p v-if="form.error" class="error">{{ form.error }}</p>
+      <p v-if="formError" class="error">{{ formError }}</p>
       <p v-if="form.createdName">{{ form.createdName }} can now sign in.</p>
     </section>
   </main>

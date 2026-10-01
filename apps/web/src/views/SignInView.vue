@@ -3,6 +3,7 @@ import { onMounted, ref } from "vue";
 import { useRouter } from "vue-router";
 import AppBar from "../components/AppBar.vue";
 import { isSignUpOpen, signIn, signUp } from "../session";
+import { submit } from "../utils/submit";
 
 const router = useRouter();
 const mode = ref<"sign-in" | "sign-up">("sign-in");
@@ -18,20 +19,14 @@ onMounted(async () => {
 });
 
 async function onSubmit() {
-  error.value = null;
-  submitting.value = true;
-  try {
+  await submit({ error, busy: submitting }, "Something went wrong", async () => {
     if (mode.value === "sign-in") {
       await signIn(email.value, password.value);
     } else {
       await signUp(name.value, email.value, password.value);
     }
     await router.push({ name: "lists" });
-  } catch (err) {
-    error.value = err instanceof Error ? err.message : "Something went wrong";
-  } finally {
-    submitting.value = false;
-  }
+  });
 }
 
 function toggleMode() {

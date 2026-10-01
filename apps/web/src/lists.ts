@@ -2,6 +2,7 @@ import type { Item, ItemUpdate, List, Payment, PaymentUpdate } from "@shopping-l
 import { apiFetch } from "./api";
 import type { ShoppingDb } from "./store";
 import now from "./utils/now";
+import { createSingleFlight } from "./utils/singleFlight";
 
 export async function createList(db: ShoppingDb, ownerId: string, name: string): Promise<List> {
   const trimmed = name.trim();
@@ -25,100 +26,93 @@ export async function createList(db: ShoppingDb, ownerId: string, name: string):
  * for one more round rather than starting a second send, which would race the
  * first to the server with the same row and could leave the server behind the
  * device. The returned promise settles after that extra round.
+ *
+ * A queued round has nothing to widen — it is just another drain of the same
+ * outbox for the same database — so the requested db is the merged one.
  */
-let currentSend: Promise<void> | null = null;
-let roundRequested = false;
+const outboxFlight = createSingleFlight<ShoppingDb>((_queued, requested) => requested);
+
 export function syncOutbox(db: ShoppingDb): Promise<void> {
-  if (currentSend) {
-    roundRequested = true;
-    return currentSend;
-  }
-  currentSend = sendInRounds(db).finally(() => {
-    currentSend = null;
-  });
-  return currentSend;
+  return outboxFlight.run(db, drainOutbox);
 }
 
-/* One repeat is enough however many callers queued up behind it. */
-async function sendInRounds(db: ShoppingDb): Promise<void> {
-  do {
-    roundRequested = false;
-    await db.drainOutbox(async (entry) => {
-      if (entry.targetType === "list") {
-        const list = await db.getList(entry.targetId);
-        if (!list) {
-          return;
-        }
-        const { list: serverList } = await apiFetch<{ list: List }>(`/api/lists/${list.id}`, {
-          method: "PUT",
-          body: { name: list.name },
+/** One round of sending: every queued row, in order, one at a time. */
+async function drainOutbox(db: ShoppingDb): Promise<void> {
+  await db.drainOutbox(async (entry) => {
+    if (entry.targetType === "list") {
+      const list = await db.getList(entry.targetId);
+      if (!list) {
+        return;
+      }
+      const { list: serverList } = await apiFetch<{ list: List }>(`/api/lists/${list.id}`, {
+        method: "PUT",
+        body: { name: list.name },
+      });
+      if (!serverList?.id) {
+        return;
+      }
+      await db.syncList(serverList);
+      return;
+    }
+    if (entry.targetType === "item") {
+      if (entry.operation === "delete") {
+        await apiFetch(`/api/lists/${entry.listId}/items/${entry.targetId}`, {
+          method: "DELETE",
         });
-        if (!serverList?.id) {
-          return;
-        }
-        await db.syncList(serverList);
         return;
       }
-      if (entry.targetType === "item") {
-        if (entry.operation === "delete") {
-          await apiFetch(`/api/lists/${entry.listId}/items/${entry.targetId}`, {
-            method: "DELETE",
-          });
-          return;
-        }
-        const item = await db.getItem(entry.targetId);
-        if (!item) {
-          return;
-        }
-        const itemUpdate: ItemUpdate = {
-          name: item.name,
-          checked: item.checked,
-          checkedAt: item.checkedAt,
-        };
-        const { item: serverItem } = await apiFetch<{ item: Item }>(
-          `/api/lists/${item.listId}/items/${item.id}`,
-          {
-            method: "PUT",
-            body: itemUpdate,
-          },
-        );
-        if (!serverItem?.id) {
-          return;
-        }
-        await db.syncItem(serverItem);
+      const item = await db.getItem(entry.targetId);
+      if (!item) {
         return;
       }
-      if (entry.targetType === "payment") {
-        if (entry.operation === "delete") {
-          await apiFetch(`/api/lists/${entry.listId}/payments/${entry.targetId}`, {
-            method: "DELETE",
-          });
-          return;
-        }
-        const payment = await db.getPayment(entry.targetId);
-        if (!payment) {
-          return;
-        }
-        const paymentUpdate: PaymentUpdate = {
-          amountInCents: payment.amountInCents,
-          paidAt: payment.paidAt,
-        };
-        const { payment: serverPayment } = await apiFetch<{ payment: Payment }>(
-          `/api/lists/${payment.listId}/payments/${payment.id}`,
-          {
-            method: "PUT",
-            body: paymentUpdate,
-          },
-        );
-        if (!serverPayment?.id) {
-          return;
-        }
-        await db.syncPayment(serverPayment);
+      const itemUpdate: ItemUpdate = {
+        name: item.name,
+        checked: item.checked,
+        checkedAt: item.checkedAt,
+      };
+      const { item: serverItem } = await apiFetch<{ item: Item }>(
+        `/api/lists/${item.listId}/items/${item.id}`,
+        {
+          method: "PUT",
+          body: itemUpdate,
+        },
+      );
+      if (!serverItem?.id) {
         return;
       }
-      throw new Error(`Unsupported outbox target ${entry.targetType}`);
-    });
-  } while (roundRequested);
+      await db.syncItem(serverItem);
+      return;
+    }
+    if (entry.targetType === "payment") {
+      if (entry.operation === "delete") {
+        await apiFetch(`/api/lists/${entry.listId}/payments/${entry.targetId}`, {
+          method: "DELETE",
+        });
+        return;
+      }
+      const payment = await db.getPayment(entry.targetId);
+      if (!payment) {
+        return;
+      }
+      const paymentUpdate: PaymentUpdate = {
+        amountInCents: payment.amountInCents,
+        paidAt: payment.paidAt,
+      };
+      const { payment: serverPayment } = await apiFetch<{ payment: Payment }>(
+        `/api/lists/${payment.listId}/payments/${payment.id}`,
+        {
+          method: "PUT",
+          body: paymentUpdate,
+        },
+      );
+      if (!serverPayment?.id) {
+        return;
+      }
+      await db.syncPayment(serverPayment);
+      return;
+    }
+    throw new Error(`Unsupported outbox target ${entry.targetType}`);
+  });
 }
 
 /* Drops local Lists the server no longer returns (revoked membership, another

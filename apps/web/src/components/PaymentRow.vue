@@ -3,6 +3,8 @@ import { ref } from "vue";
 import type { Payment } from "@shopping-list/api/domain";
 import pencilIcon from "@/assets/icones-bags-svg/pencil.svg?raw";
 import trashIcon from "@/assets/icones-bags-svg/trash.svg?raw";
+import { formatEuro } from "../utils/formatEuro";
+import { submit } from "../utils/submit";
 
 /* One Payment as a message: a card on the payer's side, the figure on its own
    line. This row owns its edit state; saving is the screen's job. */
@@ -10,29 +12,28 @@ const props = defineProps<{
   payment: Payment;
   who: string;
   own: boolean;
-  format: (cents: number) => string;
   save: (payment: Payment, amount: string, date: string) => Promise<void>;
   remove: (payment: Payment) => Promise<void>;
 }>();
 
 const editing = ref(false);
-const form = ref({ amount: "", date: "", error: null as string | null });
+const form = ref({ amount: "", date: "" });
+const formError = ref<string | null>(null);
 
 function startEdit() {
   form.value = {
     amount: (props.payment.amountInCents / 100).toFixed(2),
     date: props.payment.paidAt.slice(0, 10),
-    error: null,
   };
+  formError.value = null;
   editing.value = true;
 }
 
 async function onSave() {
-  form.value.error = null;
-  try {
-    await props.save(props.payment, form.value.amount, form.value.date);
-  } catch (err) {
-    form.value.error = err instanceof Error ? err.message : "Could not update the payment";
+  const saved = await submit({ error: formError }, "Could not update the payment", () =>
+    props.save(props.payment, form.value.amount, form.value.date),
+  );
+  if (!saved) {
     return;
   }
   editing.value = false;
@@ -53,7 +54,7 @@ async function onSave() {
         <button type="submit">Save</button>
         <button type="button" @click="editing = false">Cancel</button>
       </div>
-      <p v-if="form.error" class="error">{{ form.error }}</p>
+      <p v-if="formError" class="error">{{ formError }}</p>
     </form>
 
     <template v-else>
@@ -74,7 +75,7 @@ async function onSave() {
         />
       </template>
       <div>
-        <p>{{ format(payment.amountInCents) }}</p>
+        <p>{{ formatEuro(payment.amountInCents) }}</p>
         <div>
           <span>{{ who }}</span>
           <time :datetime="payment.paidAt">{{ payment.paidAt.slice(0, 10) }}</time>
