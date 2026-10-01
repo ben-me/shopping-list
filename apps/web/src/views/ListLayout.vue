@@ -1,11 +1,9 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from "vue";
+import { computed } from "vue";
 import { useRoute } from "vue-router";
-import type { List } from "@shopping-list/api/domain";
 import AppBar from "../components/AppBar.vue";
 import ListTabs from "../components/ListTabs.vue";
-import { currentList, loadList } from "../current-list";
-import { db } from "../db";
+import { useLiveList } from "../composables/useLiveList";
 import { listColors, type ListColors } from "../utils/listColors";
 
 /**
@@ -14,22 +12,19 @@ import { listColors, type ListColors } from "../utils/listColors";
  * the bar — and with it the sliding section underline — never remounts while
  * the List's screens (Items, Payments, Members) swap beneath it.
  *
+ * The route record is reused when the user moves to another List, so the name
+ * is read live from the Store rather than once on mount: only params change,
+ * and a List that swapped underneath a fixed title would show the wrong name
+ * and the wrong pen.
+ *
  * `colors` is the pad's marker pen, set as custom properties on this root so
  * the whole screen — bars, tabs, and rows — draws in it. A List that is still
  * loading has no pen yet and falls back.
  */
 const route = useRoute();
 const listId = computed(() => String(route.params.listId ?? ""));
-const list = ref<List | null>(currentList(listId.value));
+const list = useLiveList(listId);
 const colors = computed<ListColors | null>(() => (list.value ? listColors(list.value.id) : null));
-
-onMounted(() => {
-  void loadList(db, listId.value).then((loaded) => {
-    if (loaded) {
-      list.value = loaded;
-    }
-  });
-});
 </script>
 
 <template>

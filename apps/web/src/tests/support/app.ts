@@ -15,7 +15,6 @@ import { mount } from "@vue/test-utils";
 import { createMemoryHistory } from "vue-router";
 import type { List } from "@shopping-list/api/domain";
 import App from "../../App.vue";
-import { forgetLists } from "../../current-list";
 import { db } from "../../db";
 import { createAppRouter } from "../../router";
 import { _resetSession, type SessionUser } from "../../session";
@@ -121,6 +120,5 @@ export async function resetStore(lists: List[] = []) {
   for (const list of lists) {
     await db.syncList(list);
   }
-  forgetLists();
   _resetSession();
 }

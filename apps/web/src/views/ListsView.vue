@@ -3,7 +3,6 @@ import { onMounted, onUnmounted, ref } from "vue";
 import type { List } from "@shopping-list/api/domain";
 import AppBar from "../components/AppBar.vue";
 import { onSyncPass, runSyncPass } from "../connectivity";
-import { rememberLists } from "../current-list";
 import { db } from "../db";
 import { createList } from "../lists";
 import { listColors } from "../utils/listColors";
@@ -18,8 +17,6 @@ const creating = ref(false);
 
 async function loadLists() {
   lists.value = await db.getLists();
-  // The List screens paint their app bar from this, so no empty title flash.
-  rememberLists(lists.value);
 }
 
 function penStyle(list: List) {

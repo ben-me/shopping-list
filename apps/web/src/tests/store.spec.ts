@@ -213,7 +213,7 @@ describe("ShoppingDb", () => {
 
   it("drains captured outbox entries through a transport and clears them", async () => {
     await db.putItem(item("item-1", "Milk"));
-    const transport = vi.fn<() => Promise<void>>(async () => {});
+    const transport = vi.fn<() => Promise<boolean>>(async () => true);
 
     const drained = await db.drainOutbox(transport);
 
@@ -224,7 +224,7 @@ describe("ShoppingDb", () => {
 
   it("leaves an entry pending when the transport fails so the next Sync retries it", async () => {
     await db.putItem(item("item-1", "Milk"));
-    const transport = vi.fn<() => Promise<void>>(async () => {
+    const transport = vi.fn<() => Promise<boolean>>(async () => {
       throw new Error("no connection");
     });
 
@@ -239,7 +239,7 @@ describe("ShoppingDb", () => {
     for (let i = 0; i < 5; i += 1) {
       await db.putItem({ ...milk, checked: i % 2 === 0 });
     }
-    const transport = vi.fn<(entry: OutboxEntry) => Promise<void>>(async () => {});
+    const transport = vi.fn<(entry: OutboxEntry) => Promise<boolean>>(async () => true);
 
     const drained = await db.drainOutbox(transport);
 
@@ -251,7 +251,7 @@ describe("ShoppingDb", () => {
   it("retries every queued write to one Item together when the send fails", async () => {
     await db.putItem(milk);
     await db.putItem({ ...milk, checked: true });
-    const transport = vi.fn<() => Promise<void>>(async () => {
+    const transport = vi.fn<() => Promise<boolean>>(async () => {
       throw new Error("no connection");
     });
 
@@ -265,8 +265,9 @@ describe("ShoppingDb", () => {
     await db.putItem(bread);
     await db.putItem(milk);
     const sent: string[] = [];
-    const transport = vi.fn<(entry: OutboxEntry) => Promise<void>>(async (entry) => {
+    const transport = vi.fn<(entry: OutboxEntry) => Promise<boolean>>(async (entry) => {
       sent.push(entry.targetId);
+      return true;
     });
 
     await db.drainOutbox(transport);
@@ -278,13 +279,26 @@ describe("ShoppingDb", () => {
     await db.putItem(milk);
     await db.deleteItem(milk.id, list.id);
     const sent: string[] = [];
-    const transport = vi.fn<(entry: OutboxEntry) => Promise<void>>(async (entry) => {
+    const transport = vi.fn<(entry: OutboxEntry) => Promise<boolean>>(async (entry) => {
       sent.push(entry.operation);
+      return true;
     });
 
     await db.drainOutbox(transport);
 
     expect(sent).toEqual(["update", "delete"]);
+  });
+
+  it("drops a group the transport had nothing to send for, instead of stamping it as sent", async () => {
+    await db.putItem(milk);
+    const transport = vi.fn<(entry: OutboxEntry) => Promise<boolean>>(async () => false);
+
+    const drained = await db.drainOutbox(transport);
+
+    expect(transport).toHaveBeenCalledTimes(1);
+    expect(drained).toHaveLength(0);
+    // Nothing reached the server, so the row must not claim that it did.
+    expect(await db.outbox.toArray()).toEqual([]);
   });
 
   it("prunes synced outbox rows past the retention window, keeping pending and fresh synced rows", async () => {

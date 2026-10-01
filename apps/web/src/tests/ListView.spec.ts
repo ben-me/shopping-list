@@ -54,6 +54,7 @@ describe("ListView", () => {
 
     const wrapper = await mountList();
     await flushPromises();
+    await settle();
 
     expect(wrapper.text()).toContain("Household");
     expect(wrapper.find("label span:last-child").text()).toContain("Milk");
