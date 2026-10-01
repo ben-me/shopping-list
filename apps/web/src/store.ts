@@ -19,7 +19,12 @@ export interface OutboxEntry {
 
 type OutboxWrite = Pick<OutboxEntry, "targetType" | "targetId" | "listId" | "operation">;
 
-export type OutboxTransport = (entry: OutboxEntry) => Promise<void>;
+/**
+ * Sends one entry and reports what it did: `true` once the write reached the
+ * server, `false` when the device no longer holds the target and there was
+ * nothing left to send. A transport that resolves cannot mean both.
+ */
+export type OutboxTransport = (entry: OutboxEntry) => Promise<boolean>;
 
 /**
  * Synced rows are kept this long, then pruned: they are the only local record
@@ -248,15 +253,23 @@ export class ShoppingDb extends Dexie {
    * into one send — the transport reads the target's current state, so five
    * taps would send five identical payloads. A failed send marks none of them,
    * so the whole group is retried. Groups keep the order they were queued in.
+   *
+   * A group the transport had nothing to send for is dropped rather than
+   * stamped: a `syncedAt` is the record that a write reached the server, and
+   * nothing did. Retrying would not help either — the target is gone, and the
+   * write that removed it is queued right behind.
    */
   async drainOutbox(transport: OutboxTransport): Promise<OutboxEntry[]> {
     const pendingEntries = await this.pendingOutboxEntries();
     const drainedEntries: OutboxEntry[] = [];
     for (const group of groupPendingEntries(pendingEntries)) {
-      await transport(group[group.length - 1]!);
-      const syncedAt = new Date().toISOString();
+      const keys = group.map((entry) => entry.id!);
+      if (!(await transport(group[group.length - 1]!))) {
+        await this.outbox.bulkDelete(keys);
+        continue;
+      }
       await this.outbox.bulkUpdate(
-        group.map((entry) => ({ key: entry.id!, changes: { syncedAt } })),
+        keys.map((key) => ({ key, changes: { syncedAt: new Date().toISOString() } })),
       );
       drainedEntries.push(...group);
     }

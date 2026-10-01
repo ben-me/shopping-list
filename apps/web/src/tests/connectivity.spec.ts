@@ -135,6 +135,16 @@ describe("startSyncWatcher", () => {
 
   it("prunes synced outbox rows past the retention window after a successful drain", async () => {
     const stale = new Date(Date.now() - 25 * 60 * 60 * 1000).toISOString();
+    // The pending row needs a target the device still holds, or the drain has
+    // nothing to send for it and drops it as unsent rather than synced.
+    await db.putItem({
+      id: "pending-1",
+      listId: list.id,
+      name: "Milk",
+      checked: false,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    });
     await db.outbox.bulkAdd([
       {
         targetType: "item",
@@ -143,15 +153,9 @@ describe("startSyncWatcher", () => {
         queuedAt: stale,
         syncedAt: stale,
       },
-      {
-        targetType: "item",
-        targetId: "pending-1",
-        operation: "update",
-        queuedAt: new Date().toISOString(),
-        syncedAt: null,
-      },
     ]);
-    stubServer((url) => (url === "/api/lists" ? jsonResponse({ lists: [] }) : undefined));
+    // The server still returns the List, so only the pruning is under test.
+    stubServer((url) => (url === "/api/lists" ? jsonResponse({ lists: [list] }) : undefined));
 
     await runSyncPass(db);
 

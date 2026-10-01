@@ -39,7 +39,11 @@ export function syncOutbox(db: ShoppingDb): Promise<void> {
   return currentSend;
 }
 
-/* One repeat is enough however many callers queued up behind it. */
+/* One repeat is enough however many callers queued up behind it. The transport
+   reports whether a request went out at all: `false` means the device no longer
+   holds the target, so the drain drops the row rather than pretending it was
+   sent. A request that went out without a usable echo still counts as sent —
+   the next pull is what reconciles it. */
 async function sendInRounds(db: ShoppingDb): Promise<void> {
   do {
     roundRequested = false;
@@ -47,28 +51,27 @@ async function sendInRounds(db: ShoppingDb): Promise<void> {
       if (entry.targetType === "list") {
         const list = await db.getList(entry.targetId);
         if (!list) {
-          return;
+          return false;
         }
         const { list: serverList } = await apiFetch<{ list: List }>(`/api/lists/${list.id}`, {
           method: "PUT",
           body: { name: list.name },
         });
-        if (!serverList?.id) {
-          return;
+        if (serverList?.id) {
+          await db.syncList(serverList);
         }
-        await db.syncList(serverList);
-        return;
+        return true;
       }
       if (entry.targetType === "item") {
         if (entry.operation === "delete") {
           await apiFetch(`/api/lists/${entry.listId}/items/${entry.targetId}`, {
             method: "DELETE",
           });
-          return;
+          return true;
         }
         const item = await db.getItem(entry.targetId);
         if (!item) {
-          return;
+          return false;
         }
         const itemUpdate: ItemUpdate = {
           name: item.name,
@@ -82,22 +85,21 @@ async function sendInRounds(db: ShoppingDb): Promise<void> {
             body: itemUpdate,
           },
         );
-        if (!serverItem?.id) {
-          return;
+        if (serverItem?.id) {
+          await db.syncItem(serverItem);
         }
-        await db.syncItem(serverItem);
-        return;
+        return true;
       }
       if (entry.targetType === "payment") {
         if (entry.operation === "delete") {
           await apiFetch(`/api/lists/${entry.listId}/payments/${entry.targetId}`, {
             method: "DELETE",
           });
-          return;
+          return true;
         }
         const payment = await db.getPayment(entry.targetId);
         if (!payment) {
-          return;
+          return false;
         }
         const paymentUpdate: PaymentUpdate = {
           amountInCents: payment.amountInCents,
@@ -110,11 +112,10 @@ async function sendInRounds(db: ShoppingDb): Promise<void> {
             body: paymentUpdate,
           },
         );
-        if (!serverPayment?.id) {
-          return;
+        if (serverPayment?.id) {
+          await db.syncPayment(serverPayment);
         }
-        await db.syncPayment(serverPayment);
-        return;
+        return true;
       }
       throw new Error(`Unsupported outbox target ${entry.targetType}`);
     });

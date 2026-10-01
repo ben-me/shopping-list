@@ -1,6 +1,6 @@
 import "fake-indexeddb/auto";
 
-import type { List } from "@shopping-list/api/domain";
+import type { Item, List } from "@shopping-list/api/domain";
 import { createList, syncFromServer, syncOutbox } from "../lists";
 import { ShoppingDb } from "../store";
 
@@ -141,6 +141,39 @@ describe("syncOutbox", () => {
     expect(mostConcurrent).toBe(1);
     expect(sent).toEqual([`/api/lists/${list.id}`, `/api/lists/${list.id}`]);
     expect(await db.pendingOutboxEntries()).toHaveLength(0);
+  });
+
+  it("sends the delete when the Item a queued write describes is gone locally", async () => {
+    const milk: Item = {
+      id: "item-1",
+      listId: "list-1",
+      name: "Milk",
+      checked: false,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    };
+    const sent: string[] = [];
+    vi.stubGlobal(
+      "fetch",
+      vi.fn<typeof fetch>(async (input, init) => {
+        sent.push(`${init?.method ?? "GET"} ${String(input)}`);
+        return jsonResponse({ ok: true });
+      }),
+    );
+
+    // Edited offline, then removed before the connection came back: the update
+    // has nothing left to describe, the delete is the write that matters.
+    await db.putItem(milk);
+    await db.outbox.clear();
+    await db.setItemChecked(milk.id, milk.listId, true);
+    await db.deleteItem(milk.id, milk.listId);
+
+    await syncOutbox(db);
+
+    expect(sent).toEqual([`DELETE /api/lists/${milk.listId}/items/${milk.id}`]);
+    // Only the delete survives: the update was never sent, so it must not be
+    // left claiming that it was.
+    expect((await db.outbox.toArray()).map((entry) => entry.operation)).toEqual(["delete"]);
   });
 });
 
