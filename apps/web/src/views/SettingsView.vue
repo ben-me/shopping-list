@@ -145,6 +145,18 @@ onMounted(() => {
 </template>
 
 <style scoped>
+/* Accept is the commit, the way a submit is elsewhere in the sheet; Decline
+   beside it keeps the quiet default. */
+button.primary {
+  border-color: var(--color-ink);
+  background-color: var(--color-ink);
+  color: var(--color-paper);
+
+  &:hover:not(:disabled) {
+    background-color: var(--color-ink-hover);
+  }
+}
+
 ul li {
   display: grid;
   gap: var(--space-2);

@@ -173,13 +173,7 @@ onMounted(() => {
       @revoke="onRevoke"
     />
     <p v-else-if="loaded" class="leave-row">
-      <button
-        type="button"
-        class="danger"
-        name="leave-list"
-        :disabled="leavePending"
-        @click="onLeave"
-      >
+      <button type="button" name="leave-list" :disabled="leavePending" @click="onLeave">
         Leave this list
       </button>
     </p>
@@ -243,8 +237,19 @@ li {
   }
 }
 
-/* The leave action reads as the text style of its siblings in the sheet. */
+/* The leave action reads as the text style of its siblings in the sheet, and
+   says so in the Owes colour rather than the button default. */
 .leave-row {
   padding-block: var(--space-3);
+
+  button {
+    border-color: transparent;
+    background-color: transparent;
+    color: var(--color-owes);
+
+    &:hover:not(:disabled) {
+      background-color: var(--color-danger-soft);
+    }
+  }
 }
 </style>
