@@ -140,7 +140,9 @@ ul > li {
     opacity: 0;
   }
 
-  /* The drawn box: the one decorative span, hidden from the screen reader. */
+  /* The drawn box: the one decorative span, hidden from the screen reader.
+     It shares a cell with the real checkbox, so it stays out of the way of
+     pointer events entirely — the label behind it is the click target. */
   label span[aria-hidden="true"] {
     display: grid;
     place-items: center;
@@ -150,6 +152,7 @@ ul > li {
     font-size: 0.85rem;
     font-weight: 800;
     line-height: 1;
+    pointer-events: none;
   }
 
   /* The tick, in the List's pen; the fallback is the original marker yellow. */
