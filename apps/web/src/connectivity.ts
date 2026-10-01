@@ -2,6 +2,7 @@ import { onMounted, onUnmounted, ref } from "vue";
 import { syncFromServer, syncOutbox } from "./lists";
 import type { ShoppingDb } from "./store";
 import { ignoreRejection } from "./utils/fireAndForget";
+import { createSingleFlight } from "./utils/singleFlight";
 
 export const online = ref(true);
 
@@ -53,66 +54,50 @@ export function useSyncPass(handler: ViewSync): void {
   });
 }
 
+/** Global is the wider pass: a global request widens a queued rerun, a list request never narrows it. */
+const widerScope = (queued: SyncScope, requested: SyncScope): SyncScope =>
+  requested === "global" || queued === "global" ? "global" : "list";
+
 /**
- * One Sync pass — the single place that owns the ordering invariant: the
- * outbox drains BEFORE anything is pulled, so a pull can never overwrite the
- * local state that queued writes describe. A successful drain is followed by
- * pruning synced outbox rows past the retention window, bounding the table.
- * Then the Lists index is pulled (global passes only — see {@link SyncScope})
- * and every registered per-view sync runs in turn.
- *
  * A pass already in flight wins: concurrent triggers (the browser firing
  * `online` twice, a reconnect racing a visibility change) collapse into the
- * running pass instead of double-draining the same outbox entries. Fails
- * (and is silently ignored by callers) while offline — the outbox simply
+ * running pass instead of double-draining the same outbox entries. A call
+ * arriving mid-pass queues one rerun — the pass is allowed to finish, then runs
+ * once more so a user-triggered action is never lost to the collapse guard, the
+ * classic "accept an invitation just as the mount sync starts" race — and the
+ * caller awaits the running pass *and* that rerun, so it observes the
+ * post-action state.
+ */
+const syncPass = createSingleFlight<SyncScope>(widerScope);
+
+/**
+ * Run one Sync pass at a time — the single place that owns the ordering
+ * invariant: the outbox drains BEFORE anything is pulled, so a pull can never
+ * overwrite the local state that queued writes describe. A successful drain is
+ * followed by pruning synced outbox rows past the retention window, bounding the
+ * table. Then the Lists index is pulled (global passes only — see
+ * {@link SyncScope}) and every registered per-view sync runs in turn.
+ *
+ * Fails (and is silently ignored by callers) while offline — the outbox simply
  * keeps the queued writes for the next attempt.
  */
-let currentPass: Promise<void> | null = null;
-/**
- * A call arrived while a pass was running. The pass is allowed to finish, then
- * runs once more so a user-triggered action is never lost to the collapse
- * guard — the classic "accept an invitation just as the mount sync starts"
- * race. Bounded: any number of in-flight collapsers queue at most one rerun.
- */
-let rerunRequested = false;
-/** The scope the queued rerun runs at; widened to `global` by any global caller. */
-let rerunScope: SyncScope = "global";
 export function runSyncPass(db: ShoppingDb, scope: SyncScope = "global"): Promise<void> {
-  if (currentPass) {
-    rerunRequested = true;
-    // A global request widens the queued rerun; a list request never narrows it.
-    if (scope === "global") {
-      rerunScope = "global";
-    }
-    // Await the running pass *and* its queued rerun, so callers that await
-    // (an accept, an explicit refresh) observe the post-action state.
-    return currentPass;
-  }
-  currentPass = runPassLoop(db, scope).finally(() => {
-    currentPass = null;
-  });
-  return currentPass;
+  return syncPass.run(scope, (passScope) => runPass(db, passScope));
 }
 
-async function runPassLoop(db: ShoppingDb, scope: SyncScope): Promise<void> {
-  do {
-    rerunRequested = false;
-    await syncOutbox(db);
-    await ignoreRejection(db.pruneSyncedOutbox());
-    if (scope === "global") {
-      await syncFromServer(db);
+/** What one pass does. The flight owns when this runs and how often it repeats. */
+async function runPass(db: ShoppingDb, scope: SyncScope): Promise<void> {
+  await syncOutbox(db);
+  await ignoreRejection(db.pruneSyncedOutbox());
+  if (scope === "global") {
+    await syncFromServer(db);
+  }
+  for (const entry of viewSyncs) {
+    if (entry.globalOnly && scope !== "global") {
+      continue;
     }
-    for (const entry of viewSyncs) {
-      if (entry.globalOnly && scope !== "global") {
-        continue;
-      }
-      await ignoreRejection(entry.handler(db));
-    }
-    if (rerunRequested) {
-      scope = rerunScope;
-      rerunScope = "global";
-    }
-  } while (rerunRequested);
+    await ignoreRejection(entry.handler(db));
+  }
 }
 
 /**
@@ -122,7 +107,7 @@ async function runPassLoop(db: ShoppingDb, scope: SyncScope): Promise<void> {
  * the user sits on a List screen the whole time. Visibility-gated below, so
  * a hidden tab never polls.
  */
-const SYNC_POLL_MS = 60_000;
+export const SYNC_POLL_MS = 60_000;
 
 /**
  * Keep the device in sync without user action. Installs listeners that:
@@ -142,10 +127,8 @@ const SYNC_POLL_MS = 60_000;
  * trigger. The poll collapses into any pass already in flight (the shared
  * guard), so it can never stack with a reconnect or a view's own pass.
  * Returns a cleanup that removes the listeners and the poll.
- *
- * `pollMs` exists so tests can shorten the sweep; callers keep the default.
  */
-export function startSyncWatcher(db: ShoppingDb, pollMs: number = SYNC_POLL_MS): () => void {
+export function startSyncWatcher(db: ShoppingDb): () => void {
   const markOffline = () => {
     online.value = false;
   };
@@ -165,7 +148,7 @@ export function startSyncWatcher(db: ShoppingDb, pollMs: number = SYNC_POLL_MS):
   window.addEventListener("online", markOnlineAndSync);
   window.addEventListener("offline", markOffline);
   document.addEventListener("visibilitychange", syncIfVisible);
-  const pollTimer = setInterval(syncIfVisible, pollMs);
+  const pollTimer = setInterval(syncIfVisible, SYNC_POLL_MS);
 
   return () => {
     window.removeEventListener("online", markOnlineAndSync);

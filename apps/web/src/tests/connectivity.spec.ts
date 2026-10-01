@@ -3,7 +3,7 @@ import "fake-indexeddb/auto";
 import type { List } from "@shopping-list/api/domain";
 import { db } from "../db";
 import { addItem } from "../items";
-import { onSyncPass, online, runSyncPass, startSyncWatcher } from "../connectivity";
+import { onSyncPass, online, runSyncPass, startSyncWatcher, SYNC_POLL_MS } from "../connectivity";
 
 const list: List = {
   id: "list-1",
@@ -47,9 +47,25 @@ function stubServer(
 
 let stopWatch: (() => void) | null = null;
 
-function watch(pollMs?: number): () => void {
-  stopWatch = startSyncWatcher(db, pollMs);
+function watch(): () => void {
+  stopWatch = startSyncWatcher(db);
   return stopWatch;
+}
+
+/**
+ * Install the watcher with only the interval timer faked, so its poll can be
+ * driven on demand while every other timer — and the async Sync pass a tick
+ * starts — stays real.
+ */
+function watchWithPoll(): () => void {
+  vi.useFakeTimers({ toFake: ["setInterval", "clearInterval"] });
+  return watch();
+}
+
+/** Run the watcher's pending poll: one sweep at the production poll interval. */
+async function tickPoll(): Promise<void> {
+  await vi.advanceTimersByTimeAsync(SYNC_POLL_MS);
+  vi.useRealTimers();
 }
 
 beforeEach(async () => {
@@ -64,6 +80,7 @@ beforeEach(async () => {
 afterEach(() => {
   stopWatch?.();
   stopWatch = null;
+  vi.useRealTimers();
   vi.unstubAllGlobals();
 });
 
@@ -229,7 +246,9 @@ describe("startSyncWatcher", () => {
     const { requests } = stubServer((url) =>
       url === "/api/lists" ? jsonResponse({ lists: [] }) : undefined,
     );
-    watch(20); // shorten the sweep; production uses SYNC_POLL_MS
+    watchWithPoll();
+
+    await tickPoll();
 
     await vi.waitFor(() => {
       expect(requests.some((r) => r.url === "/api/lists")).toBe(true);
@@ -240,11 +259,13 @@ describe("startSyncWatcher", () => {
     const { requests } = stubServer((url) =>
       url === "/api/lists" ? jsonResponse({ lists: [] }) : undefined,
     );
-    watch(20);
+    watchWithPoll();
     // Drop the connection after the watcher mirrored navigator.onLine.
     online.value = false;
 
-    await new Promise((resolve) => setTimeout(resolve, 60));
+    await tickPoll();
+    // Real time passes with nothing started: no pass reaches the server.
+    await new Promise((resolve) => setTimeout(resolve, 20));
 
     expect(requests.some((r) => r.url === "/api/lists")).toBe(false);
   });
