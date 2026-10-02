@@ -17,6 +17,6 @@ test("a new user on the same browser never sees the previous user's Lists", asyn
   await signUp(page, "Second User", request);
 
   // No leftovers from the previous account.
-  await expect(page.getByText("Your lists will appear here.")).toBeVisible();
+  await expect(page.getByText("No lists yet. Create the first one below.")).toBeVisible();
   await expect(page.getByRole("link", { name: "test" })).toHaveCount(0);
 });

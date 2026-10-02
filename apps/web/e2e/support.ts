@@ -4,11 +4,9 @@ import { WEB_ORIGIN } from "../playwright.config";
 
 /**
  * Shared helpers for the e2e specs: provision a user through the admin route,
- * sign them in, create a List, add, tick, and remove Items.
+ * sign them in, create a List, add, tick and remove Items.
  *
- * Accounts are provisioned, not self-created (ADR 0003): `00-bootstrap` signs
- * up once on the empty database (that account becomes the Admin) and every
- * later account is created through the admin route with a unique email.
+ * Accounts are provisioned, not self-created (ADR 0003).
  */
 
 export const PASSWORD = "e2e-secret-123";
@@ -24,10 +22,7 @@ export function input(page: Page, formName: string) {
   return page.locator(`input[name="${formName}"]`);
 }
 
-/**
- * Sign the Admin in over the API and return the session cookie. A fresh
- * sign-in needs a fresh cookie, so sign out any stale session first.
- */
+/* Sign the Admin in over the API and return the session cookie. */
 export async function adminCookie(request: APIRequestContext): Promise<string> {
   await request.post("/api/auth/sign-out", {
     headers: { origin: TRUSTED_ORIGIN },
@@ -72,7 +67,12 @@ export async function signInAsUser(page: Page, email: string, password: string =
   await page.goto("/");
   await input(page, "email").fill(email);
   await input(page, "password").fill(password);
+  // Wait for the session cookie to be set before the caller navigates on.
+  const signedIn = page.waitForResponse((response) =>
+    response.url().includes("/api/auth/sign-in/email"),
+  );
   await page.getByRole("button", { name: "Sign in" }).click();
+  await signedIn;
 }
 
 /** Provision an account and sign it in through the real sign-in form. */
@@ -83,36 +83,49 @@ export async function signUp(page: Page, name: string, request: APIRequestContex
 }
 
 export async function signOut(page: Page) {
+  // Wait for sign-out to reach the server before navigating away, or the
+  // in-flight request can race the next sign-in and drop the new session.
+  const signedOut = page.waitForResponse((response) =>
+    response.url().includes("/api/auth/sign-out"),
+  );
   await page.getByRole("button", { name: "Sign out" }).click();
+  await signedOut;
   await expect(page.getByRole("heading", { name: "Sign in" })).toBeVisible();
 }
 
 export async function createList(page: Page, name: string) {
   await input(page, "name").fill(name);
-  await page.getByRole("button", { name: "Create a List" }).click();
+  await page.getByRole("button", { name: "Create list" }).click();
   await page.getByRole("link", { name }).click();
   await expect(page.getByRole("heading", { name })).toBeVisible();
+}
+
+/** The Members section is a tab on the List screens; open it like Items or Payments. */
+export async function openMembers(page: Page) {
+  await page.getByRole("link", { name: "Members" }).click();
 }
 
 export function itemRow(page: Page, name: string) {
   return page.getByRole("listitem").filter({ hasText: name });
 }
 
+/* An Invitation row: found by role and text, the email being unique to it. */
+export function invitationRow(page: Page, text: string) {
+  return page.getByRole("listitem").filter({ hasText: text });
+}
+
 export function paymentRow(page: Page, amount: string) {
-  return page.locator(".payments li").filter({ hasText: amount });
+  return page.locator("main ul li").filter({ hasText: amount });
 }
 
 export async function addItem(page: Page, name: string) {
   await input(page, "item").fill(name);
-  await page.getByRole("button", { name: "Add an Item" }).click();
+  await page.getByRole("button", { name: "Add" }).click();
   await expect(itemRow(page, name)).toBeVisible();
 }
 
-/**
- * Waits until the local Store reflects the expected Item state and the outbox
- * has drained, so a reload is guaranteed to show the same state. `checked:
- * null` waits for the Item to be gone.
- */
+/* Waits until the Store holds the expected Item state and the outbox has
+   drained, so a reload shows the same thing. `checked: null` waits for gone. */
 export function itemSettled(page: Page, name: string, checked: boolean | null) {
   const listId = new URL(page.url()).pathname.split("/").pop() ?? "";
   // Runs in the page: imports the app's own Store module and inspects its state.

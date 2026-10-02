@@ -3,7 +3,7 @@ import "fake-indexeddb/auto";
 import type { List } from "@shopping-list/api/domain";
 import { db } from "../db";
 import { addItem } from "../items";
-import { onSyncPass, online, runSyncPass, startSyncWatcher } from "../connectivity";
+import { onSyncPass, online, runSyncPass, startSyncWatcher, SYNC_POLL_MS } from "../connectivity";
 
 const list: List = {
   id: "list-1",
@@ -52,6 +52,22 @@ function watch(): () => void {
   return stopWatch;
 }
 
+/**
+ * Install the watcher with only the interval timer faked, so its poll can be
+ * driven on demand while every other timer — and the async Sync pass a tick
+ * starts — stays real.
+ */
+function watchWithPoll(): () => void {
+  vi.useFakeTimers({ toFake: ["setInterval", "clearInterval"] });
+  return watch();
+}
+
+/** Run the watcher's pending poll: one sweep at the production poll interval. */
+async function tickPoll(): Promise<void> {
+  await vi.advanceTimersByTimeAsync(SYNC_POLL_MS);
+  vi.useRealTimers();
+}
+
 beforeEach(async () => {
   await db.lists.clear();
   await db.items.clear();
@@ -64,6 +80,7 @@ beforeEach(async () => {
 afterEach(() => {
   stopWatch?.();
   stopWatch = null;
+  vi.useRealTimers();
   vi.unstubAllGlobals();
 });
 
@@ -135,6 +152,16 @@ describe("startSyncWatcher", () => {
 
   it("prunes synced outbox rows past the retention window after a successful drain", async () => {
     const stale = new Date(Date.now() - 25 * 60 * 60 * 1000).toISOString();
+    // The pending row needs a target the device still holds, or the drain has
+    // nothing to send for it and drops it as unsent rather than synced.
+    await db.putItem({
+      id: "pending-1",
+      listId: list.id,
+      name: "Milk",
+      checked: false,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    });
     await db.outbox.bulkAdd([
       {
         targetType: "item",
@@ -143,15 +170,9 @@ describe("startSyncWatcher", () => {
         queuedAt: stale,
         syncedAt: stale,
       },
-      {
-        targetType: "item",
-        targetId: "pending-1",
-        operation: "update",
-        queuedAt: new Date().toISOString(),
-        syncedAt: null,
-      },
     ]);
-    stubServer((url) => (url === "/api/lists" ? jsonResponse({ lists: [] }) : undefined));
+    // The server still returns the List, so only the pruning is under test.
+    stubServer((url) => (url === "/api/lists" ? jsonResponse({ lists: [list] }) : undefined));
 
     await runSyncPass(db);
 
@@ -178,6 +199,79 @@ describe("startSyncWatcher", () => {
     const get = requests.find((r) => r.init?.method === undefined || r.init?.method === "GET");
     expect(get?.url).toBe("/api/lists");
     stopViewSync();
+  });
+
+  it("a list-scoped pass drains and fans out but skips the app-wide Lists pull", async () => {
+    const { requests } = stubServer((url) =>
+      url === "/api/lists" ? jsonResponse({ lists: [] }) : undefined,
+    );
+    let viewSyncCalls = 0;
+    let globalSyncCalls = 0;
+    const stopViewSync = onSyncPass(async () => {
+      viewSyncCalls += 1;
+    });
+    const stopGlobalSync = onSyncPass(
+      async () => {
+        globalSyncCalls += 1;
+      },
+      { globalOnly: true },
+    );
+
+    await runSyncPass(db, "list");
+
+    expect(requests.some((r) => r.url === "/api/lists")).toBe(false);
+    expect(viewSyncCalls).toBe(1);
+    expect(globalSyncCalls).toBe(0);
+    stopViewSync();
+    stopGlobalSync();
+  });
+
+  it("widens a queued rerun to global when a global pass waits behind a list pass", async () => {
+    // A gate keeps the first (list-scoped) pass in flight until released.
+    let release: (() => void) | undefined;
+    const gate = new Promise<void>((resolve) => (release = resolve));
+    const { requests } = stubServer(async () => {
+      await gate;
+      return jsonResponse({ lists: [] });
+    });
+
+    const first = runSyncPass(db, "list");
+    await new Promise((resolve) => setTimeout(resolve, 10));
+
+    const second = runSyncPass(db); // global: must widen the queued rerun
+    release?.();
+    await Promise.all([first, second]);
+
+    // The rerun ran as a global pass: the Lists index was pulled at least once.
+    expect(requests.filter((r) => r.url === "/api/lists")).toHaveLength(1);
+  });
+
+  it("polls the server periodically while online and visible, with no user action", async () => {
+    const { requests } = stubServer((url) =>
+      url === "/api/lists" ? jsonResponse({ lists: [] }) : undefined,
+    );
+    watchWithPoll();
+
+    await tickPoll();
+
+    await vi.waitFor(() => {
+      expect(requests.some((r) => r.url === "/api/lists")).toBe(true);
+    });
+  });
+
+  it("does not poll while offline", async () => {
+    const { requests } = stubServer((url) =>
+      url === "/api/lists" ? jsonResponse({ lists: [] }) : undefined,
+    );
+    watchWithPoll();
+    // Drop the connection after the watcher mirrored navigator.onLine.
+    online.value = false;
+
+    await tickPoll();
+    // Real time passes with nothing started: no pass reaches the server.
+    await new Promise((resolve) => setTimeout(resolve, 20));
+
+    expect(requests.some((r) => r.url === "/api/lists")).toBe(false);
   });
 
   it("collapses concurrent reconnect triggers into one pass — the outbox drains once", async () => {

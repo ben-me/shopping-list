@@ -2,6 +2,7 @@ import type { Item, ItemUpdate, List, Payment, PaymentUpdate } from "@shopping-l
 import { apiFetch } from "./api";
 import type { ShoppingDb } from "./store";
 import now from "./utils/now";
+import { createSingleFlight } from "./utils/singleFlight";
 
 export async function createList(db: ShoppingDb, ownerId: string, name: string): Promise<List> {
   const trimmed = name.trim();
@@ -20,33 +21,51 @@ export async function createList(db: ShoppingDb, ownerId: string, name: string):
   return list;
 }
 
-export async function syncOutbox(db: ShoppingDb): Promise<void> {
+/**
+ * Send everything queued, one send at a time. A caller arriving mid-send asks
+ * for one more round rather than starting a second send, which would race the
+ * first to the server with the same row and could leave the server behind the
+ * device. The returned promise settles after that extra round.
+ *
+ * A queued round has nothing to widen — it is just another drain of the same
+ * outbox for the same database — so the requested db is the merged one.
+ */
+const outboxFlight = createSingleFlight<ShoppingDb>((_queued, requested) => requested);
+
+export function syncOutbox(db: ShoppingDb): Promise<void> {
+  return outboxFlight.run(db, drainOutbox);
+}
+
+/* The transport reports whether a request went out at all: `false` means the
+   device no longer holds the target, so the drain drops the row rather than
+   pretending it was sent. A request that went out without a usable echo still
+   counts as sent — the next pull is what reconciles it. */
+async function drainOutbox(db: ShoppingDb): Promise<void> {
   await db.drainOutbox(async (entry) => {
     if (entry.targetType === "list") {
       const list = await db.getList(entry.targetId);
       if (!list) {
-        return;
+        return false;
       }
       const { list: serverList } = await apiFetch<{ list: List }>(`/api/lists/${list.id}`, {
         method: "PUT",
         body: { name: list.name },
       });
-      if (!serverList?.id) {
-        return;
+      if (serverList?.id) {
+        await db.syncList(serverList);
       }
-      await db.syncList(serverList);
-      return;
+      return true;
     }
     if (entry.targetType === "item") {
       if (entry.operation === "delete") {
         await apiFetch(`/api/lists/${entry.listId}/items/${entry.targetId}`, {
           method: "DELETE",
         });
-        return;
+        return true;
       }
       const item = await db.getItem(entry.targetId);
       if (!item) {
-        return;
+        return false;
       }
       const itemUpdate: ItemUpdate = {
         name: item.name,
@@ -60,22 +79,21 @@ export async function syncOutbox(db: ShoppingDb): Promise<void> {
           body: itemUpdate,
         },
       );
-      if (!serverItem?.id) {
-        return;
+      if (serverItem?.id) {
+        await db.syncItem(serverItem);
       }
-      await db.syncItem(serverItem);
-      return;
+      return true;
     }
     if (entry.targetType === "payment") {
       if (entry.operation === "delete") {
         await apiFetch(`/api/lists/${entry.listId}/payments/${entry.targetId}`, {
           method: "DELETE",
         });
-        return;
+        return true;
       }
       const payment = await db.getPayment(entry.targetId);
       if (!payment) {
-        return;
+        return false;
       }
       const paymentUpdate: PaymentUpdate = {
         amountInCents: payment.amountInCents,
@@ -88,21 +106,17 @@ export async function syncOutbox(db: ShoppingDb): Promise<void> {
           body: paymentUpdate,
         },
       );
-      if (!serverPayment?.id) {
-        return;
+      if (serverPayment?.id) {
+        await db.syncPayment(serverPayment);
       }
-      await db.syncPayment(serverPayment);
-      return;
+      return true;
     }
     throw new Error(`Unsupported outbox target ${entry.targetType}`);
   });
 }
 
-/**
- * Server-authoritative: drop local Lists the server no longer returns
- * (previous user's leftovers, removed memberships). The outbox has already
- * drained (runSyncPass), so just-pushed offline Lists survive.
- */
+/* Drops local Lists the server no longer returns (revoked membership, another
+   user's leftovers). The outbox drains first, so just-pushed Lists survive. */
 export async function syncFromServer(db: ShoppingDb): Promise<void> {
   const { lists } = await apiFetch<{ lists: List[] }>("/api/lists");
   if (!lists) {

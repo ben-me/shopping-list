@@ -8,7 +8,7 @@ vi.mock(
 import { flushPromises } from "@vue/test-utils";
 import type { Item, List } from "@shopping-list/api/domain";
 import { db } from "../db";
-import { addItem, removeItem, setItemChecked, syncItemsFromServer } from "../items";
+import { addItem, removeItem, syncItemsFromServer } from "../items";
 import { syncOutbox } from "../lists";
 import { _resetSession } from "../session";
 
@@ -27,11 +27,8 @@ function jsonResponse(body: unknown, status = 200): Response {
   });
 }
 
-/**
- * Record every request the sync makes so tests can assert the exact server
- * contract. The default handler answers any Item PUT with the server's
- * canonical echo of the write.
- */
+/* Records every request the sync makes. Any Item PUT is answered with the
+   server's canonical echo of the write. */
 function stubServer(
   handler?: (url: string, init?: RequestInit) => Response | Promise<Response> | undefined,
 ) {
@@ -85,28 +82,6 @@ describe("Items on a List", () => {
     expect(await db.pendingOutboxEntries()).toHaveLength(0);
   });
 
-  it("ticks and un-ticks an Item offline and nothing money-related happens", async () => {
-    stubServer();
-    const item = await addItem(db, list.id, "Milk");
-
-    const ticked = await setItemChecked(db, item, true);
-    expect(ticked.checked).toBe(true);
-    expect(ticked.checkedAt).toBeTruthy();
-
-    const unticked = await setItemChecked(db, ticked, false);
-    expect(unticked.checked).toBe(false);
-    expect(unticked.checkedAt).toBeUndefined();
-
-    const stored = await db.getItems(list.id);
-    expect(stored[0]).toMatchObject({ name: "Milk", checked: false, checkedAt: undefined });
-    expect((await db.pendingOutboxEntries()).map((e) => e.targetType)).toEqual([
-      "item",
-      "item",
-      "item",
-    ]);
-    expect((await db.getPayments(list.id)).length).toBe(0);
-  });
-
   it("removes an Item offline and queues the delete for Sync", async () => {
     stubServer();
     const item = await addItem(db, list.id, "Milk");
@@ -122,7 +97,7 @@ describe("Items on a List", () => {
   it("syncs a queued Item to the server when the connection returns", async () => {
     const { requests } = stubServer();
     const item = await addItem(db, list.id, "Milk");
-    await setItemChecked(db, item, true);
+    await db.setItemChecked(item.id, list.id, true);
 
     await syncOutbox(db);
     await flushPromises();

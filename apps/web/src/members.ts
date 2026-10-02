@@ -37,14 +37,22 @@ export async function listMembers(listId: string): Promise<MemberDetails[]> {
  * server-side, this is how every device learns who the Members are — both
  * the invitee's and the Owner's — so the Split/standing re-divides for the
  * real group.
+ *
+ * Returns the named rows the server sent. Membership rows hold ids only, so a
+ * screen that labels Members by name takes them from here rather than asking
+ * the same endpoint again. An unexpected payload mirrors nothing and returns
+ * an empty set.
  */
-export async function syncMembershipsFromServer(db: ShoppingDb, listId: string): Promise<void> {
+export async function syncMembershipsFromServer(
+  db: ShoppingDb,
+  listId: string,
+): Promise<MemberDetails[]> {
   const [body, list] = await Promise.all([
     apiFetch<{ members?: MemberDetails[] }>(`/api/lists/${listId}/members`),
     db.getList(listId),
   ]);
   if (!body?.members || !list) {
-    return;
+    return [];
   }
   await db.replaceMemberships(
     listId,
@@ -52,6 +60,7 @@ export async function syncMembershipsFromServer(db: ShoppingDb, listId: string):
       .filter((member) => member.memberId !== list.ownerId)
       .map((member) => ({ listId, memberId: member.memberId, joinedAt: member.joinedAt })),
   );
+  return body.members;
 }
 
 /**

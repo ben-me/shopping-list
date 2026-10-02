@@ -1,5 +1,6 @@
 import Dexie, { type Table } from "dexie";
 import type { Item, List, Membership, Payment } from "@shopping-list/api/domain";
+import now from "./utils/now";
 
 export type OutboxTarget = "list" | "item" | "payment";
 
@@ -18,15 +19,16 @@ export interface OutboxEntry {
 
 type OutboxWrite = Pick<OutboxEntry, "targetType" | "targetId" | "listId" | "operation">;
 
-export type OutboxTransport = (entry: OutboxEntry) => Promise<void>;
+/**
+ * Sends one entry and reports what it did: `true` once the write reached the
+ * server, `false` when the device no longer holds the target and there was
+ * nothing left to send. A transport that resolves cannot mean both.
+ */
+export type OutboxTransport = (entry: OutboxEntry) => Promise<boolean>;
 
 /**
- * How long a synced outbox row is kept after it reached the server. Every
- * write appends an outbox row, so the table would grow without bound unless
- * synced rows are pruned. A synced row is also the only local record that an
- * offline write actually made it — and the only way to diagnose an entry that
- * sat pending for days — so rows are pruned by age rather than deleted the
- * moment they sync: the window keeps that history without unbounded growth.
+ * Synced rows are kept this long, then pruned: they are the only local record
+ * that an offline write made it, and the table grows by one row per write.
  */
 export const OUTBOX_RETENTION_MS = 24 * 60 * 60 * 1000;
 
@@ -102,6 +104,61 @@ export class ShoppingDb extends Dexie {
     });
   }
 
+  /**
+   * Tick or un-tick an Item: a command, not a patch. Reads the row inside the
+   * transaction that writes it, so two taps in a row cannot both build on the
+   * same stale copy and undo each other. Never touches a Payment.
+   */
+  async setItemChecked(id: string, listId: string, checked: boolean): Promise<Item> {
+    const timestamp = now();
+    return this.transaction("rw", this.items, this.outbox, async () => {
+      const current = await this.items.get(id);
+      if (!current || current.listId !== listId) {
+        throw new Error(`No Item ${id} in List ${listId}`);
+      }
+      const updated: Item = {
+        ...current,
+        checked,
+        checkedAt: checked ? timestamp : undefined,
+        updatedAt: timestamp,
+      };
+      await this.items.put(updated);
+      await this.queueOutboxWrite({
+        targetType: "item",
+        targetId: id,
+        listId,
+        operation: "update",
+      });
+      return updated;
+    });
+  }
+
+  /**
+   * Edit a Payment: a command, for the same reason as {@link setItemChecked}.
+   * Only the fields given are touched; everything else is read from the row.
+   */
+  async updatePayment(
+    id: string,
+    listId: string,
+    edit: { amountInCents?: number; paidAt?: string },
+  ): Promise<Payment> {
+    return this.transaction("rw", this.payments, this.outbox, async () => {
+      const current = await this.payments.get(id);
+      if (!current || current.listId !== listId) {
+        throw new Error(`No Payment ${id} in List ${listId}`);
+      }
+      const updated: Payment = { ...current, ...edit, updatedAt: now() };
+      await this.payments.put(updated);
+      await this.queueOutboxWrite({
+        targetType: "payment",
+        targetId: id,
+        listId,
+        operation: "update",
+      });
+      return updated;
+    });
+  }
+
   deleteItem(id: string, listId: string): Promise<void> {
     return this.writeWithOutbox(this.items, () => this.items.delete(id), {
       targetType: "item",
@@ -121,14 +178,8 @@ export class ShoppingDb extends Dexie {
   }
 
   /**
-   * Apply a server copy of an Item to the local Store — the inbound half of a
-   * Sync. Two guards keep an in-flight pull from clobbering fresher local
-   * state (ADR 0001, last-write-wins per field):
-   *
-   * - a pending outbox delete is a tombstone: the Item stays removed even if
-   *   the pull was issued before the removal and still carries the old copy;
-   * - a newer local edit (still queued for Sync) beats an older server
-   *   snapshot; the queued write wins on push and the echo comes back then.
+   * Apply a server copy of an Item. Last-write-wins (ADR 0001), with a pending
+   * delete as a tombstone and a newer local edit beating an older server copy.
    */
   async syncItem(item: Item): Promise<void> {
     const [owesDelete, local] = await Promise.all([
@@ -144,12 +195,7 @@ export class ShoppingDb extends Dexie {
     await this.items.put(item);
   }
 
-  /**
-   * The inbound half of a Sync for a Payment, with the same guards as
-   * {@link syncItem}: a pending delete is a tombstone, and a newer local edit
-   * beats an older server snapshot. Payments are independent rows — a pulled
-   * Payment is applied as its own row and never merged into another.
-   */
+  /** A server copy of a Payment, with the same guards as {@link syncItem}. */
   async syncPayment(payment: Payment): Promise<void> {
     const [owesDelete, local] = await Promise.all([
       this.hasPendingDelete("payment", payment.id),
@@ -164,11 +210,7 @@ export class ShoppingDb extends Dexie {
     await this.payments.put(payment);
   }
 
-  /**
-   * Indexed point lookup: does this target still have an unsynced delete in
-   * the outbox? The `targetId` index keeps this O(log n) per synced row
-   * instead of scanning every outbox row.
-   */
+  /** Indexed lookup, so a synced row costs O(log n) rather than a table scan. */
   private async hasPendingDelete(targetType: OutboxTarget, targetId: string): Promise<boolean> {
     const pendingDeletes = await this.outbox
       .where("targetId")
@@ -187,12 +229,7 @@ export class ShoppingDb extends Dexie {
     await this.memberships.put(membership);
   }
 
-  /**
-   * Replace the local Membership set for a List with the given rows, in one
-   * transaction. This is the one write that skips the outbox: Memberships are
-   * never edited offline — every change is a server-side invite/accept — so
-   * there is nothing to queue (`writeWithOutbox` does not apply).
-   */
+  /** The one write that skips the outbox: Memberships only change server-side. */
   async replaceMemberships(listId: string, memberships: Membership[]): Promise<void> {
     await this.transaction("rw", this.memberships, async () => {
       await this.memberships.where("listId").equals(listId).delete();
@@ -211,24 +248,35 @@ export class ShoppingDb extends Dexie {
     return rows.filter((entry) => entry.syncedAt === null);
   }
 
+  /**
+   * Send everything queued and mark it sent. Writes to the same target collapse
+   * into one send — the transport reads the target's current state, so five
+   * taps would send five identical payloads. A failed send marks none of them,
+   * so the whole group is retried. Groups keep the order they were queued in.
+   *
+   * A group the transport had nothing to send for is dropped rather than
+   * stamped: a `syncedAt` is the record that a write reached the server, and
+   * nothing did. Retrying would not help either — the target is gone, and the
+   * write that removed it is queued right behind.
+   */
   async drainOutbox(transport: OutboxTransport): Promise<OutboxEntry[]> {
     const pendingEntries = await this.pendingOutboxEntries();
     const drainedEntries: OutboxEntry[] = [];
-    for (const entry of pendingEntries) {
-      await transport(entry);
-      await this.outbox.update(entry.id!, { syncedAt: new Date().toISOString() });
-      drainedEntries.push(entry);
+    for (const group of groupPendingEntries(pendingEntries)) {
+      const keys = group.map((entry) => entry.id!);
+      if (!(await transport(group[group.length - 1]!))) {
+        await this.outbox.bulkDelete(keys);
+        continue;
+      }
+      await this.outbox.bulkUpdate(
+        keys.map((key) => ({ key, changes: { syncedAt: new Date().toISOString() } })),
+      );
+      drainedEntries.push(...group);
     }
     return drainedEntries;
   }
 
-  /**
-   * Remove synced outbox rows older than {@link OUTBOX_RETENTION_MS}. Rows
-   * still pending (`syncedAt === null`) never match: IndexedDB leaves records
-   * whose indexed value is null out of the index entirely, so this is a
-   * bounded range scan over the `syncedAt` index — not a scan-and-filter of
-   * the whole table (same lesson as the `targetId` point lookup).
-   */
+  /** Pending rows stay: IndexedDB leaves `null` out of the index, so this stays a bounded scan. */
   async pruneSyncedOutbox(): Promise<void> {
     const cutoff = new Date(Date.now() - OUTBOX_RETENTION_MS).toISOString();
     await this.outbox.where("syncedAt").belowOrEqual(cutoff).delete();
@@ -278,4 +326,19 @@ export class ShoppingDb extends Dexie {
   private async queueOutboxWrite(entry: OutboxWrite): Promise<void> {
     await this.outbox.add({ ...entry, queuedAt: new Date().toISOString(), syncedAt: null });
   }
+}
+
+/** Group queued writes by target, oldest group first; update and delete stay apart. */
+function groupPendingEntries(entries: OutboxEntry[]): OutboxEntry[][] {
+  const groups = new Map<string, OutboxEntry[]>();
+  for (const entry of entries) {
+    const key = `${entry.targetType}:${entry.targetId}:${entry.operation}`;
+    const group = groups.get(key);
+    if (group) {
+      group.push(entry);
+      continue;
+    }
+    groups.set(key, [entry]);
+  }
+  return [...groups.values()];
 }

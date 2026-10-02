@@ -1,14 +1,15 @@
 <script setup lang="ts">
 import { onMounted, onUnmounted, ref } from "vue";
-import { useRouter } from "vue-router";
 import type { List } from "@shopping-list/api/domain";
+import AppBar from "../components/AppBar.vue";
 import { onSyncPass, runSyncPass } from "../connectivity";
 import { db } from "../db";
 import { createList } from "../lists";
-import { session, signOutAndRedirect } from "../session";
+import { listColors } from "../utils/listColors";
+import { session } from "../session";
 import { ignoreRejection, logRejection } from "../utils/fireAndForget";
+import { submit } from "../utils/submit";
 
-const router = useRouter();
 const lists = ref<List[]>([]);
 const name = ref("");
 const error = ref<string | null>(null);
@@ -18,26 +19,24 @@ async function loadLists() {
   lists.value = await db.getLists();
 }
 
+function penStyle(list: List) {
+  return { "--list-accent": listColors(list.id).accent };
+}
+
 async function onCreate() {
   error.value = null;
-  if (!session.user) {
+  const user = session.user;
+  if (!user) {
     return;
   }
-  creating.value = true;
-  try {
-    await createList(db, session.user.id, name.value);
-  } catch (err) {
-    error.value = err instanceof Error ? err.message : "Could not create the list";
+  const created = await submit({ error, busy: creating }, "Could not create the list", () =>
+    createList(db, user.id, name.value),
+  );
+  if (!created) {
     return;
-  } finally {
-    creating.value = false;
   }
   name.value = "";
   await logRejection(loadLists(), "Loading the lists");
-}
-
-async function onSignOut() {
-  await signOutAndRedirect(router);
 }
 
 let stopSyncPass: (() => void) | null = null;
@@ -46,10 +45,7 @@ onMounted(() => {
   // Paint the local state right away, then reconcile with the server.
   void logRejection(loadLists(), "Loading the lists");
   stopSyncPass = onSyncPass(async () => {
-    // A sync pass may have pulled in Lists that appeared only on the server
-    // since this view mounted — e.g. an accepted invitation or a device
-    // hand-over where sign-in wiped the local Store. Re-read so the home is
-    // never stale.
+    // A pass may have pulled in Lists that only exist on the server.
     await logRejection(loadLists(), "Loading the lists");
   });
   void ignoreRejection(runSyncPass(db));
@@ -62,24 +58,66 @@ onUnmounted(() => {
 </script>
 
 <template>
-  <h1>Shopping Lists</h1>
-  <div v-if="session.user">
-    <p>Signed in as {{ session.user.name }}</p>
-    <RouterLink :to="{ name: 'settings' }">Settings</RouterLink>
-    <button type="button" @click="onSignOut">Sign out</button>
-  </div>
-  <p v-if="lists.length === 0">Your lists will appear here.</p>
-  <ul>
-    <li v-for="list in lists" :key="list.id">
-      <RouterLink :to="{ name: 'list', params: { listId: list.id } }">{{ list.name }}</RouterLink>
-    </li>
-  </ul>
-  <form @submit.prevent="onCreate">
-    <label>
-      List name
-      <input v-model="name" name="name" />
-    </label>
-    <button type="submit" :disabled="creating || !session.user">Create a List</button>
-  </form>
-  <p v-if="error">{{ error }}</p>
+  <AppBar title="Shopping Lists" settings />
+  <main class="page">
+    <section aria-label="Your lists">
+      <p v-if="lists.length === 0" class="empty">No lists yet. Create the first one below.</p>
+      <ul v-else class="rows">
+        <li v-for="list in lists" :key="list.id" :style="penStyle(list)">
+          <RouterLink :to="{ name: 'list', params: { listId: list.id } }">
+            <span>{{ list.name }}</span>
+          </RouterLink>
+        </li>
+      </ul>
+    </section>
+    <section aria-label="Create a list">
+      <h2>Create a list</h2>
+      <form @submit.prevent="onCreate">
+        <label>
+          List name
+          <input v-model="name" name="name" />
+        </label>
+        <button type="submit" :disabled="creating || !session.user">Create list</button>
+      </form>
+      <p v-if="error" class="error">{{ error }}</p>
+    </section>
+  </main>
 </template>
+
+<style scoped>
+ul > li {
+  padding-inline: var(--space-4);
+  border-bottom: 1px solid var(--color-rule);
+
+  &:last-child {
+    border-bottom: none;
+  }
+
+  /* The stripe: the List's marker pen, drawn down the edge of its row. */
+  &::before {
+    content: "";
+    width: 0.375rem;
+    height: 1.625rem;
+    border-radius: var(--radius-sm);
+    background-color: var(--list-accent);
+  }
+
+  a {
+    display: flex;
+    flex: 1;
+    align-items: center;
+    gap: var(--space-3);
+    min-height: 3.25rem;
+    font-weight: 600;
+    text-decoration: none;
+  }
+
+  a::after {
+    content: "›";
+    margin-inline-start: auto;
+    color: var(--color-ink-muted);
+    font-size: 1.25rem;
+    line-height: 1;
+  }
+}
+</style>

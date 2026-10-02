@@ -5,13 +5,12 @@ vi.mock(
   async () => await import("./mocks/auth-client").then((m) => m.makeAuthClientMock()),
 );
 
-import { mount, flushPromises } from "@vue/test-utils";
-import { createMemoryHistory } from "vue-router";
+import { flushPromises } from "@vue/test-utils";
 import type { List, PendingInvitation } from "@shopping-list/api/domain";
-import App from "../App.vue";
 import { db } from "../db";
-import { createAppRouter } from "../router";
-import { _resetSession, type SessionUser } from "../session";
+import { pendingInvitationCount } from "../pending-invitations";
+import type { SessionUser } from "../session";
+import { mountApp, resetStore, settle, stubApi } from "./support/app";
 
 const user: SessionUser = {
   id: "user-1",
@@ -19,41 +18,27 @@ const user: SessionUser = {
   email: "[EMAIL]",
 };
 
-function jsonResponse(body: unknown, status = 200): Response {
-  return new Response(JSON.stringify(body), {
-    status,
-    headers: { "Content-Type": "application/json" },
-  });
+interface SettingsStub {
+  /** The Admin role is what opens the Add-a-user section. */
+  role?: string;
+  invitations?: PendingInvitation[];
+  lists?: List[];
 }
 
-function stubSignedIn(role: string | undefined) {
-  const signedIn = { ...user, role };
-  vi.stubGlobal(
-    "fetch",
-    vi.fn<typeof fetch>(async (input: string | URL | Request, init?: RequestInit) => {
-      const url = typeof input === "string" ? input : String(input);
-      if (url === "/api/auth/get-session") {
-        return jsonResponse({ session: { token: "tok" }, user: signedIn });
-      }
-      if (url === "/api/lists" && !init?.method) {
-        return jsonResponse({ lists: [] });
-      }
-      if (url === "/api/invitations" && !init?.method) {
-        return jsonResponse({ invitations: [] });
-      }
-      throw new Error(`No stub for ${url}`);
-    }),
+/** The routes the screen reads on its own, over a signed-in session. */
+function stubSettingsApi(stub: SettingsStub = {}) {
+  stubApi(
+    {
+      "GET /api/lists": { lists: stub.lists ?? [] },
+      "GET /api/invitations": () => ({ invitations: stub.invitations ?? [] }),
+    },
+    { user: { ...user, role: stub.role } },
   );
 }
 
-function settle() {
-  return new Promise((resolve) => setTimeout(resolve, 25));
-}
-
 beforeEach(async () => {
-  await db.lists.clear();
-  await db.outbox.clear();
-  _resetSession();
+  await resetStore();
+  pendingInvitationCount.value = 0;
 });
 
 afterEach(() => {
@@ -63,40 +48,28 @@ afterEach(() => {
 describe("SettingsView", () => {
   it("shows the Add-a-user form to the Admin and posts it on submit", async () => {
     let created: { method?: string; body?: string } | null = null;
-    vi.stubGlobal(
-      "fetch",
-      vi.fn<typeof fetch>(async (input: string | URL | Request, init?: RequestInit) => {
-        const url = typeof input === "string" ? input : String(input);
-        if (url === "/api/auth/get-session") {
-          return jsonResponse({ session: { token: "tok" }, user: { ...user, role: "admin" } });
-        }
-        if (url === "/api/lists" && !init?.method) {
-          return jsonResponse({ lists: [] });
-        }
-        if (url === "/api/auth/admin/create-user") {
-          created = { method: init?.method, body: init?.body as string };
-          return jsonResponse({ user: { id: "user-2" } });
-        }
-        if (url === "/api/invitations" && !init?.method) {
-          return jsonResponse({ invitations: [] });
-        }
-        throw new Error(`No stub for ${url}`);
-      }),
+    stubApi(
+      {
+        "GET /api/lists": { lists: [] },
+        "GET /api/invitations": { invitations: [] },
+        "POST /api/auth/admin/create-user": (init) => {
+          created = { method: init?.method, body: String(init?.body) };
+          return { user: { id: "user-2" } };
+        },
+      },
+      { user: { ...user, role: "admin" } },
     );
-    const router = createAppRouter(createMemoryHistory());
-    await router.push("/settings");
-    await router.isReady();
 
-    const wrapper = mount(App, { global: { plugins: [router] } });
+    const { wrapper } = await mountApp("/settings");
     await flushPromises();
     await settle();
 
-    expect(wrapper.find("section.add-user").exists()).toBe(true);
+    expect(wrapper.find('section[aria-label="Add a user"]').exists()).toBe(true);
 
     await wrapper.find('input[name="add-user-name"]').setValue("Partner");
     await wrapper.find('input[name="add-user-email"]').setValue("partner@example.com");
     await wrapper.find('input[name="add-user-password"]').setValue("password-123");
-    await wrapper.find("form.add-user-form").trigger("submit");
+    await wrapper.find("form").trigger("submit");
     await flushPromises();
     await settle();
 
@@ -114,21 +87,18 @@ describe("SettingsView", () => {
   });
 
   it("lets a Member open Settings and hides the Add-a-user section", async () => {
-    stubSignedIn("user");
-    const router = createAppRouter(createMemoryHistory());
-    await router.push("/settings");
-    await router.isReady();
+    stubSettingsApi({ role: "user" });
 
-    const wrapper = mount(App, { global: { plugins: [router] } });
+    const { wrapper, router } = await mountApp("/settings");
     await flushPromises();
     await settle();
 
     expect(router.currentRoute.value.name).toBe("settings");
-    expect(wrapper.find("section.add-user").exists()).toBe(false);
-    expect(wrapper.find("section.invitations").exists()).toBe(false);
+    expect(wrapper.find('section[aria-label="Add a user"]').exists()).toBe(false);
+    expect(wrapper.find('section[aria-label="Invitations for you"]').exists()).toBe(false);
   });
 
-  it("shows the Lists the user joined and removes one they leave", async () => {
+  it("shows the Lists the user joined on the home; leaving lives in the List", async () => {
     const joinedList: List = {
       id: "list-2",
       ownerId: "user-2",
@@ -142,44 +112,18 @@ describe("SettingsView", () => {
       memberId: user.id,
       joinedAt: new Date().toISOString(),
     });
-    let leaveCalled = false;
-    vi.stubGlobal(
-      "fetch",
-      vi.fn<typeof fetch>(async (input: string | URL | Request, init?: RequestInit) => {
-        const url = typeof input === "string" ? input : String(input);
-        if (url === "/api/auth/get-session") {
-          return jsonResponse({ session: { token: "tok" }, user });
-        }
-        if (url === "/api/invitations" && !init?.method) {
-          return jsonResponse({ invitations: [] });
-        }
-        if (url === "/api/lists" && !init?.method) {
-          return jsonResponse({ lists: [joinedList] });
-        }
-        if (url === `/api/lists/${joinedList.id}/membership` && init?.method === "DELETE") {
-          leaveCalled = true;
-          return jsonResponse({ ok: true });
-        }
-        throw new Error(`No stub for ${url}`);
-      }),
-    );
-    const router = createAppRouter(createMemoryHistory());
-    await router.push("/settings");
-    await router.isReady();
+    stubSettingsApi({ lists: [joinedList] });
 
-    const wrapper = mount(App, { global: { plugins: [router] } });
+    const { wrapper, router } = await mountApp("/");
     await flushPromises();
     await settle();
 
+    // Joined Lists are Lists first: they belong on the home, not in Settings.
     expect(wrapper.text()).toContain("Holiday shop");
 
-    await wrapper.find('button[name="leave-list"]').trigger("click");
+    await router.push("/settings");
     await flushPromises();
-    await settle();
-
-    expect(leaveCalled).toBe(true);
-    expect(wrapper.text()).not.toContain("Holiday shop");
-    expect(await db.getList(joinedList.id)).toBeUndefined();
+    expect(wrapper.text()).not.toContain("Lists you joined");
   });
 
   it("lets the invitee accept a pending invitation and clears the inbox", async () => {
@@ -192,33 +136,21 @@ describe("SettingsView", () => {
       createdAt: new Date().toISOString(),
     };
     let pending: PendingInvitation[] = [invitation];
-    const apiCalls: string[] = [];
-    vi.stubGlobal(
-      "fetch",
-      vi.fn<typeof fetch>(async (input: string | URL | Request, init?: RequestInit) => {
-        const url = typeof input === "string" ? input : String(input);
-        apiCalls.push(`${init?.method ?? "GET"} ${url}`);
-        if (url === "/api/auth/get-session") {
-          return jsonResponse({ session: { token: "tok" }, user });
-        }
-        if (url === "/api/invitations" && !init?.method) {
-          return jsonResponse({ invitations: pending });
-        }
-        if (url === "/api/invitations/inv-1/accept") {
+    let accepted = false;
+    stubApi(
+      {
+        "GET /api/lists": { lists: [] },
+        "GET /api/invitations": () => ({ invitations: pending }),
+        "POST /api/invitations/inv-1/accept": () => {
+          accepted = true;
           pending = [];
-          return jsonResponse({ ok: true });
-        }
-        if (url === "/api/lists" && !init?.method) {
-          return jsonResponse({ lists: [] });
-        }
-        throw new Error(`No stub for ${url}`);
-      }),
+          return { ok: true };
+        },
+      },
+      { user },
     );
-    const router = createAppRouter(createMemoryHistory());
-    await router.push("/settings");
-    await router.isReady();
 
-    const wrapper = mount(App, { global: { plugins: [router] } });
+    const { wrapper } = await mountApp("/settings");
     await flushPromises();
     await settle();
 
@@ -226,14 +158,17 @@ describe("SettingsView", () => {
     expect(wrapper.text()).toContain("Ada invited you to Weekend shop");
     expect(wrapper.find('button[name="accept-invitation"]').exists()).toBe(true);
     expect(wrapper.find('button[name="decline-invitation"]').exists()).toBe(true);
+    // The Settings badge reads the same count as the inbox.
+    expect(pendingInvitationCount.value).toBe(1);
 
     // Accepting clears the inbox; Sync pulls the List in for the Lists home.
     await wrapper.find('button[name="accept-invitation"]').trigger("click");
     await flushPromises();
     await settle();
 
-    expect(apiCalls).toContain("POST /api/invitations/inv-1/accept");
+    expect(accepted).toBe(true);
     expect(wrapper.text()).not.toContain("Ada invited you");
+    expect(pendingInvitationCount.value).toBe(0);
   });
 
   it("lets the invitee decline a pending invitation", async () => {
@@ -245,34 +180,22 @@ describe("SettingsView", () => {
       invitedByName: "Ada",
       createdAt: new Date().toISOString(),
     };
-    const apiCalls: string[] = [];
-    let invitations: PendingInvitation[] = [invitation];
-    vi.stubGlobal(
-      "fetch",
-      vi.fn<typeof fetch>(async (input: string | URL | Request, init?: RequestInit) => {
-        const url = typeof input === "string" ? input : String(input);
-        apiCalls.push(`${init?.method ?? "GET"} ${url}`);
-        if (url === "/api/auth/get-session") {
-          return jsonResponse({ session: { token: "tok" }, user });
-        }
-        if (url === "/api/invitations" && !init?.method) {
-          return jsonResponse({ invitations });
-        }
-        if (url === "/api/invitations/inv-2/decline") {
-          invitations = [];
-          return jsonResponse({ ok: true });
-        }
-        if (url === "/api/lists" && !init?.method) {
-          return jsonResponse({ lists: [] });
-        }
-        throw new Error(`No stub for ${url}`);
-      }),
+    let pending: PendingInvitation[] = [invitation];
+    let declined = false;
+    stubApi(
+      {
+        "GET /api/lists": { lists: [] },
+        "GET /api/invitations": () => ({ invitations: pending }),
+        "POST /api/invitations/inv-2/decline": () => {
+          declined = true;
+          pending = [];
+          return { ok: true };
+        },
+      },
+      { user },
     );
-    const router = createAppRouter(createMemoryHistory());
-    await router.push("/settings");
-    await router.isReady();
 
-    const wrapper = mount(App, { global: { plugins: [router] } });
+    const { wrapper } = await mountApp("/settings");
     await flushPromises();
     await settle();
 
@@ -282,7 +205,7 @@ describe("SettingsView", () => {
     await flushPromises();
     await settle();
 
-    expect(apiCalls).toContain("POST /api/invitations/inv-2/decline");
+    expect(declined).toBe(true);
     expect(wrapper.text()).not.toContain("Ada invited you");
   });
 });

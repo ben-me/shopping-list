@@ -5,13 +5,11 @@ vi.mock(
   async () => await import("./mocks/auth-client").then((m) => m.makeAuthClientMock()),
 );
 
-import { mount, flushPromises } from "@vue/test-utils";
-import { createMemoryHistory } from "vue-router";
+import { flushPromises } from "@vue/test-utils";
 import type { List } from "@shopping-list/api/domain";
-import App from "../App.vue";
 import { db } from "../db";
-import { createAppRouter } from "../router";
-import { _resetSession, type SessionUser } from "../session";
+import type { SessionUser } from "../session";
+import { mountApp, resetStore, serverDown, settle, stubApi } from "./support/app";
 
 const user: SessionUser = {
   id: "user-1",
@@ -27,44 +25,8 @@ const list: List = {
   updatedAt: new Date().toISOString(),
 };
 
-function jsonResponse(body: unknown, status = 200): Response {
-  return new Response(JSON.stringify(body), {
-    status,
-    headers: { "Content-Type": "application/json" },
-  });
-}
-
-function stubRoutes(handler: (url: string, init?: RequestInit) => Response) {
-  const fetchImpl = vi.fn<typeof fetch>(
-    async (input: string | URL | Request, init?: RequestInit) => {
-      const url = typeof input === "string" ? input : String(input);
-      return handler(url, init);
-    },
-  );
-  vi.stubGlobal("fetch", fetchImpl);
-  return fetchImpl;
-}
-
-function stubSignedIn(handler?: (url: string, init?: RequestInit) => Response) {
-  return stubRoutes((url, init) => {
-    if (url === "/api/auth/get-session") {
-      return jsonResponse({ user });
-    }
-    if (handler) {
-      return handler(url, init);
-    }
-    throw new Error(`No stub for ${url}`);
-  });
-}
-
-function settle() {
-  return new Promise((resolve) => setTimeout(resolve, 25));
-}
-
 beforeEach(async () => {
-  await db.lists.clear();
-  await db.outbox.clear();
-  _resetSession();
+  await resetStore();
 });
 
 afterEach(() => {
@@ -74,12 +36,9 @@ afterEach(() => {
 describe("ListsView", () => {
   it("renders the signed-in user's lists from the local Store", async () => {
     await db.putList(list);
-    stubSignedIn();
-    const router = createAppRouter(createMemoryHistory());
-    await router.push("/");
-    await router.isReady();
+    stubApi({}, { user });
 
-    const wrapper = mount(App, { global: { plugins: [router] } });
+    const { wrapper } = await mountApp("/");
     await flushPromises();
 
     expect(wrapper.text()).toContain("Shopping Lists");
@@ -88,12 +47,9 @@ describe("ListsView", () => {
   });
 
   it("creates a List locally and shows it immediately, even when the server is unreachable", async () => {
-    stubSignedIn(() => new Response(null, { status: 503 }));
-    const router = createAppRouter(createMemoryHistory());
-    await router.push("/");
-    await router.isReady();
+    stubApi({}, { user, fallback: serverDown });
 
-    const wrapper = mount(App, { global: { plugins: [router] } });
+    const { wrapper } = await mountApp("/");
     await flushPromises();
     await wrapper.find('input[name="name"]').setValue("Weekend shop");
     await wrapper.find("form").trigger("submit");
@@ -107,23 +63,20 @@ describe("ListsView", () => {
 
   it("signs out and lands on the sign-in view", async () => {
     let signedOut = false;
-    stubRoutes((url) => {
-      // The router re-checks the session on every navigation, and sign-out
-      // invalidates the (stubbed) session cookie on the server.
-      if (url === "/api/auth/get-session") {
-        return jsonResponse(signedOut ? {} : { session: { token: "tok" }, user });
-      }
-      if (url === "/api/auth/sign-out") {
-        signedOut = true;
-        return jsonResponse({ success: true });
-      }
-      throw new Error(`No stub for ${url}`);
-    });
-    const router = createAppRouter(createMemoryHistory());
-    await router.push("/");
-    await router.isReady();
+    stubApi(
+      {
+        // The router re-checks the session on every navigation, and sign-out
+        // invalidates the (stubbed) session cookie on the server.
+        "GET /api/auth/get-session": () => (signedOut ? {} : { user }),
+        "POST /api/auth/sign-out": () => {
+          signedOut = true;
+          return { success: true };
+        },
+      },
+      { user },
+    );
 
-    const wrapper = mount(App, { global: { plugins: [router] } });
+    const { wrapper, router } = await mountApp("/");
     await flushPromises();
     const signOutButton = wrapper.findAll("button").find((b) => b.text() === "Sign out");
     expect(signOutButton).toBeDefined();
@@ -132,5 +85,24 @@ describe("ListsView", () => {
     await settle(); // the Store wipe in the sign-out path settles a tick later
     expect(router.currentRoute.value.name).toBe("sign-in");
     expect(wrapper.text()).toContain("Sign in");
+  });
+});
+
+describe("switching between Lists", () => {
+  it("paints the second List's chrome, not the first one's", async () => {
+    const other: List = { ...list, id: "list-2", name: "Hardware store" };
+    await db.putList(list);
+    await db.putList(other);
+    stubApi({}, { user, fallback: serverDown });
+
+    const { wrapper, router } = await mountApp(`/list/${list.id}`);
+    await flushPromises();
+    expect(wrapper.find("h1").text()).toBe("Household");
+
+    // The layout route record is reused: only its params change.
+    await router.push(`/list/${other.id}`);
+    await flushPromises();
+
+    expect(wrapper.find("h1").text()).toBe("Hardware store");
   });
 });

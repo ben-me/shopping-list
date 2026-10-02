@@ -5,12 +5,9 @@ vi.mock(
   async () => await import("./mocks/auth-client").then((m) => m.makeAuthClientMock()),
 );
 
-import { mount, flushPromises } from "@vue/test-utils";
-import { createMemoryHistory } from "vue-router";
-import App from "../App.vue";
-import { db } from "../db";
-import { createAppRouter } from "../router";
-import { _resetSession, type SessionUser } from "../session";
+import { flushPromises } from "@vue/test-utils";
+import type { SessionUser } from "../session";
+import { jsonResponse, mountApp, resetStore, stubApi } from "./support/app";
 
 const user: SessionUser = {
   id: "user-1",
@@ -18,28 +15,8 @@ const user: SessionUser = {
   email: "[EMAIL]",
 };
 
-function jsonResponse(body: unknown, status = 200): Response {
-  return new Response(JSON.stringify(body), {
-    status,
-    headers: { "Content-Type": "application/json" },
-  });
-}
-
-function stubApi(routes: Record<string, () => Response>) {
-  const fetchImpl = vi.fn<typeof fetch>(async (input) => {
-    const url = typeof input === "string" ? input : String(input);
-    const make = routes[url];
-    if (!make) throw new Error(`No stub for ${url}`);
-    return make();
-  });
-  vi.stubGlobal("fetch", fetchImpl);
-  return fetchImpl;
-}
-
 beforeEach(async () => {
-  await db.lists.clear();
-  await db.outbox.clear();
-  _resetSession();
+  await resetStore();
 });
 
 afterEach(() => {
@@ -52,19 +29,15 @@ describe("SignInView", () => {
     stubApi({
       // The router re-checks the session on every navigation: before sign-in
       // there is no session, after it the (stubbed) cookie session exists.
-      "/api/auth/get-session": () =>
-        jsonResponse(signedIn ? { session: { token: "tok" }, user } : {}),
+      "/api/auth/get-session": () => (signedIn ? { user } : {}),
       "/api/auth/sign-in/email": () => {
         signedIn = true;
-        return jsonResponse({ token: "tok", user });
+        return { token: "tok", user };
       },
-      "/api/signup-status": () => jsonResponse({ signUpOpen: false }),
+      "/api/signup-status": () => ({ signUpOpen: false }),
     });
-    const router = createAppRouter(createMemoryHistory());
-    await router.push("/sign-in");
-    await router.isReady();
 
-    const wrapper = mount(App, { global: { plugins: [router] } });
+    const { wrapper, router } = await mountApp("/sign-in");
     await wrapper.find('input[name="email"]').setValue("[EMAIL]");
     await wrapper.find('input[name="password"]').setValue("password123");
     await wrapper.find("form").trigger("submit");
@@ -73,19 +46,16 @@ describe("SignInView", () => {
     expect(router.currentRoute.value.name).toBe("lists");
     expect(wrapper.text()).toContain("Shopping Lists");
     expect(wrapper.text()).toContain("Signed in as Test User");
-    expect(wrapper.text()).toContain("Your lists will appear here.");
+    expect(wrapper.text()).toContain("No lists yet. Create the first one below.");
   });
 
   it("does not offer sign-up once the bootstrap Admin exists", async () => {
     stubApi({
-      "/api/auth/get-session": () => jsonResponse({}),
-      "/api/signup-status": () => jsonResponse({ signUpOpen: false }),
+      "/api/auth/get-session": () => ({}),
+      "/api/signup-status": () => ({ signUpOpen: false }),
     });
-    const router = createAppRouter(createMemoryHistory());
-    await router.push("/sign-in");
-    await router.isReady();
 
-    const wrapper = mount(App, { global: { plugins: [router] } });
+    const { wrapper } = await mountApp("/sign-in");
     await flushPromises();
 
     expect(wrapper.text()).not.toContain("Create an account");
@@ -93,14 +63,11 @@ describe("SignInView", () => {
 
   it("offers sign-up only while the database is empty (bootstrap)", async () => {
     stubApi({
-      "/api/auth/get-session": () => jsonResponse({}),
-      "/api/signup-status": () => jsonResponse({ signUpOpen: true }),
+      "/api/auth/get-session": () => ({}),
+      "/api/signup-status": () => ({ signUpOpen: true }),
     });
-    const router = createAppRouter(createMemoryHistory());
-    await router.push("/sign-in");
-    await router.isReady();
 
-    const wrapper = mount(App, { global: { plugins: [router] } });
+    const { wrapper } = await mountApp("/sign-in");
     await flushPromises();
 
     expect(wrapper.text()).toContain("Create an account");
@@ -109,19 +76,15 @@ describe("SignInView", () => {
   it("signs a new user up (bootstrap) and lands on the lists index", async () => {
     let signedIn = false;
     stubApi({
-      "/api/auth/get-session": () =>
-        jsonResponse(signedIn ? { session: { token: "tok" }, user } : {}),
+      "/api/auth/get-session": () => (signedIn ? { user } : {}),
       "/api/auth/sign-up/email": () => {
         signedIn = true;
-        return jsonResponse({ token: "tok", user });
+        return { token: "tok", user };
       },
-      "/api/signup-status": () => jsonResponse({ signUpOpen: true }),
+      "/api/signup-status": () => ({ signUpOpen: true }),
     });
-    const router = createAppRouter(createMemoryHistory());
-    await router.push("/sign-in");
-    await router.isReady();
 
-    const wrapper = mount(App, { global: { plugins: [router] } });
+    const { wrapper, router } = await mountApp("/sign-in");
     await flushPromises();
     await wrapper.find("button[type=button]").trigger("click");
     await wrapper.find('input[name="name"]').setValue("Test User");
@@ -136,14 +99,11 @@ describe("SignInView", () => {
 
   it("shows a form error the user can act on", async () => {
     stubApi({
-      "/api/auth/get-session": () => jsonResponse({}),
+      "/api/auth/get-session": () => ({}),
       "/api/auth/sign-in/email": () => jsonResponse({ message: "Invalid email or password" }, 401),
     });
-    const router = createAppRouter(createMemoryHistory());
-    await router.push("/sign-in");
-    await router.isReady();
 
-    const wrapper = mount(App, { global: { plugins: [router] } });
+    const { wrapper, router } = await mountApp("/sign-in");
     await wrapper.find('input[name="email"]').setValue("[EMAIL]");
     await wrapper.find('input[name="password"]').setValue("wrong");
     await wrapper.find("form").trigger("submit");

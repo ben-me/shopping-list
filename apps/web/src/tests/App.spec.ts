@@ -5,49 +5,35 @@ vi.mock(
   async () => await import("./mocks/auth-client").then((m) => m.makeAuthClientMock()),
 );
 
-import { mount, flushPromises } from "@vue/test-utils";
-import { createMemoryHistory } from "vue-router";
-import App from "../App.vue";
+import { flushPromises } from "@vue/test-utils";
 import { db } from "../db";
-import { createAppRouter } from "../router";
-import { _resetSession, type SessionUser } from "../session";
+import type { SessionUser } from "../session";
+import { mountApp, resetStore, serverDown, stubApi } from "./support/app";
+
 const user: SessionUser = {
   id: "user-1",
   name: "Test User",
   email: "[EMAIL]",
 };
 
-function jsonResponse(body: unknown): Response {
-  return new Response(JSON.stringify(body), {
-    status: 200,
-    headers: { "Content-Type": "application/json" },
-  });
-}
-
+/** A signed-in session; the Lists index itself is out of reach in these tests. */
 function stubSignedInSession() {
-  vi.stubGlobal(
-    "fetch",
-    vi.fn<typeof fetch>(async () => jsonResponse({ user })),
-  );
+  stubApi({}, { user, fallback: serverDown });
 }
 
 afterEach(() => {
   vi.unstubAllGlobals();
-  _resetSession();
 });
 
 beforeEach(async () => {
-  await db.lists.clear();
-  await db.outbox.clear();
+  await resetStore();
 });
 
 describe("App", () => {
   it("redirects an unauthenticated visit to the sign-in view", async () => {
-    const router = createAppRouter(createMemoryHistory());
-    await router.push("/");
-    await router.isReady();
+    stubApi();
 
-    const wrapper = mount(App, { global: { plugins: [router] } });
+    const { wrapper } = await mountApp("/");
     await flushPromises();
 
     expect(wrapper.text()).toContain("Sign in");
@@ -56,11 +42,8 @@ describe("App", () => {
 
   it("renders the lists index for a signed-in session", async () => {
     stubSignedInSession();
-    const router = createAppRouter(createMemoryHistory());
-    await router.push("/");
-    await router.isReady();
 
-    const wrapper = mount(App, { global: { plugins: [router] } });
+    const { wrapper } = await mountApp("/");
     await flushPromises();
 
     expect(wrapper.text()).toContain("Shopping Lists");
@@ -76,24 +59,18 @@ describe("App", () => {
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
     });
-    const router = createAppRouter(createMemoryHistory());
-    await router.push("/list/list-1");
-    await router.isReady();
 
-    const wrapper = mount(App, { global: { plugins: [router] } });
+    const { wrapper } = await mountApp("/list/list-1");
     await flushPromises();
 
     expect(wrapper.text()).toContain("Household");
-    expect(wrapper.text()).toContain("Nothing on this list yet.");
+    expect(wrapper.text()).toContain("Nothing here yet.");
   });
 
   it("shows the offline banner while the device has no connection", async () => {
     stubSignedInSession();
-    const router = createAppRouter(createMemoryHistory());
-    await router.push("/");
-    await router.isReady();
 
-    const wrapper = mount(App, { global: { plugins: [router] } });
+    const { wrapper } = await mountApp("/");
     await flushPromises();
     const offlineBanner = () => wrapper.find('[role="status"]');
     expect(offlineBanner().exists()).toBe(false);
