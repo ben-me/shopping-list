@@ -234,12 +234,6 @@ textarea:focus {
   list-style: none;
 }
 
-/* Rows lined up as a row: the only thing every list of them agrees on. The
-   padding and the hairline between rows are not shared — each ledger that
-   wants them sets them on its own `li`, which it renders itself.
-
-   Written through `:where()` so the base carries no specificity of its own and
-   a list can raise its own values on its own rows without a fight. */
 :where(.rows) > li {
   display: flex;
   align-items: center;
