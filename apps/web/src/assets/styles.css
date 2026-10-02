@@ -74,7 +74,6 @@
 
 body {
   font-family:
-    "Archivo Variable",
     system-ui,
     -apple-system,
     "Segoe UI",
@@ -83,17 +82,8 @@ body {
     sans-serif;
   font-size: var(--fs-body);
   color: var(--color-ink);
-
   /* The sheet reaches the screen edges; only its type stops at `--sheet-width`. */
   background-color: var(--color-paper);
-}
-
-h1,
-h2,
-h3 {
-  font-weight: 700;
-  line-height: 1.15;
-  letter-spacing: -0.005em;
 }
 
 h1 {
@@ -105,11 +95,6 @@ h2 {
 }
 
 h3 {
-  font-size: var(--fs-h3);
-}
-
-/* A section heading sits below the page title in the app bar. */
-.page h2 {
   font-size: var(--fs-h3);
 }
 
@@ -140,16 +125,11 @@ a {
 }
 
 button {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
   min-height: var(--control-size);
   padding-inline: var(--space-3);
-  border: 1px solid var(--color-rule);
+  border: none;
   border-radius: var(--radius);
-  background-color: var(--color-paper);
-  color: var(--color-ink);
-  font-weight: 600;
+  font-weight: 400;
   cursor: pointer;
 }
 
@@ -158,30 +138,18 @@ button:disabled {
   cursor: not-allowed;
 }
 
-button:hover:not(:disabled) {
-  border-color: var(--color-ink-muted);
-}
-
 button[type="submit"] {
-  border-color: var(--color-ink);
   background-color: var(--color-ink);
   color: var(--color-paper);
-}
-
-button[type="submit"]:hover:not(:disabled) {
-  background-color: var(--color-ink-hover);
 }
 
 input:not([type="checkbox"], [type="radio"]),
 select,
 textarea {
-  min-width: 0;
   min-height: var(--control-size);
   padding-inline: var(--space-3);
   border: 1px solid var(--color-rule);
   border-radius: var(--radius);
-  background-color: var(--color-paper);
-  color: var(--color-ink);
 }
 
 form {
@@ -193,8 +161,7 @@ form label {
   display: grid;
   gap: var(--space-1);
   color: var(--color-ink-muted);
-  font-size: var(--fs-small);
-  font-weight: 600;
+  font-weight: 400;
 }
 
 /* Focus stays in ink; the pen is never the thing a key press hunts for. */
@@ -213,18 +180,10 @@ textarea:focus {
   background-color: var(--color-paper);
 }
 
-.page > * + * {
-  border-top: 1px solid var(--color-rule);
-}
-
 .page > section {
   display: grid;
   gap: var(--space-3);
   align-content: start;
-  padding: var(--space-4);
-}
-
-.page > p {
   padding: var(--space-4);
 }
 
