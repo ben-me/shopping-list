@@ -4,6 +4,17 @@ import now from "./utils/now";
 
 export type OutboxTarget = "list" | "item" | "payment";
 
+/**
+ * A Member's display name, as the last Sync pulled it. Keyed by Member id, not
+ * by List: one name serves every List the Member belongs to, and the Owner's
+ * name lives here too — they hold no Membership row, so nothing else on the
+ * device would carry it.
+ */
+export interface MemberName {
+  memberId: string;
+  name: string;
+}
+
 export type OutboxOperation = "update" | "delete";
 
 export interface OutboxEntry {
@@ -37,6 +48,7 @@ export class ShoppingDb extends Dexie {
   items!: Table<Item, string>;
   payments!: Table<Payment, string>;
   memberships!: Table<Membership, string>;
+  memberNames!: Table<MemberName, string>;
   outbox!: Table<OutboxEntry, number>;
 
   constructor(name = "shopping-list") {
@@ -48,6 +60,9 @@ export class ShoppingDb extends Dexie {
       memberships: "[listId+memberId], listId, memberId, joinedAt",
       outbox: "++id, syncedAt, targetType, targetId",
     });
+    // Names came with Memberships, so a device already holding a v1 Store adds
+    // the table empty and fills it on its next Sync.
+    this.version(2).stores({ memberNames: "memberId" });
   }
 
   getLists(): Promise<List[]> {
@@ -229,6 +244,18 @@ export class ShoppingDb extends Dexie {
     await this.memberships.put(membership);
   }
 
+  /** A server's names for the Members of a List; last write wins, so they refresh. */
+  async putMemberNames(names: MemberName[]): Promise<void> {
+    await this.memberNames.bulkPut(names);
+  }
+
+  /** Every name the device holds, keyed by Member id, for the screens that label by name. */
+  async getMemberNames(): Promise<Record<string, string>> {
+    return Object.fromEntries(
+      (await this.memberNames.toArray()).map((row) => [row.memberId, row.name]),
+    );
+  }
+
   /** The one write that skips the outbox: Memberships only change server-side. */
   async replaceMemberships(listId: string, memberships: Membership[]): Promise<void> {
     await this.transaction("rw", this.memberships, async () => {
@@ -289,11 +316,16 @@ export class ShoppingDb extends Dexie {
       this.items.clear(),
       this.payments.clear(),
       this.memberships.clear(),
+      this.memberNames.clear(),
       this.outbox.clear(),
     ]);
   }
 
-  /** Drop a List and everything that belongs to it, queued writes included. */
+  /**
+   * Drop a List and everything that belongs to it, queued writes included. The
+   * Member names stay: they belong to the Members, who keep them on every
+   * other List this device holds.
+   */
   async removeList(listId: string): Promise<void> {
     const outboxIds = (
       await this.outbox

@@ -1,7 +1,7 @@
 import "fake-indexeddb/auto";
 
 import type { List } from "@shopping-list/api/domain";
-import { leaveList, listMembers, memberIdsOf, syncMembershipsFromServer } from "../members";
+import { localMembers, leaveList, memberIdsOf, syncMembershipsFromServer } from "../members";
 import { ShoppingDb } from "../store";
 import now from "@/utils/now";
 
@@ -76,6 +76,14 @@ describe("syncMembershipsFromServer", () => {
 
     expect(await memberIdsOf(db, list)).toEqual(["user-1", "user-2", "user-3"]);
 
+    // The names land in the Store as well, the Owner's included: they are what
+    // both name-labelling screens read once the device goes offline.
+    expect(await db.getMemberNames()).toEqual({
+      "user-1": "Test User",
+      "user-2": "Two",
+      "user-3": "Three",
+    });
+
     // The server dropping a Member removes their local Membership row; the
     // Owner's pseudo-row is never stored.
     vi.stubGlobal(
@@ -106,27 +114,22 @@ describe("syncMembershipsFromServer", () => {
   });
 });
 
-describe("listMembers", () => {
-  it("returns everyone with access, Owner first, with names", async () => {
-    const members = [
-      { memberId: list.ownerId, name: "Test User", joinedAt: list.createdAt },
+describe("localMembers", () => {
+  it("names the Owner and the Members from the synced names, in Split order", async () => {
+    await joined("user-2", "2026-01-01T00:00:00.000Z");
+    await joined("user-3", "2026-01-02T00:00:00.000Z");
+    // The Owner first (they hold no Membership row), and user-3 never synced
+    // a name: it reads neutrally rather than as a raw id.
+    await db.putMemberNames([
+      { memberId: "user-1", name: "Test User" },
+      { memberId: "user-2", name: "Two" },
+    ]);
+
+    expect(await localMembers(db, list)).toEqual([
+      { memberId: "user-1", name: "Test User", joinedAt: list.createdAt },
       { memberId: "user-2", name: "Two", joinedAt: "2026-01-01T00:00:00.000Z" },
-    ];
-    vi.stubGlobal(
-      "fetch",
-      vi.fn(async () => jsonResponse({ members })),
-    );
-
-    await expect(listMembers(list.id)).resolves.toEqual(members);
-  });
-
-  it("defaults to an empty list when the payload is missing", async () => {
-    vi.stubGlobal(
-      "fetch",
-      vi.fn(async () => jsonResponse({})),
-    );
-
-    await expect(listMembers(list.id)).resolves.toEqual([]);
+      { memberId: "user-3", name: "Member", joinedAt: "2026-01-02T00:00:00.000Z" },
+    ]);
   });
 });
 
