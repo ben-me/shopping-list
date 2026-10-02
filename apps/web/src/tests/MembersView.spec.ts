@@ -9,7 +9,7 @@ import { flushPromises } from "@vue/test-utils";
 import type { List, ListInvitation, MemberDetails } from "@shopping-list/api/domain";
 import { db } from "../db";
 import type { SessionUser } from "../session";
-import { jsonResponse, mountApp, resetStore, settle, stubApi } from "./support/app";
+import { jsonResponse, mountApp, resetStore, serverDown, settle, stubApi } from "./support/app";
 
 const user: SessionUser = { id: "user-1", name: "Test User", email: "[EMAIL]" };
 
@@ -87,6 +87,37 @@ describe("MembersView", () => {
 
     expect(wrapper.text()).toContain("Test User (you)");
     expect(wrapper.text()).toContain("Ada");
+  });
+
+  it("shows the names and the standing offline, from the local Store", async () => {
+    memberStub();
+    await db.syncMembership({
+      listId: list.id,
+      memberId: "user-2",
+      joinedAt: "2026-01-02T00:00:00.000Z",
+    });
+    await db.putPayment({
+      id: "pay-1",
+      listId: list.id,
+      memberId: user.id,
+      amountInCents: 300,
+      paidAt: "2026-01-01T10:00:00.000Z",
+      createdAt: "2026-01-01T09:00:00.000Z",
+      updatedAt: "2026-01-01T09:00:00.000Z",
+    });
+    await db.putMemberNames([
+      { memberId: user.id, name: "Test User" },
+      { memberId: "user-2", name: "Ada" },
+    ]);
+    // Whatever the last sync stored is all there is.
+    stubApi({}, { user, fallback: serverDown });
+
+    const wrapper = await mountMembers();
+    await settle();
+
+    const rows = wrapper.findAll("ul.rows > li");
+    expect(rows.map((row) => row.find(".member-name").text())).toEqual(["Test User (you)", "Ada"]);
+    expect(rows[1]!.text()).toContain("owes 1,50");
   });
 
   it("lets the Owner invite by email and revoke a pending invitation", async () => {

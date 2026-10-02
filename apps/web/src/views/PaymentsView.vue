@@ -7,10 +7,9 @@ import PaymentRow from "../components/PaymentRow.vue";
 import { runSyncPass, useSyncPass } from "../connectivity";
 import { db } from "../db";
 import { syncOutbox } from "../lists";
-import { memberIdsOf, syncMembershipsFromServer } from "../members";
+import { memberIdsOf, syncMembershipsFromServer, UNKNOWN_MEMBER_NAME } from "../members";
 import { addPayment, removePayment, syncPaymentsFromServer, updatePayment } from "../payments";
 import { session } from "../session";
-import type { ShoppingDb } from "../store";
 import { computeOwed } from "../utils/computeOwed";
 import { ignoreRejection, logRejection } from "../utils/fireAndForget";
 import { formatEuro } from "../utils/formatEuro";
@@ -39,7 +38,7 @@ const memberLabel = (memberId: string) => {
   if (memberId === session.user?.id) {
     return "You";
   }
-  return memberNames.value[memberId] ?? "Member";
+  return memberNames.value[memberId] ?? UNKNOWN_MEMBER_NAME;
 };
 
 const userPaymentStatus = {
@@ -56,17 +55,13 @@ const myStanding = computed(() => {
 });
 
 async function loadMembers() {
-  const list = await db.getList(listId.value);
+  const [list, names] = await Promise.all([db.getList(listId.value), db.getMemberNames()]);
   members.value = list ? await memberIdsOf(db, list) : [];
+  memberNames.value = names;
 }
 
 async function loadPayments() {
   payments.value = (await db.getPayments(listId.value)).slice().reverse();
-}
-
-async function syncMembers(store: ShoppingDb) {
-  const details = await syncMembershipsFromServer(store, listId.value);
-  memberNames.value = Object.fromEntries(details.map((member) => [member.memberId, member.name]));
 }
 
 async function onRecordPayment() {
@@ -110,8 +105,8 @@ async function onDeletePayment(payment: Payment) {
 
 useSyncPass(async (db) => {
   await ignoreRejection(syncPaymentsFromServer(db, listId.value));
-  // An accepted Invitation redivides the standing, so re-pull the Members.
-  await ignoreRejection(syncMembers(db));
+  // A new Member redivides the standing, and brings their name with it.
+  await ignoreRejection(syncMembershipsFromServer(db, listId.value));
   await logRejection(loadMembers(), "Loading the members");
   await logRejection(loadPayments(), "Loading the payments");
 });

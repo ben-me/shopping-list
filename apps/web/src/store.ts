@@ -4,6 +4,12 @@ import now from "./utils/now";
 
 export type OutboxTarget = "list" | "item" | "payment";
 
+/** A Member's display name, keyed by Member id — the Owner's lives here too. */
+export interface MemberName {
+  memberId: string;
+  name: string;
+}
+
 export type OutboxOperation = "update" | "delete";
 
 export interface OutboxEntry {
@@ -37,6 +43,7 @@ export class ShoppingDb extends Dexie {
   items!: Table<Item, string>;
   payments!: Table<Payment, string>;
   memberships!: Table<Membership, string>;
+  memberNames!: Table<MemberName, string>;
   outbox!: Table<OutboxEntry, number>;
 
   constructor(name = "shopping-list") {
@@ -48,6 +55,8 @@ export class ShoppingDb extends Dexie {
       memberships: "[listId+memberId], listId, memberId, joinedAt",
       outbox: "++id, syncedAt, targetType, targetId",
     });
+    // A v1 Store gains the table empty and fills it on its next Sync.
+    this.version(2).stores({ memberNames: "memberId" });
   }
 
   getLists(): Promise<List[]> {
@@ -229,6 +238,18 @@ export class ShoppingDb extends Dexie {
     await this.memberships.put(membership);
   }
 
+  /** Last write wins, so a Sync pass refreshes names. */
+  async putMemberNames(names: MemberName[]): Promise<void> {
+    await this.memberNames.bulkPut(names);
+  }
+
+  /** Every name the device holds, keyed by Member id. */
+  async getMemberNames(): Promise<Record<string, string>> {
+    return Object.fromEntries(
+      (await this.memberNames.toArray()).map((row) => [row.memberId, row.name]),
+    );
+  }
+
   /** The one write that skips the outbox: Memberships only change server-side. */
   async replaceMemberships(listId: string, memberships: Membership[]): Promise<void> {
     await this.transaction("rw", this.memberships, async () => {
@@ -289,11 +310,15 @@ export class ShoppingDb extends Dexie {
       this.items.clear(),
       this.payments.clear(),
       this.memberships.clear(),
+      this.memberNames.clear(),
       this.outbox.clear(),
     ]);
   }
 
-  /** Drop a List and everything that belongs to it, queued writes included. */
+  /**
+   * Drop a List and everything that belongs to it, queued writes included.
+   * Member names stay: they belong to the Member, not the List.
+   */
   async removeList(listId: string): Promise<void> {
     const outboxIds = (
       await this.outbox

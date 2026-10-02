@@ -262,6 +262,32 @@ describe("PaymentsView", () => {
     expect(rowByAmount("7,00").text()).not.toContain("user-2");
   });
 
+  it("still names the rows after a reload with the server out of reach", async () => {
+    stubNamedMembers();
+    await db.putPayment({
+      id: "pay-2",
+      listId: list.id,
+      memberId: "user-2",
+      amountInCents: 700,
+      paidAt: "2026-02-02T10:00:00.000Z",
+      createdAt: "2026-02-02T09:00:00.000Z",
+      updatedAt: "2026-02-02T09:00:00.000Z",
+    });
+    await mountPayments();
+    await flushPromises();
+    await runSyncPass(db);
+    await flushPromises();
+
+    // The names the pass stored are all there is offline.
+    stubOfflineServer();
+    const reloaded = await mountPayments();
+    await flushPromises();
+    await settle();
+
+    expect(reloaded.findAll("ul li")[0]!.text()).toContain("Two");
+    expect(reloaded.text()).not.toContain("user-2");
+  });
+
   it("keeps your own net in the foot of the screen, under the running total", async () => {
     stubNamedMembers();
     await db.syncMembership({

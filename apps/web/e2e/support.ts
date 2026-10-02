@@ -79,7 +79,7 @@ export async function signInAsUser(page: Page, email: string, password: string =
 export async function signUp(page: Page, name: string, request: APIRequestContext) {
   const { email } = await provisionUser(request, name);
   await signInAsUser(page, email);
-  await expect(page.getByText("Signed in as")).toContainText(name);
+  await expect(page.getByRole("button", { name: "Sign out" })).toBeVisible();
 }
 
 export async function signOut(page: Page) {

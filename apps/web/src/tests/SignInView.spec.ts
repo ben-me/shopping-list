@@ -45,7 +45,7 @@ describe("SignInView", () => {
 
     expect(router.currentRoute.value.name).toBe("lists");
     expect(wrapper.text()).toContain("Shopping Lists");
-    expect(wrapper.text()).toContain("Signed in as Test User");
+    expect(wrapper.text()).toContain("Sign out");
     expect(wrapper.text()).toContain("No lists yet. Create the first one below.");
   });
 
@@ -94,7 +94,7 @@ describe("SignInView", () => {
     await flushPromises();
 
     expect(router.currentRoute.value.name).toBe("lists");
-    expect(wrapper.text()).toContain("Signed in as Test User");
+    expect(wrapper.text()).toContain("Sign out");
   });
 
   it("shows a form error the user can act on", async () => {

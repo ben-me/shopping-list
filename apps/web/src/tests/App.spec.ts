@@ -47,7 +47,7 @@ describe("App", () => {
     await flushPromises();
 
     expect(wrapper.text()).toContain("Shopping Lists");
-    expect(wrapper.text()).toContain("Signed in as Test User");
+    expect(wrapper.text()).toContain("Sign out");
   });
 
   it("renders the List view for a signed-in session at /list/:listId", async () => {

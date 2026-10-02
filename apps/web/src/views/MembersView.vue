@@ -7,7 +7,7 @@ import InvitationsPanel from "../components/InvitationsPanel.vue";
 import { useSyncPass } from "../connectivity";
 import { db } from "../db";
 import { createInvitation, listInvitations, revokeInvitation } from "../invitations";
-import { leaveList, listMembers } from "../members";
+import { leaveList, localMembers, syncMembershipsFromServer } from "../members";
 import { session } from "../session";
 import { computeOwed } from "../utils/computeOwed";
 import { ignoreRejection, logRejection } from "../utils/fireAndForget";
@@ -80,8 +80,14 @@ const isOwner = () => members.value[0]?.memberId === session.user?.id;
 /** The Owner panel and the leave action are opposites: exactly one of them shows. */
 const showInvitations = computed(() => loaded.value && isOwner());
 
+/** The server's Members while online; the Store's when the pull throws. */
 async function loadMembers() {
-  members.value = await listMembers(listId.value);
+  try {
+    members.value = await syncMembershipsFromServer(db, listId.value);
+  } catch {
+    const list = await db.getList(listId.value);
+    members.value = list ? await localMembers(db, list) : [];
+  }
 }
 
 async function loadInvitations() {
