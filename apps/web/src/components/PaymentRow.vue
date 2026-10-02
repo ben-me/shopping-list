@@ -1,8 +1,8 @@
 <script setup lang="ts">
 import { ref } from "vue";
 import type { Payment } from "@shopping-list/api/domain";
-import pencilIcon from "@/assets/icones-bags-svg/pencil.svg?raw";
-import trashIcon from "@/assets/icones-bags-svg/trash.svg?raw";
+import pencilIcon from "@/assets/svg/pencil.svg?raw";
+import trashIcon from "@/assets/svg/trash.svg?raw";
 import { formatEuro } from "../utils/formatEuro";
 import { submit } from "../utils/submit";
 
