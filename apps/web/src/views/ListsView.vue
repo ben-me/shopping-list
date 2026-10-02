@@ -67,7 +67,6 @@ onUnmounted(() => {
         <li v-for="list in lists" :key="list.id" :style="penStyle(list)">
           <RouterLink :to="{ name: 'list', params: { listId: list.id } }">
             <span>{{ list.name }}</span>
-            <span aria-hidden="true">›</span>
           </RouterLink>
         </li>
       </ul>
@@ -88,7 +87,14 @@ onUnmounted(() => {
 
 <style scoped>
 ul > li {
-  padding-block: 0;
+  /* A ruled ledger row: only the stripe and the link, inset from the sheet edge.
+     The link carries the row's height and its own breathing room. */
+  padding-inline: var(--space-4);
+  border-bottom: 1px solid var(--color-rule);
+
+  &:last-child {
+    border-bottom: none;
+  }
 
   /* The stripe: the List's marker pen, drawn down the edge of its row. */
   &::before {
@@ -109,8 +115,9 @@ ul > li {
     text-decoration: none;
   }
 
-  /* The chevron, decorative only. */
-  a span[aria-hidden="true"] {
+  /* The chevron, decorative only: drawn at the far end of the link. */
+  a::after {
+    content: "›";
     margin-inline-start: auto;
     color: var(--color-ink-muted);
     font-size: 1.25rem;

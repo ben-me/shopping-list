@@ -124,12 +124,13 @@ form {
   }
 }
 
-/* The card stands in for the sheet's hairline; the row gives back its gutters. */
+/* The card stands in for the sheet's hairline: this is a message on a thread,
+   not a ruled ledger line, so the row owns nothing but its own gutters. */
 li {
+  display: flex;
+  align-items: center;
   gap: var(--space-2);
-  padding-block: var(--space-1);
-  padding-inline: var(--space-3);
-  border-bottom: none;
+  padding: var(--space-1) var(--space-3);
 
   /* The card's own lines, inside the bubble already set above. */
   > div {
@@ -172,7 +173,6 @@ li {
   }
 
   > button:hover:not(:disabled) {
-    background: none;
     color: var(--color-ink);
   }
 

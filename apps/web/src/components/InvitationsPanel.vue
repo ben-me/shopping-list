@@ -30,7 +30,7 @@ const statusLabel = (status: ListInvitation["status"]) =>
   <section>
     <h2>Invitations</h2>
     <p v-if="invitations.length === 0" class="empty">Nobody invited yet.</p>
-    <ul v-else>
+    <ul v-else class="rows">
       <li v-for="invitation in openInvitations" :key="invitation.id">
         <span>{{ invitation.email }}</span>
         <span class="invitation-status">({{ statusLabel(invitation.status) }})</span>
@@ -61,13 +61,12 @@ const statusLabel = (status: ListInvitation["status"]) =>
 </template>
 
 <style scoped>
-/* One row each, revoke on the right edge. */
+/* One row each, revoke on the right edge. The shared base lines the row up;
+   this list is tighter than a ledger's and rules nothing off between rows. */
 ul {
   li {
-    display: flex;
-    align-items: center;
     gap: var(--space-2);
-    padding-block: var(--space-1);
+    padding: var(--space-1) var(--space-4);
     overflow-wrap: anywhere;
   }
 

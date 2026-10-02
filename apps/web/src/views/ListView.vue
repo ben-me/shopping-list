@@ -96,7 +96,6 @@ onMounted(() => {
             :checked="item.checked"
             @change="onToggle(item, $event)"
           />
-          <span aria-hidden="true"></span>
           <span>{{ item.name }}</span>
         </label>
         <button type="button" :aria-label="`Remove ${item.name}`" @click="onRemove(item)">×</button>
@@ -111,11 +110,17 @@ form input[name="item"] {
 }
 
 ul > li {
-  padding-block: var(--space-1);
+  /* A ruled ledger row, edge to edge, with the type inset from the sheet edge.
+     A touch tighter than the other screens' rows: the label below brings its
+     own padding-block. */
+  padding: var(--space-1) var(--space-4);
+  border-bottom: 1px solid var(--color-rule);
 
-  /* The whole row is the label for the checkbox under it. The real checkbox
-     shares a cell with the box drawn over it, so the grid does the placing and
-     nothing needs an offset or z-index to stay in step with the row. */
+  &:last-child {
+    border-bottom: none;
+  }
+
+  /* The whole row is the label for the checkbox beside it. */
   label {
     display: grid;
     grid-template-columns: auto 1fr;
@@ -128,58 +133,42 @@ ul > li {
     cursor: pointer;
   }
 
-  /* Both halves share one cell, and neither may grow the label's column. */
-  label input,
-  label span[aria-hidden="true"] {
-    grid-area: 1 / 1;
-    width: var(--checkbox-size);
-    height: var(--checkbox-size);
-  }
-
+  /* The box is drawn on the checkbox itself, so there is no copy of it laid
+     over the top and nothing to keep out of the pointer's way. */
   label input {
-    opacity: 0;
-  }
-
-  /* The drawn box: the one decorative span, hidden from the screen reader.
-     It shares a cell with the real checkbox, so it stays out of the way of
-     pointer events entirely — the label behind it is the click target. */
-  label span[aria-hidden="true"] {
     display: grid;
     place-items: center;
+    width: var(--checkbox-size);
+    height: var(--checkbox-size);
+    appearance: none;
     border: 2px solid var(--color-ink);
     border-radius: var(--radius-sm);
     background-color: var(--color-paper);
+  }
+
+  /* The tick rides inside the box, hidden until the box is filled in the List's
+     pen; the fallback is the original marker yellow. */
+  label input::after {
+    content: "✓";
+    opacity: 0;
     font-size: 0.85rem;
     font-weight: 800;
     line-height: 1;
-    pointer-events: none;
   }
 
-  /* The tick, in the List's pen; the fallback is the original marker yellow. */
-  label span[aria-hidden="true"]::after {
-    content: "✓";
-    opacity: 0;
-  }
-
-  /* The name trails the box inside the label. */
-  label span:last-child {
-    grid-area: 1 / 2;
-    min-width: 0;
-    font-weight: 500;
-    overflow-wrap: anywhere;
-  }
-
-  label input:checked + span {
+  label input:checked {
     background-color: var(--list-accent, var(--color-marker));
   }
 
-  label input:checked + span::after {
+  label input:checked::after {
     opacity: 1;
   }
 
-  label input:focus-visible + span {
-    outline: 2px solid var(--color-ink);
-    outline-offset: 2px;
+  /* The name trails the box inside the label. */
+  label span {
+    min-width: 0;
+    font-weight: 500;
+    overflow-wrap: anywhere;
   }
 
   /* Done: the row takes the pen's soft wash, the name goes quiet. */
@@ -187,7 +176,7 @@ ul > li {
     background-color: var(--list-accent-soft, var(--color-marker-soft));
   }
 
-  &.done label span:last-child {
+  &.done label span {
     color: var(--color-ink-muted);
     text-decoration: line-through;
     text-decoration-thickness: 2px;

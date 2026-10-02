@@ -12,9 +12,11 @@ const route = useRoute();
  * The tab bar lives in the persistent List layout, so when the route changes
  * this element is never re-created — it is measured anew against the active
  * tab and glides over with a CSS transition instead of blinking into place.
+ * The nav draws the line itself, from the two custom properties the measurement
+ * leaves behind.
  */
-const line = ref<HTMLElement | null>(null);
-const lineStyle = ref({ left: "0px", width: "0px" });
+const nav = ref<HTMLElement | null>(null);
+const lineStyle = ref({ "--line-left": "0px", "--line-width": "0px" });
 /**
  * False until the line has been placed under the open section for the first
  * time. That first placement paints without a transition — the line appears
@@ -25,16 +27,16 @@ const placed = ref(false);
 
 function scheduleMeasure() {
   void nextTick(() => {
-    const nav = line.value?.parentElement;
-    const active = nav?.querySelector<HTMLElement>('.tab[aria-current="page"]');
-    if (!nav || !active) {
+    const bar = nav.value;
+    const active = bar?.querySelector<HTMLElement>('.tab[aria-current="page"]');
+    if (!bar || !active) {
       return;
     }
-    const navRect = nav.getBoundingClientRect();
+    const barRect = bar.getBoundingClientRect();
     const tabRect = active.getBoundingClientRect();
     lineStyle.value = {
-      left: `${tabRect.left - navRect.left}px`,
-      width: `${tabRect.width}px`,
+      "--line-left": `${tabRect.left - barRect.left}px`,
+      "--line-width": `${tabRect.width}px`,
     };
     if (!placed.value) {
       // Flip a frame later, once this first position has committed, so the
@@ -52,52 +54,77 @@ watch(() => props.listId, scheduleMeasure);
 </script>
 
 <template>
-  <RouterLink class="tab" :to="{ name: 'list', params: { listId } }">Items</RouterLink>
-  <RouterLink class="tab" :to="{ name: 'list-payments', params: { listId } }">Payments</RouterLink>
-  <RouterLink class="tab" :to="{ name: 'list-members', params: { listId } }">Members</RouterLink>
-  <span ref="line" :class="{ 'no-animate': !placed }" aria-hidden="true" :style="lineStyle"></span>
+  <nav ref="nav" aria-label="Sections" :class="{ 'no-animate': !placed }" :style="lineStyle">
+    <RouterLink class="tab" :to="{ name: 'list', params: { listId } }">Items</RouterLink>
+    <RouterLink class="tab" :to="{ name: 'list-payments', params: { listId } }"
+      >Payments</RouterLink
+    >
+    <RouterLink class="tab" :to="{ name: 'list-members', params: { listId } }">Members</RouterLink>
+  </nav>
 </template>
 
 <style scoped>
-/* The screen switcher: text tabs, the current one underlined like a paper tab.
-   The `tab` class stays on the links as the handle the underline measures
-   against. */
-a {
-  display: inline-flex;
+/* The screen switcher: text tabs on their own row of the app bar, the current
+   one underlined like a paper tab. The row rides on the same sheet and inset
+   as the account line above it, and the `tab` class stays on the links as the
+   handle the underline measures against. */
+nav {
+  position: relative;
+  display: flex;
   align-items: center;
-  min-height: var(--control-size);
-  padding-inline: var(--space-3);
-  color: var(--color-ink-muted);
-  font-size: var(--fs-small);
-  font-weight: 600;
-  text-decoration: none;
-  white-space: nowrap;
+  gap: var(--space-1);
+  width: 100%;
+  max-width: var(--sheet-width);
+  margin-inline: auto;
+  padding-inline: var(--space-4);
 
-  &:hover {
-    color: var(--color-ink);
+  /* The tab bar bleeds its first tab past the sheet's inset, so the bar's own
+     left edge lines up with the account line above it. */
+  & > :first-child {
+    margin-inline-start: calc(var(--space-3) * -1);
   }
 
-  /* The open section reads in ink against the muted tabs beside it — identity,
-     never the only marker. The underline itself is the span below, not a shadow
-     on the tab: one line for the whole bar, gliding over in the pad's own pen. */
-  &[aria-current="page"] {
-    color: var(--color-ink);
-  }
-}
+  a {
+    display: inline-flex;
+    align-items: center;
+    min-height: var(--control-size);
+    padding-inline: var(--space-3);
+    color: var(--color-ink-muted);
+    font-size: var(--fs-small);
+    font-weight: 600;
+    text-decoration: none;
+    white-space: nowrap;
 
-/* The one span in the bar: the section underline, riding under the open tab. */
-span {
-  position: absolute;
-  bottom: 0;
-  height: 3px;
-  background-color: var(--list-accent, var(--color-ink));
-  pointer-events: none;
-  transition:
-    left 240ms ease,
-    width 240ms ease;
+    &:hover {
+      color: var(--color-ink);
+    }
+
+    /* The open section reads in ink against the muted tabs beside it — identity,
+       never the only marker. The underline is this nav's own `::after`, not a
+       shadow on the tab: one line for the whole bar, gliding over in the pad's
+       own pen. */
+    &[aria-current="page"] {
+      color: var(--color-ink);
+    }
+  }
+
+  /* The section underline, drawn between the two measurements left above. */
+  &::after {
+    content: "";
+    position: absolute;
+    bottom: 0;
+    left: var(--line-left);
+    width: var(--line-width);
+    height: 3px;
+    background-color: var(--list-accent, var(--color-ink));
+    pointer-events: none;
+    transition:
+      left 240ms ease,
+      width 240ms ease;
+  }
 
   /* The first placement lands without the glide (see the `placed` flag). */
-  &.no-animate {
+  &.no-animate::after {
     transition: none;
   }
 }

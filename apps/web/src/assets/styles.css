@@ -275,15 +275,14 @@ textarea:focus {
   max-width: calc(var(--sheet-width) - var(--space-3) * 2);
 }
 
-/* Rows ruled off, edge to edge, with the type inset from the sheet edge. */
-.rows > li {
+/* Rows lined up as a row: the only thing every list of them agrees on. The
+   padding and the hairline between rows are not shared — each ledger that
+   wants them sets them on its own `li`, which it renders itself.
+
+   Written through `:where()` so the base carries no specificity of its own and
+   a list can raise its own values on its own rows without a fight. */
+:where(.rows) > li {
   display: flex;
   align-items: center;
   gap: var(--space-3);
-  padding: var(--space-2) var(--space-4);
-  border-bottom: 1px solid var(--color-rule);
-}
-
-.rows > li:last-child {
-  border-bottom: none;
 }

@@ -5,8 +5,9 @@ import { session, signOutAndRedirect } from "../session";
 
 /**
  * The chrome every screen wears. `title` is the page's `h1`; the `nav` slot
- * adds a second row for screens with their own sections. The Settings count is
- * kept fresh by the global Sync pass, so this component only reads it.
+ * adds a second row holding the screen's own sections nav, which brings its
+ * own landmark. The Settings count is kept fresh by the global Sync pass, so
+ * this component only reads it.
  */
 defineProps<{
   title: string;
@@ -15,6 +16,16 @@ defineProps<{
 }>();
 
 const router = useRouter();
+
+/**
+ * The pending count is drawn, not typed: the link hands its badge the number
+ * as a custom property, quoted so `content` reads it as a string.
+ */
+function pendingStyle() {
+  return pendingInvitationCount.value > 0
+    ? { "--pending": `"${pendingInvitationCount.value}"` }
+    : undefined;
+}
 
 async function onSignOut() {
   await signOutAndRedirect(router);
@@ -27,11 +38,8 @@ async function onSignOut() {
       <RouterLink v-if="back" :to="back" aria-label="Back">←</RouterLink>
       <h1>{{ title }}</h1>
       <nav v-if="session.user" class="account-actions" aria-label="Account">
-        <RouterLink v-if="settings" :to="{ name: 'settings' }">
+        <RouterLink v-if="settings" :to="{ name: 'settings' }" :style="pendingStyle()">
           Settings
-          <span v-if="pendingInvitationCount > 0" aria-hidden="true">
-            {{ pendingInvitationCount }}
-          </span>
           <span v-if="pendingInvitationCount > 0" class="visually-hidden">
             {{ pendingInvitationCount }} pending
             {{ pendingInvitationCount === 1 ? "invitation" : "invitations" }}
@@ -40,9 +48,9 @@ async function onSignOut() {
         <button type="button" @click="onSignOut">Sign out</button>
       </nav>
     </div>
-    <nav v-if="$slots.nav" class="tabs" aria-label="Sections">
-      <slot name="nav" />
-    </nav>
+    <!-- The screen's own second row: its sections. It brings its own nav, so
+         nothing here wraps it in another one. -->
+    <slot name="nav" />
   </header>
 </template>
 
@@ -54,16 +62,15 @@ header {
   background-color: var(--color-paper);
   border-bottom: var(--hairline) solid var(--color-ink);
 
-  /* Both rows — the account line and the section tabs — ride on the same sheet
-     and inset. */
-  > div,
-  > nav {
+  /* The account line rides on the sheet, inset from its edges. */
+  > div {
     position: relative;
     display: flex;
     align-items: center;
     gap: var(--space-1);
     width: 100%;
     max-width: var(--sheet-width);
+    min-height: var(--bar-height);
     margin-inline: auto;
     padding-inline: var(--space-4);
   }
@@ -75,10 +82,6 @@ header {
     font-size: var(--fs-h3);
     text-overflow: ellipsis;
     white-space: nowrap;
-  }
-
-  > div {
-    min-height: var(--bar-height);
   }
 }
 
@@ -136,8 +139,10 @@ a[aria-label="Back"] {
 
   /* The pending-invitation count: a small ink disc so it stays in the
      palette without borrowing the marker, which means "marked off" and
-     nothing else. */
-  span[aria-hidden="true"] {
+     nothing else. Drawn by the link, which is handed the count as a custom
+     property and leaves it unset when there is nothing pending. */
+  a::after {
+    content: var(--pending);
     display: inline-grid;
     place-items: center;
     min-width: var(--badge-size);
@@ -163,11 +168,5 @@ a[aria-label="Back"] {
   clip-path: inset(50%);
   white-space: nowrap;
   border: 0;
-}
-
-/* The tabs bar bleeds its first tab past the sheet's inset, so the bar's own
-   left edge lines up with the account line above it. */
-nav[aria-label="Sections"] > :first-child {
-  margin-inline-start: calc(var(--space-3) * -1);
 }
 </style>

@@ -62,7 +62,8 @@ describe("AppBar", () => {
     pendingInvitationCount.value = 2;
     const bar = await mountBar({ title: "Shopping Lists", settings: true }, "/", user);
     const settings = bar.find('a[href="/settings"]');
-    expect(settings.find('span[aria-hidden="true"]').text()).toBe("2");
+    // The count is drawn, not typed: the link hands it to the badge to paint.
+    expect((settings.element as HTMLElement).style.getPropertyValue("--pending")).toBe('"2"');
     // The screen reader hears the full state, not just the number.
     expect(settings.text()).toContain("2 pending invitations");
   });
@@ -70,7 +71,8 @@ describe("AppBar", () => {
   it("leaves the Settings action unmarked when the inbox is empty", async () => {
     pendingInvitationCount.value = 0;
     const bar = await mountBar({ title: "Shopping Lists", settings: true }, "/", user);
-    expect(bar.find('a[href="/settings"] span[aria-hidden="true"]').exists()).toBe(false);
+    const settings = bar.find('a[href="/settings"]');
+    expect((settings.element as HTMLElement).style.getPropertyValue("--pending")).toBe("");
   });
 
   it("shows neither account action while signed out", async () => {

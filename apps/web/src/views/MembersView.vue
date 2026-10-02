@@ -184,9 +184,16 @@ onMounted(() => {
 
 <style scoped>
 /* Name left, figures right. They share the row's baseline so amounts read as a
-   table even when a name wraps. */
+   table even when a name wraps. The row is a ruled ledger line of its own:
+   inset from the sheet edge and ruled off from the next one. */
 li {
   align-items: baseline;
+  padding: var(--space-2) var(--space-4);
+  border-bottom: 1px solid var(--color-rule);
+
+  &:last-child {
+    border-bottom: none;
+  }
 
   .member-name {
     margin-inline-end: auto;

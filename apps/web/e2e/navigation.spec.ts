@@ -24,8 +24,14 @@ test("every signed-in screen shows a way back, and sign-out stays reachable", as
   // The List's own sections are reachable from its navigation, and the open
   // section is marked by one underline line that glides across the tabs.
   const lineBox = async () => {
-    const box = await page.locator(".tabs span").boundingBox();
-    if (!box) {
+    // The underline is the sections nav's own ::after, drawn from the two
+    // custom properties the open tab measured into it.
+    const box = await page.locator('nav[aria-label="Sections"]').evaluate((bar) => {
+      const line = getComputedStyle(bar, "::after");
+      const barBox = bar.getBoundingClientRect();
+      return { x: barBox.left + parseFloat(line.left), width: parseFloat(line.width) };
+    });
+    if (Number.isNaN(box.x)) {
       throw new Error("The section underline is missing");
     }
     return box;

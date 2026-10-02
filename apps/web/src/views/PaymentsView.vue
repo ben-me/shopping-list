@@ -141,7 +141,7 @@ onMounted(() => {
       <p v-if="paymentError" class="error">{{ paymentError }}</p>
     </template>
 
-    <ul class="rows">
+    <ul>
       <PaymentRow
         v-for="payment in payments"
         :key="payment.id"
