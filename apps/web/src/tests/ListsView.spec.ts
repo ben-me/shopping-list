@@ -43,7 +43,6 @@ describe("ListsView", () => {
 
     expect(wrapper.text()).toContain("Shopping Lists");
     expect(wrapper.text()).toContain("Household");
-    // The account controls only render for a signed-in session.
     expect(wrapper.text()).toContain("Sign out");
   });
 

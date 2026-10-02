@@ -278,7 +278,7 @@ describe("PaymentsView", () => {
     await runSyncPass(db);
     await flushPromises();
 
-    // Offline now: the names the pass stored are the only ones there are.
+    // The names the pass stored are all there is offline.
     stubOfflineServer();
     const reloaded = await mountPayments();
     await flushPromises();

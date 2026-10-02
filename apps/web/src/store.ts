@@ -4,12 +4,7 @@ import now from "./utils/now";
 
 export type OutboxTarget = "list" | "item" | "payment";
 
-/**
- * A Member's display name, as the last Sync pulled it. Keyed by Member id, not
- * by List: one name serves every List the Member belongs to, and the Owner's
- * name lives here too — they hold no Membership row, so nothing else on the
- * device would carry it.
- */
+/** A Member's display name, keyed by Member id — the Owner's lives here too. */
 export interface MemberName {
   memberId: string;
   name: string;
@@ -60,8 +55,7 @@ export class ShoppingDb extends Dexie {
       memberships: "[listId+memberId], listId, memberId, joinedAt",
       outbox: "++id, syncedAt, targetType, targetId",
     });
-    // Names came with Memberships, so a device already holding a v1 Store adds
-    // the table empty and fills it on its next Sync.
+    // A v1 Store gains the table empty and fills it on its next Sync.
     this.version(2).stores({ memberNames: "memberId" });
   }
 
@@ -244,12 +238,12 @@ export class ShoppingDb extends Dexie {
     await this.memberships.put(membership);
   }
 
-  /** A server's names for the Members of a List; last write wins, so they refresh. */
+  /** Last write wins, so a Sync pass refreshes names. */
   async putMemberNames(names: MemberName[]): Promise<void> {
     await this.memberNames.bulkPut(names);
   }
 
-  /** Every name the device holds, keyed by Member id, for the screens that label by name. */
+  /** Every name the device holds, keyed by Member id. */
   async getMemberNames(): Promise<Record<string, string>> {
     return Object.fromEntries(
       (await this.memberNames.toArray()).map((row) => [row.memberId, row.name]),
@@ -322,9 +316,8 @@ export class ShoppingDb extends Dexie {
   }
 
   /**
-   * Drop a List and everything that belongs to it, queued writes included. The
-   * Member names stay: they belong to the Members, who keep them on every
-   * other List this device holds.
+   * Drop a List and everything that belongs to it, queued writes included.
+   * Member names stay: they belong to the Member, not the List.
    */
   async removeList(listId: string): Promise<void> {
     const outboxIds = (

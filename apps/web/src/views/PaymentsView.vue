@@ -57,8 +57,6 @@ const myStanding = computed(() => {
 async function loadMembers() {
   const [list, names] = await Promise.all([db.getList(listId.value), db.getMemberNames()]);
   members.value = list ? await memberIdsOf(db, list) : [];
-  // Names come from the Store, not from the fetch: the last Sync stored them,
-  // so a reload offline still labels every row.
   memberNames.value = names;
 }
 
@@ -107,7 +105,7 @@ async function onDeletePayment(payment: Payment) {
 
 useSyncPass(async (db) => {
   await ignoreRejection(syncPaymentsFromServer(db, listId.value));
-  // An accepted Invitation redivides the standing and brings its name with it.
+  // A new Member redivides the standing, and brings their name with it.
   await ignoreRejection(syncMembershipsFromServer(db, listId.value));
   await logRejection(loadMembers(), "Loading the members");
   await logRejection(loadPayments(), "Loading the payments");

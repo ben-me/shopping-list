@@ -76,8 +76,7 @@ describe("syncMembershipsFromServer", () => {
 
     expect(await memberIdsOf(db, list)).toEqual(["user-1", "user-2", "user-3"]);
 
-    // The names land in the Store as well, the Owner's included: they are what
-    // both name-labelling screens read once the device goes offline.
+    // The Owner's name lands here too: it holds no Membership row.
     expect(await db.getMemberNames()).toEqual({
       "user-1": "Test User",
       "user-2": "Two",
@@ -118,8 +117,7 @@ describe("localMembers", () => {
   it("names the Owner and the Members from the synced names, in Split order", async () => {
     await joined("user-2", "2026-01-01T00:00:00.000Z");
     await joined("user-3", "2026-01-02T00:00:00.000Z");
-    // The Owner first (they hold no Membership row), and user-3 never synced
-    // a name: it reads neutrally rather than as a raw id.
+    // The Owner first (they hold no Membership row); user-3 never synced a name.
     await db.putMemberNames([
       { memberId: "user-1", name: "Test User" },
       { memberId: "user-2", name: "Two" },

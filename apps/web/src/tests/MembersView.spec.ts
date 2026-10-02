@@ -109,7 +109,7 @@ describe("MembersView", () => {
       { memberId: user.id, name: "Test User" },
       { memberId: "user-2", name: "Ada" },
     ]);
-    // The server is out of reach now: the names are whatever the last sync stored.
+    // Whatever the last sync stored is all there is.
     stubApi({}, { user, fallback: serverDown });
 
     const wrapper = await mountMembers();

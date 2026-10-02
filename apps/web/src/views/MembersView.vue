@@ -80,11 +80,7 @@ const isOwner = () => members.value[0]?.memberId === session.user?.id;
 /** The Owner panel and the leave action are opposites: exactly one of them shows. */
 const showInvitations = computed(() => loaded.value && isOwner());
 
-/**
- * The Members of this List, Owner first, as the server sends them while online.
- * Offline the pull throws and the local Store answers instead — names and
- * Memberships alike, so the sheet still reads names after a reload.
- */
+/** The server's Members while online; the Store's when the pull throws. */
 async function loadMembers() {
   try {
     members.value = await syncMembershipsFromServer(db, listId.value);

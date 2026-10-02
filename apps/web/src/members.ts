@@ -19,14 +19,12 @@ export async function memberIdsOf(db: ShoppingDb, list: List): Promise<string[]>
   return [...new Set([list.ownerId, ...memberships.map((membership) => membership.memberId)])];
 }
 
-/** A screen labels a Member it has no name for with this, never with their raw id. */
+/** How a screen labels a Member it has no synced name for. */
 export const UNKNOWN_MEMBER_NAME = "Member";
 
 /**
- * Everyone with access to a List as the local Store knows them, with the names
- * the last Sync pulled — the same rows the server sends, Owner first, so both
- * the Payments ledger and the Members sheet read one place. A Member the device
- * has no name for yet reads as {@link UNKNOWN_MEMBER_NAME}.
+ * Everyone with access to a List as the Store knows them, Owner first, with the
+ * names the last Sync pulled.
  */
 export async function localMembers(db: ShoppingDb, list: List): Promise<MemberDetails[]> {
   const [memberIds, names, memberships] = await Promise.all([
@@ -38,23 +36,18 @@ export async function localMembers(db: ShoppingDb, list: List): Promise<MemberDe
   return memberIds.map((memberId) => ({
     memberId,
     name: names[memberId] ?? UNKNOWN_MEMBER_NAME,
-    // The Owner holds no Membership row; they joined by creating the List.
     joinedAt: joinedAt.get(memberId) ?? list.createdAt,
   }));
 }
 
 /**
  * Pull the server's Member set for a List and mirror it locally, replacing the
- * List's whole local set: rows the server no longer returns are dropped, and
- * every server row is stored (the Owner is implied, so their pseudo-row is
- * filtered out). Their names go in beside those rows, keyed by Member, so both
- * name-labelling screens keep reading them offline. After an Invitation is
- * accepted server-side, this is how every device learns who the Members are —
- * both the invitee's and the Owner's — so the Split/standing re-divides for the
- * real group, and picks up the new Member's name with them.
+ * List's whole local set: Membership rows and names, the Owner's pseudo-row
+ * filtered out. After an Invitation is accepted server-side, this is how every
+ * device learns who the Members are, so the Split/standing re-divides for the
+ * real group — with the new Member's name.
  *
- * Returns the named rows the server sent. An unexpected payload mirrors nothing
- * and returns an empty set.
+ * Returns the named rows the server sent. An unexpected payload mirrors nothing.
  */
 export async function syncMembershipsFromServer(
   db: ShoppingDb,

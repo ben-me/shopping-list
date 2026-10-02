@@ -47,7 +47,6 @@ describe("App", () => {
     await flushPromises();
 
     expect(wrapper.text()).toContain("Shopping Lists");
-    // The account controls only render for a signed-in session.
     expect(wrapper.text()).toContain("Sign out");
   });
 
