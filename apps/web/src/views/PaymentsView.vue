@@ -168,10 +168,9 @@ onMounted(() => {
 </template>
 
 <style scoped>
-/* Amount first, then the date: the date field needs its intrinsic width, the
-   amount takes whatever is left. Three controls on one line is tight on a
-   phone: the bar closes the gaps between them and stops the button from
-   spending width on its own padding. */
+/* Amount first, then the date: the date field needs its intrinsic width and
+   the amount takes whatever is left. Three controls on one line is tight on a
+   phone, so the bar closes the gaps and the button spends no width on padding. */
 form {
   gap: var(--space-1);
 
@@ -201,8 +200,7 @@ form {
 }
 
 /* Both labels ride in the ink bar beside their figure, so they are set in
-   paper; the size difference is what keeps the running total the louder of the
-   two. */
+   paper; the size difference keeps the running total the louder of the two. */
 .total-label,
 .own-standing-label {
   color: var(--color-paper);
@@ -217,7 +215,6 @@ form {
   font-size: var(--fs-small);
 }
 
-/* The one big figure on the screen: wide, heavy, lining up in columns. */
 .total-paid {
   color: var(--color-paper);
   font-size: var(--fs-h2);

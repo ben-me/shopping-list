@@ -86,7 +86,7 @@ async function onSave() {
 </template>
 
 <style scoped>
-/* One shape for the card and for the edit form. Capped at 70% so a long date
+/* One shape for the card and for the edit form, capped at 70% so a long date
    cannot stretch it across the sheet. */
 form,
 li > div {
@@ -97,7 +97,6 @@ li > div {
   background-color: var(--color-paper);
 }
 
-/* The bubble is small, so the form inside it sits tighter than the screen's. */
 form {
   display: flex;
   flex: 0 1 auto;
@@ -118,7 +117,6 @@ form {
     gap: var(--space-2);
   }
 
-  /* The label already sets the height; no floor needed. */
   button {
     flex: 1;
   }
@@ -132,20 +130,17 @@ li {
   gap: var(--space-2);
   padding: var(--space-1) var(--space-3);
 
-  /* The card's own lines, inside the bubble already set above. */
   > div {
     display: flex;
     flex-direction: column;
     gap: var(--space-1);
   }
 
-  /* Figure on its own line, so no date can push it inward. */
   > div > p {
     font-variant-numeric: tabular-nums;
     font-weight: 700;
   }
 
-  /* The payer and the date ride under the figure. */
   > div > div {
     display: flex;
     flex-wrap: wrap;
@@ -161,7 +156,6 @@ li {
     overflow-wrap: anywhere;
   }
 
-  /* Actions ride on the inside, so the card stays flush with the sheet. */
   > button {
     width: 2rem;
     min-height: 2.5rem;
@@ -180,7 +174,6 @@ li {
     color: var(--color-owes);
   }
 
-  /* Yours hangs off the right, everyone else's off the left. */
   &.own {
     justify-content: flex-end;
   }

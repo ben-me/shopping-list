@@ -165,7 +165,6 @@ ul li {
     border-bottom: none;
   }
 
-  /* Accept / Decline ride under the invitation's text, sharing its width. */
   div {
     display: flex;
     flex-wrap: wrap;

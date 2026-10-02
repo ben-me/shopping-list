@@ -61,8 +61,8 @@ const statusLabel = (status: ListInvitation["status"]) =>
 </template>
 
 <style scoped>
-/* One row each, revoke on the right edge. The shared base lines the row up;
-   this list is tighter than a ledger's and rules nothing off between rows. */
+/* Invitation rows, not ledger rows: nothing rules them off, and the revoke
+   button rides the right edge. */
 ul {
   li {
     gap: var(--space-2);

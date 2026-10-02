@@ -43,8 +43,8 @@ const colors = computed<ListColors | null>(() => (list.value ? listColors(list.v
 </template>
 
 <style scoped>
-/* The only element of the layout: the column that stacks the bars above the
-   screen, able to give way so the List screen itself keeps its height. */
+/* The column that stacks the bars above the screen, giving way so the List
+   screen itself keeps its height. */
 div {
   display: flex;
   flex-direction: column;

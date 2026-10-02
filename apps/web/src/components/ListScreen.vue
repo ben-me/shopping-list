@@ -30,7 +30,8 @@
 }
 
 /* The input bar above the scrolling rows: full-width rule, contents on the
-   sheet. How the contents themselves lay out is the screen's business. */
+   sheet. The screens fill the slots, so these reach them through
+   `::v-slotted`; how the contents lay out is the screen's business. */
 .entry {
   display: grid;
   grid-template-columns: minmax(0, 1fr);
@@ -38,12 +39,36 @@
   padding: var(--space-2) var(--space-3);
   border-bottom: 1px solid var(--color-rule);
   background-color: var(--color-paper);
+
+  > ::v-slotted(*) {
+    width: 100%;
+    max-width: calc(var(--sheet-width) - var(--space-3) * 2);
+  }
+
+  /* Everything but the first child, the way `* + *` would say it. */
+  > ::v-slotted(:nth-child(n + 2)) {
+    margin-block-start: var(--space-1);
+  }
+
+  ::v-slotted(form) {
+    display: flex;
+    gap: var(--space-2);
+    min-width: 0;
+  }
+
+  ::v-slotted(input) {
+    padding-inline: var(--space-2);
+  }
+
+  ::v-slotted(.error) {
+    font-size: var(--fs-small);
+  }
 }
 
 /* The foot bar: the one figure a screen keeps under its rows. It is a row of
    the screen's grid rather than an overlay on the sheet, so the last row can
-   never end up hidden behind it. Set in ink, the way a submit is, so the
-   running total reads as the sum of the whole pad rather than one more row. */
+   never end up hidden behind it, and it is set in ink the way a submit is so
+   the running total reads as the sum of the whole pad. */
 footer {
   display: grid;
   grid-template-columns: minmax(0, 1fr);
@@ -51,5 +76,10 @@ footer {
   padding: var(--space-2) var(--space-3);
   background-color: var(--color-ink);
   color: var(--color-paper);
+}
+
+.screen-footer > ::v-slotted(*) {
+  width: 100%;
+  max-width: calc(var(--sheet-width) - var(--space-3) * 2);
 }
 </style>

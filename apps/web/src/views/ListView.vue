@@ -164,14 +164,12 @@ ul > li {
     opacity: 1;
   }
 
-  /* The name trails the box inside the label. */
   label span {
     min-width: 0;
     font-weight: 500;
     overflow-wrap: anywhere;
   }
 
-  /* Done: the row takes the pen's soft wash, the name goes quiet. */
   &.done {
     background-color: var(--list-accent-soft, var(--color-marker-soft));
   }

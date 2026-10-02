@@ -87,8 +87,6 @@ onUnmounted(() => {
 
 <style scoped>
 ul > li {
-  /* A ruled ledger row: only the stripe and the link, inset from the sheet edge.
-     The link carries the row's height and its own breathing room. */
   padding-inline: var(--space-4);
   border-bottom: 1px solid var(--color-rule);
 
@@ -115,7 +113,6 @@ ul > li {
     text-decoration: none;
   }
 
-  /* The chevron, decorative only: drawn at the far end of the link. */
   a::after {
     content: "›";
     margin-inline-start: auto;

@@ -37,7 +37,7 @@ async function onSignOut() {
     <div>
       <RouterLink v-if="back" :to="back" aria-label="Back">←</RouterLink>
       <h1>{{ title }}</h1>
-      <nav v-if="session.user" class="account-actions" aria-label="Account">
+      <nav v-if="session.user" aria-label="Account">
         <RouterLink v-if="settings" :to="{ name: 'settings' }" :style="pendingStyle()">
           Settings
           <span v-if="pendingInvitationCount > 0" class="visually-hidden">
@@ -62,7 +62,6 @@ header {
   background-color: var(--color-paper);
   border-bottom: var(--hairline) solid var(--color-ink);
 
-  /* The account line rides on the sheet, inset from its edges. */
   > div {
     position: relative;
     display: flex;
@@ -73,6 +72,60 @@ header {
     min-height: var(--bar-height);
     margin-inline: auto;
     padding-inline: var(--space-4);
+
+    /* Tighter together than the tabs. */
+    nav {
+      display: flex;
+      align-items: center;
+      gap: var(--space-3);
+
+      a,
+      button {
+        display: inline-flex;
+        align-items: center;
+        min-height: var(--control-size);
+        padding-inline: 0;
+        border: 0;
+        background: none;
+        color: var(--color-ink-muted);
+        font-size: var(--fs-small);
+        font-weight: 600;
+        text-decoration: none;
+        white-space: nowrap;
+      }
+
+      /* The account link holds its label and count badge wide enough to
+         breathe. */
+      a {
+        gap: 0.375rem;
+      }
+
+      a:hover,
+      button:hover:not(:disabled) {
+        background: none;
+        color: var(--color-ink);
+        text-decoration: underline;
+      }
+
+      /* The pending-invitation count, a small ink disc so it stays in the
+         palette without borrowing the marker, which means "marked off" and
+         nothing else. The link is handed the count as a custom property and
+         leaves it unset when there is nothing pending. */
+      a::after {
+        content: var(--pending);
+        display: inline-grid;
+        place-items: center;
+        min-width: var(--badge-size);
+        height: var(--badge-size);
+        padding-inline: var(--space-1);
+        border-radius: var(--radius-pill);
+        background-color: var(--color-ink);
+        color: var(--color-paper);
+        font-size: 0.7rem;
+        font-weight: 700;
+        line-height: 1;
+      }
+    }
   }
 
   h1 {
@@ -85,7 +138,6 @@ header {
   }
 }
 
-/* The way back: the one link that is a direct child of the account line. */
 a[aria-label="Back"] {
   display: inline-grid;
   place-items: center;
@@ -103,61 +155,6 @@ a[aria-label="Back"] {
   }
 }
 
-/* Tighter together than the tabs, and out of the header's two-level nesting. */
-.account-actions {
-  display: flex;
-  align-items: center;
-  gap: var(--space-3);
-
-  a,
-  button {
-    display: inline-flex;
-    align-items: center;
-    min-height: var(--control-size);
-    padding-inline: 0;
-    border: 0;
-    background: none;
-    color: var(--color-ink-muted);
-    font-size: var(--fs-small);
-    font-weight: 600;
-    text-decoration: none;
-    white-space: nowrap;
-  }
-
-  /* The account link holds its label and count badge wide enough to
-     breathe. */
-  a {
-    gap: 0.375rem;
-  }
-
-  a:hover,
-  button:hover:not(:disabled) {
-    background: none;
-    color: var(--color-ink);
-    text-decoration: underline;
-  }
-
-  /* The pending-invitation count: a small ink disc so it stays in the
-     palette without borrowing the marker, which means "marked off" and
-     nothing else. Drawn by the link, which is handed the count as a custom
-     property and leaves it unset when there is nothing pending. */
-  a::after {
-    content: var(--pending);
-    display: inline-grid;
-    place-items: center;
-    min-width: var(--badge-size);
-    height: var(--badge-size);
-    padding-inline: var(--space-1);
-    border-radius: var(--radius-pill);
-    background-color: var(--color-ink);
-    color: var(--color-paper);
-    font-size: 0.7rem;
-    font-weight: 700;
-    line-height: 1;
-  }
-}
-
-/* Text only a screen reader hears: the disc itself says just the number. */
 .visually-hidden {
   position: absolute;
   width: 1px;

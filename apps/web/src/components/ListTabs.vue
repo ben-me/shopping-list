@@ -64,10 +64,8 @@ watch(() => props.listId, scheduleMeasure);
 </template>
 
 <style scoped>
-/* The screen switcher: text tabs on their own row of the app bar, the current
-   one underlined like a paper tab. The row rides on the same sheet and inset
-   as the account line above it, and the `tab` class stays on the links as the
-   handle the underline measures against. */
+/* The row rides on the same sheet and inset as the account line above it, and
+   the `tab` class stays on the links as the handle the underline measures. */
 nav {
   position: relative;
   display: flex;
@@ -100,15 +98,13 @@ nav {
     }
 
     /* The open section reads in ink against the muted tabs beside it — identity,
-       never the only marker. The underline is this nav's own `::after`, not a
-       shadow on the tab: one line for the whole bar, gliding over in the pad's
-       own pen. */
+       never the only marker. */
     &[aria-current="page"] {
       color: var(--color-ink);
     }
   }
 
-  /* The section underline, drawn between the two measurements left above. */
+  /* The underline, drawn between the two measurements the script leaves behind. */
   &::after {
     content: "";
     position: absolute;
