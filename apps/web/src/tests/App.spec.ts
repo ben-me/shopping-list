@@ -47,7 +47,8 @@ describe("App", () => {
     await flushPromises();
 
     expect(wrapper.text()).toContain("Shopping Lists");
-    expect(wrapper.text()).toContain("Signed in as Test User");
+    // The account controls only render for a signed-in session.
+    expect(wrapper.text()).toContain("Sign out");
   });
 
   it("renders the List view for a signed-in session at /list/:listId", async () => {

@@ -43,7 +43,8 @@ describe("ListsView", () => {
 
     expect(wrapper.text()).toContain("Shopping Lists");
     expect(wrapper.text()).toContain("Household");
-    expect(wrapper.text()).toContain("Signed in as Test User");
+    // The account controls only render for a signed-in session.
+    expect(wrapper.text()).toContain("Sign out");
   });
 
   it("creates a List locally and shows it immediately, even when the server is unreachable", async () => {

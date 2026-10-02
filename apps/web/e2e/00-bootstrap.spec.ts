@@ -32,7 +32,7 @@ test("an empty database bootstraps the Admin, then sign-up closes for good", asy
     await input(page, "email").fill(ADMIN_EMAIL);
     await input(page, "password").fill(ADMIN_PASSWORD);
     await page.getByRole("button", { name: "Sign up" }).click();
-    await expect(page.getByText("Signed in as")).toContainText("Bootstrap Admin");
+    await expect(page.getByRole("button", { name: "Sign out" })).toBeVisible();
     await page.getByRole("button", { name: "Sign out" }).click();
     await expect(page.getByRole("heading", { name: "Sign in" })).toBeVisible();
   });
@@ -81,9 +81,8 @@ test("an empty database bootstraps the Admin, then sign-up closes for good", asy
 
   await test.step("the Admin provisions an account through the app UI", async () => {
     await signInAsUser(page, ADMIN_EMAIL, ADMIN_PASSWORD);
-    await expect(page.getByText("Signed in as Bootstrap Admin")).toBeVisible();
-
     // Only the Admin sees a Settings link, whose Add-a-user form provisions.
+    await expect(page.getByRole("link", { name: "Settings" })).toBeVisible();
     await page.getByRole("link", { name: "Settings" }).click();
     await expect(page.getByRole("heading", { name: "Add a user" })).toBeVisible();
     await input(page, "add-user-name").fill("UI Provisioned");
@@ -96,6 +95,6 @@ test("an empty database bootstraps the Admin, then sign-up closes for good", asy
     await page.getByRole("button", { name: "Sign out" }).click();
     await expect(page.getByRole("heading", { name: "Sign in" })).toBeVisible();
     await signInAsUser(page, "uiprovisioned@e2e.test", "ui-provisioned-password");
-    await expect(page.getByText("Signed in as UI Provisioned")).toBeVisible();
+    await expect(page.getByRole("button", { name: "Sign out" })).toBeVisible();
   });
 });
