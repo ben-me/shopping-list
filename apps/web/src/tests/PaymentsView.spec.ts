@@ -130,6 +130,15 @@ describe("PaymentsView", () => {
     expect(remounted.text()).toContain("12,50");
   });
 
+  it("rejects recording a Payment with no date", async () => {
+    stubOfflineServer();
+
+    const wrapper = await recordPayment("12.50", "");
+
+    expect(wrapper.text()).toContain("Give the payment a date");
+    expect(await db.getPayments(list.id)).toHaveLength(0);
+  });
+
   it("rejects recording a Payment without a positive amount", async () => {
     stubOfflineServer();
 

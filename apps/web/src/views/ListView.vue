@@ -42,7 +42,7 @@ function onToggle(item: Item, event: Event) {
   ignoreRejection(
     db.setItemChecked(item.id, item.listId, input.checked).then(
       () => ignoreRejection(syncOutbox(db)),
-      (err: unknown) => {
+      async (err: unknown) => {
         console.error("Ticking the item failed", err);
         return db.getItem(item.id).then((stored) => {
           input.checked = stored?.checked ?? false;

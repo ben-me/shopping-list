@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref } from "vue";
+import { computed, ref } from "vue";
 import type { Payment } from "@shopping-list/api/domain";
 import pencilIcon from "@/assets/svg/pencil.svg?raw";
 import trashIcon from "@/assets/svg/trash.svg?raw";
@@ -19,6 +19,15 @@ const props = defineProps<{
 const editing = ref(false);
 const form = ref({ amount: "", date: "" });
 const formError = ref<string | null>(null);
+
+const paidOn = computed(() => {
+  const [year = 0, month = 1, day = 1] = props.payment.paidAt.slice(0, 10).split("-").map(Number);
+  return new Date(year, month - 1, day).toLocaleDateString("de-DE", {
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+  });
+});
 
 function startEdit() {
   form.value = {
@@ -78,7 +87,7 @@ async function onSave() {
         <p>{{ formatEuro(payment.amountInCents) }}</p>
         <div>
           <span>{{ who }}</span>
-          <time :datetime="payment.paidAt">{{ payment.paidAt.slice(0, 10) }}</time>
+          <time :datetime="payment.paidAt">{{ paidOn }}</time>
         </div>
       </div>
     </template>
@@ -94,14 +103,11 @@ li > div {
   padding: var(--space-2) var(--space-3);
   border: var(--hairline) solid var(--color-rule);
   border-radius: var(--radius-lg);
-  background-color: var(--color-paper);
 }
 
 form {
   display: flex;
-  flex: 0 1 auto;
   flex-direction: column;
-  gap: var(--space-2);
 
   input {
     min-height: 2rem;
@@ -134,36 +140,31 @@ li {
     display: flex;
     flex-direction: column;
     gap: var(--space-1);
-  }
 
-  > div > p {
-    font-variant-numeric: tabular-nums;
-    font-weight: 700;
-  }
+    p {
+      font-weight: 600;
+    }
 
-  > div > div {
-    display: flex;
-    flex-wrap: wrap;
-    gap: var(--space-1) var(--space-2);
-    align-items: baseline;
-    color: var(--color-ink-muted);
-    font-size: var(--fs-small);
+    div {
+      display: flex;
+      flex-wrap: wrap;
+      gap: var(--space-1) var(--space-2);
+      align-items: baseline;
+      color: var(--color-ink-muted);
+      font-size: var(--fs-small);
+    }
   }
 
   > div > div span {
-    min-width: 0;
     font-weight: 600;
     overflow-wrap: anywhere;
   }
 
   > button {
-    width: 2rem;
-    min-height: 2.5rem;
-    padding: 0;
-    border: 0;
+    padding: 0.25rem;
     background: none;
     color: var(--color-ink-muted);
-    font-size: 1.625rem;
+    font-size: 1.75rem;
   }
 
   > button:hover:not(:disabled) {
@@ -176,14 +177,10 @@ li {
 
   &.own {
     justify-content: flex-end;
-  }
 
-  &.own > div {
-    align-items: flex-end;
-  }
-
-  &.own > div > div {
-    justify-content: flex-end;
+    div {
+      align-items: flex-end;
+    }
   }
 }
 

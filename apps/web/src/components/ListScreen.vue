@@ -33,12 +33,10 @@
    sheet. The screens fill the slots, so these reach them through
    `::v-slotted`; how the contents lay out is the screen's business. */
 .entry {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr);
-  justify-items: center;
+  display: flex;
+  justify-content: center;
   padding: var(--space-2) var(--space-3);
   border-bottom: 1px solid var(--color-rule);
-  background-color: var(--color-paper);
 
   > ::v-slotted(*) {
     width: 100%;
@@ -53,11 +51,11 @@
   ::v-slotted(form) {
     display: flex;
     gap: var(--space-2);
-    min-width: 0;
   }
 
   ::v-slotted(input) {
-    padding-inline: var(--space-2);
+    padding-inline: var(--space-1);
+    font-size: var(--fs-small);
   }
 
   ::v-slotted(.error) {

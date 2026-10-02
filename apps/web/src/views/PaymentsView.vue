@@ -28,7 +28,10 @@ const paymentForm = ref({
 });
 const paymentError = ref<string | null>(null);
 
-const isoFromDate = (date: string) => new Date(`${date}T12:00:00.000Z`).toISOString();
+/** The day as an instant, noon so a timezone either side of UTC cannot move it.
+ *  A day that is not there stays a day that is not there: the form says so. */
+const isoFromDate = (date: string) =>
+  date === "" ? "" : new Date(`${date}T12:00:00.000Z`).toISOString();
 const isOwn = (payment: Payment) => payment.memberId === session.user?.id;
 const standing = computed(() => computeOwed(members.value, payments.value));
 
@@ -39,20 +42,19 @@ const memberLabel = (memberId: string) => {
   return memberNames.value[memberId] ?? "Member";
 };
 
-/**
- * How this screen words your own net: it speaks to you and shows the figure
- * beside the wording instead of inside it.
- */
-const myOwedVoice = { owes: () => "You owe", owed: () => "You are owed", settled: "Settled up" };
+const userPaymentStatus = {
+  owes: () => "You owe",
+  owed: () => "You are owed",
+  settled: "Settled up",
+};
 
 /** The Owed wording for your own net: what you hand over, or what you're owed. */
 const myStanding = computed(() => {
   const id = session.user?.id;
   const figure = id ? standing.value.owed.find((owed) => owed.memberId === id) : undefined;
-  return figure ? owedPresentation(figure.amountInCents, myOwedVoice) : null;
+  return figure ? owedPresentation(figure.amountInCents, userPaymentStatus) : null;
 });
 
-/** The Owner always counts as a Member, so the split needs the List row. */
 async function loadMembers() {
   const list = await db.getList(listId.value);
   members.value = list ? await memberIdsOf(db, list) : [];
@@ -168,42 +170,35 @@ onMounted(() => {
 </template>
 
 <style scoped>
-/* Amount first, then the date: the date field needs its intrinsic width and
-   the amount takes whatever is left. Three controls on one line is tight on a
-   phone, so the bar closes the gaps and the button spends no width on padding. */
 form {
-  gap: var(--space-1);
+  display: flex;
 
-  input[name="payment-amount"] {
-    flex: 1 1 3rem;
-  }
+  input {
+    min-width: 0;
 
-  input[name="payment-date"] {
-    flex: 1 1 8.75rem;
+    &:not([type="date"]) {
+      flex-grow: 1;
+    }
+
+    &[type="date"] {
+      min-width: fit-content;
+    }
   }
 
   button {
-    flex: none;
+    flex: 0;
     padding-inline: var(--space-2);
   }
 }
 
-/* Label on the left, the figure on the right; on a very narrow screen a long
-   figure wraps under its label rather than pushing it off the bar. */
 .total,
 .own-standing {
   display: flex;
-  flex-wrap: wrap;
-  align-items: baseline;
   justify-content: space-between;
-  gap: var(--space-1) var(--space-3);
 }
 
-/* Both labels ride in the ink bar beside their figure, so they are set in
-   paper; the size difference keeps the running total the louder of the two. */
 .total-label,
 .own-standing-label {
-  color: var(--color-paper);
   font-weight: 600;
 }
 
@@ -216,16 +211,13 @@ form {
 }
 
 .total-paid {
-  color: var(--color-paper);
   font-size: var(--fs-h2);
   font-weight: 700;
-  font-variant-numeric: tabular-nums;
 }
 
 .own-standing-figure {
   font-size: var(--fs-small);
   font-weight: 700;
-  font-variant-numeric: tabular-nums;
 }
 
 /* Green: the group owes you. Red: you owe the group. */
