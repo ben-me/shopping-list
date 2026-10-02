@@ -36,7 +36,6 @@
   display: flex;
   justify-content: center;
   padding: var(--space-2) var(--space-3);
-  border-bottom: 1px solid var(--color-rule);
 
   > ::v-slotted(*) {
     width: 100%;

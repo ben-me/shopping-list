@@ -60,7 +60,6 @@ onUnmounted(() => {
 <template>
   <AppBar title="Shopping Lists" settings />
   <main class="page">
-    <p v-if="session.user" class="muted">Signed in as {{ session.user.name }}</p>
     <section aria-label="Your lists">
       <p v-if="lists.length === 0" class="empty">No lists yet. Create the first one below.</p>
       <ul v-else class="rows">

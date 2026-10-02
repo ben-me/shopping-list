@@ -3,12 +3,6 @@ import { useRouter, type RouteLocationRaw } from "vue-router";
 import { pendingInvitationCount } from "../pending-invitations";
 import { session, signOutAndRedirect } from "../session";
 
-/**
- * The chrome every screen wears. `title` is the page's `h1`; the `nav` slot
- * adds a second row holding the screen's own sections nav, which brings its
- * own landmark. The Settings count is kept fresh by the global Sync pass, so
- * this component only reads it.
- */
 defineProps<{
   title: string;
   back?: RouteLocationRaw;
@@ -17,10 +11,6 @@ defineProps<{
 
 const router = useRouter();
 
-/**
- * The pending count is drawn, not typed: the link hands its badge the number
- * as a custom property, quoted so `content` reads it as a string.
- */
 function pendingStyle() {
   return pendingInvitationCount.value > 0
     ? { "--pending": `"${pendingInvitationCount.value}"` }
@@ -59,31 +49,25 @@ header {
   position: sticky;
   top: 0;
   z-index: 10;
-  background-color: var(--color-paper);
-  border-bottom: var(--hairline) solid var(--color-ink);
+  border-bottom: var(--hairline) solid var(--color-ink-muted);
 
-  > div {
-    position: relative;
+  div {
     display: flex;
     align-items: center;
     gap: var(--space-1);
-    width: 100%;
     max-width: var(--sheet-width);
-    min-height: var(--bar-height);
     margin-inline: auto;
     padding-inline: var(--space-4);
 
     /* Tighter together than the tabs. */
     nav {
       display: flex;
-      align-items: center;
       gap: var(--space-3);
 
       a,
       button {
         display: inline-flex;
         align-items: center;
-        min-height: var(--control-size);
         padding-inline: 0;
         border: 0;
         background: none;
@@ -130,7 +114,6 @@ header {
 
   h1 {
     flex: 1;
-    min-width: 0;
     overflow: hidden;
     font-size: var(--fs-h3);
     text-overflow: ellipsis;
@@ -139,20 +122,12 @@ header {
 }
 
 a[aria-label="Back"] {
-  display: inline-grid;
+  display: grid;
   place-items: center;
-  min-height: var(--control-size);
-  width: var(--control-size);
+  padding-inline: 0.5rem;
   margin-inline-start: calc(var(--space-2) * -1);
-  color: var(--color-ink-muted);
-  font-size: var(--fs-h3);
   font-weight: 600;
-  line-height: 1;
   text-decoration: none;
-
-  &:hover {
-    color: var(--color-ink);
-  }
 }
 
 .visually-hidden {

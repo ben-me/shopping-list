@@ -90,7 +90,6 @@ onMounted(() => {
 <template>
   <AppBar title="Settings" :back="{ name: 'lists' }" />
   <main class="page">
-    <p v-if="session.user" class="muted">Signed in as {{ session.user.name }}</p>
     <section v-if="invitations.length > 0" aria-label="Invitations for you">
       <h2>Invitations</h2>
       <ul>

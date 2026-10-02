@@ -153,8 +153,10 @@ onMounted(() => {
       <ul class="rows">
         <li v-for="row in memberRows" :key="row.memberId" :class="row.className">
           <span class="member-name">{{ row.name }}</span>
-          <span v-if="row.share" class="member-share">{{ row.share }}</span>
-          <span v-if="row.owed" class="member-owed">{{ row.owed }}</span>
+          <div class="member-info">
+            <span v-if="row.share" class="member-share">{{ row.share }}</span>
+            <span v-if="row.owed" class="member-owed">{{ row.owed }}</span>
+          </div>
         </li>
       </ul>
       <!-- A lone Member has no Owed figure; the running total stands in. -->
@@ -185,45 +187,53 @@ onMounted(() => {
 <style scoped>
 /* Name left, figures right, on the row's baseline so amounts read as a table
    even when a name wraps. */
-li {
-  align-items: baseline;
-  padding: var(--space-2) var(--space-4);
-  border-bottom: 1px solid var(--color-rule);
+ul {
+  li {
+    align-items: baseline;
+    padding-block: var(--space-4);
+    border-bottom: 1px solid var(--color-rule);
 
-  &:last-child {
-    border-bottom: none;
-  }
+    &:last-child {
+      border-bottom: none;
+    }
 
-  .member-name {
-    margin-inline-end: auto;
-    min-width: 0;
-    font-weight: 600;
-    overflow-wrap: anywhere;
-  }
+    .member-name {
+      margin-inline-end: auto;
+      font-weight: 600;
+      overflow-wrap: anywhere;
+    }
 
-  .member-share {
-    color: var(--color-ink-muted);
-    white-space: nowrap;
-  }
+    .member-share {
+      color: var(--color-ink-muted);
+      white-space: nowrap;
+      font-size: var(--fs-small);
+    }
 
-  .member-owed {
-    font-variant-numeric: tabular-nums;
-    font-weight: 600;
-    white-space: nowrap;
-  }
+    .member-owed {
+      font-variant-numeric: tabular-nums;
+      font-weight: 600;
+      white-space: nowrap;
+    }
 
-  /* Red: this Member owes the group. Green: the group owes them. */
-  &.owes .member-owed {
-    color: var(--color-owes);
-  }
+    /* Red: this Member owes the group. Green: the group owes them. */
+    &.owes .member-owed {
+      color: var(--color-owes);
+    }
 
-  &.owed .member-owed {
-    color: var(--color-owed);
-  }
+    &.owed .member-owed {
+      color: var(--color-owed);
+    }
 
-  &.settled .member-owed {
-    color: var(--color-ink-muted);
+    &.settled .member-owed {
+      color: var(--color-ink-muted);
+    }
   }
+}
+
+.member-info {
+  display: flex;
+  flex-direction: column;
+  text-align: end;
 }
 
 .member-total {
