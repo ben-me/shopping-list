@@ -1,5 +1,5 @@
 /**
- * Shared scaffolding for the component specs.
+ * Shared scaffolding for the specs.
  *
  * Every screen spec used to carry its own copy of the same four helpers: a
  * JSON response builder, a timer tick, a `fetch` stub written as a chain of
@@ -77,15 +77,26 @@ export interface StubApiOptions {
   fallback?: RouteReply;
 }
 
+/** One request the stub answered, in the shape a spec asserts the server contract with. */
+export interface RecordedRequest {
+  method: string;
+  url: string;
+  body: string | undefined;
+}
+
 /**
  * Stubs global `fetch` with the given route table. A spec that needs the
  * session to change mid-test (sign-in, sign-out) overrides
  * `GET /api/auth/get-session` in the table; a spec about offline behaviour
  * passes a `fallback` instead of naming every route.
+ *
+ * Returns the requests it answered, in order, so a spec can assert the exact
+ * server contract (`sync-outbox.spec.ts`) rather than only what came back.
  */
 export function stubApi(routes: RouteTable = {}, options: StubApiOptions = {}) {
   const user = options.user ?? null;
   const table: RouteTable = { ...routes };
+  const requests: RecordedRequest[] = [];
   // The default session answer never overrules a spec that names the route.
   if (!("/api/auth/get-session" in table) && !("GET /api/auth/get-session" in table)) {
     table["GET /api/auth/get-session"] = () => (user ? { user } : {});
@@ -97,6 +108,7 @@ export function stubApi(routes: RouteTable = {}, options: StubApiOptions = {}) {
       const url =
         typeof input === "string" ? input : input instanceof Request ? input.url : String(input);
       const method = (init?.method ?? "GET").toUpperCase();
+      requests.push({ method, url, body: init?.body as string | undefined });
       const reply = lookup(table, method, url) ?? options.fallback;
       if (reply === undefined) {
         throw new Error(`No stub for ${method} ${url}`);
@@ -104,6 +116,7 @@ export function stubApi(routes: RouteTable = {}, options: StubApiOptions = {}) {
       return toResponse(reply, init);
     }),
   );
+  return { requests };
 }
 
 /** Opens the app on `path` behind a memory router, the way a visit would. */

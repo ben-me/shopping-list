@@ -9,15 +9,6 @@ export async function getInvitation(db: Db, id: string): Promise<Invitation | un
   return row ? toInvitation(row) : undefined;
 }
 
-export async function getInvitationsByList(db: Db, listId: string): Promise<Invitation[]> {
-  const rows = await db
-    .select()
-    .from(schema.invitations)
-    .where(eq(schema.invitations.listId, listId))
-    .orderBy(asc(schema.invitations.createdAt));
-  return rows.map(toInvitation);
-}
-
 export async function getInvitationsByListWithContext(
   db: Db,
   listId: string,

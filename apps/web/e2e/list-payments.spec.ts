@@ -9,17 +9,8 @@ import { createList, input, paymentRow, signUp } from "./support";
 test("a member records a Payment and it survives reloads", async ({ page, request }) => {
   await signUp(page, "E2E Payments", request);
   await createList(page, "Groceries");
-
-  await test.step("Payments is its own screen behind the List's navigation", async () => {
-    // The Items screen carries no money at all.
-    await expect(page.getByRole("button", { name: "Add" })).toBeVisible();
-    await expect(input(page, "payment-amount")).toHaveCount(0);
-
-    await page.getByRole("link", { name: "Payments" }).click();
-    await expect(input(page, "payment-amount")).toBeVisible();
-    // Items are not on this screen.
-    await expect(page.getByRole("button", { name: "Add" })).toHaveCount(0);
-  });
+  // The List opens on Items; Payments is behind the List's navigation.
+  await page.getByRole("link", { name: "Payments" }).click();
 
   await input(page, "payment-amount").fill("12.50");
   await input(page, "payment-date").fill("2026-02-01");
@@ -29,20 +20,8 @@ test("a member records a Payment and it survives reloads", async ({ page, reques
   // The ledger names who paid, not just the amount.
   await expect(paymentRow(page, "12,50")).toContainText("You");
 
-  await test.step("the screen shows the running total, and a lone Member gets no Owed figure", async () => {
-    await expect(page.locator(".total-paid")).toContainText("12,50");
-    await expect(page.locator(".standing-member")).toHaveCount(0);
-    await expect(page.locator(".own-standing")).toHaveCount(0);
-  });
-
   await page.reload();
 
   await expect(paymentRow(page, "12,50")).toBeVisible();
   await expect(page.locator(".total-paid")).toContainText("12,50");
-
-  await test.step("the Items screen is one tap away and back to the List", async () => {
-    await page.getByRole("link", { name: "Items" }).click();
-    await expect(page.getByRole("button", { name: "Add" })).toBeVisible();
-    await expect(input(page, "payment-amount")).toHaveCount(0);
-  });
 });

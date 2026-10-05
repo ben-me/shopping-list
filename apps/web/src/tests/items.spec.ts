@@ -5,12 +5,11 @@ vi.mock(
   async () => await import("./mocks/auth-client").then((m) => m.makeAuthClientMock()),
 );
 
-import { flushPromises } from "@vue/test-utils";
 import type { Item, List } from "@shopping-list/api/domain";
 import { db } from "../db";
 import { addItem, removeItem, syncItemsFromServer } from "../items";
 import { syncOutbox } from "../lists";
-import { _resetSession } from "../session";
+import { resetStore, serverDown, stubApi } from "./support/app";
 
 const list: List = {
   id: "list-1",
@@ -20,45 +19,8 @@ const list: List = {
   updatedAt: new Date().toISOString(),
 };
 
-function jsonResponse(body: unknown, status = 200): Response {
-  return new Response(JSON.stringify(body), {
-    status,
-    headers: { "Content-Type": "application/json" },
-  });
-}
-
-/* Records every request the sync makes. Any Item PUT is answered with the
-   server's canonical echo of the write. */
-function stubServer(
-  handler?: (url: string, init?: RequestInit) => Response | Promise<Response> | undefined,
-) {
-  const requests: { url: string; init?: RequestInit }[] = [];
-  const fetchImpl = vi.fn<typeof fetch>(async (input: string | URL | Request, init?) => {
-    const url = typeof input === "string" ? input : String(input);
-    requests.push({ url, init });
-    const handled = await handler?.(url, init);
-    if (handled) {
-      return handled;
-    }
-    if (init?.method === "PUT" && url.includes("/items/")) {
-      return jsonResponse({ item: { ...JSON.parse(String(init.body)), updatedAt: "server" } });
-    }
-    if (init?.method === "DELETE" && url.includes("/items/")) {
-      return jsonResponse({ ok: true });
-    }
-    throw new Error(`No stub for ${url} ${init?.method}`);
-  });
-  vi.stubGlobal("fetch", fetchImpl);
-  return { requests, fetchImpl };
-}
-
 beforeEach(async () => {
-  await db.lists.clear();
-  await db.items.clear();
-  await db.payments.clear();
-  await db.outbox.clear();
-  await db.syncList(list);
-  _resetSession();
+  await resetStore([list]);
 });
 
 afterEach(() => {
@@ -67,7 +29,7 @@ afterEach(() => {
 
 describe("Items on a List", () => {
   it("adds an Item offline: it appears immediately and is queued for Sync", async () => {
-    stubServer();
+    stubApi({});
 
     const item = await addItem(db, list.id, "  Milk  ");
 
@@ -83,7 +45,7 @@ describe("Items on a List", () => {
   });
 
   it("removes an Item offline and queues the delete for Sync", async () => {
-    stubServer();
+    stubApi({});
     const item = await addItem(db, list.id, "Milk");
 
     await removeItem(db, item);
@@ -94,38 +56,8 @@ describe("Items on a List", () => {
     expect(pending[1]).toMatchObject({ targetType: "item", targetId: item.id, listId: list.id });
   });
 
-  it("syncs a queued Item to the server when the connection returns", async () => {
-    const { requests } = stubServer();
-    const item = await addItem(db, list.id, "Milk");
-    await db.setItemChecked(item.id, list.id, true);
-
-    await syncOutbox(db);
-    await flushPromises();
-
-    const put = requests.find((r) => r.init?.method === "PUT");
-    expect(put?.url).toBe(`/api/lists/${list.id}/items/${item.id}`);
-    expect(JSON.parse((put?.init?.body as string) ?? "{}")).toMatchObject({
-      name: "Milk",
-      checked: true,
-    });
-    expect(await db.pendingOutboxEntries()).toHaveLength(0);
-  });
-
-  it("syncs a queued Item delete to the server when the connection returns", async () => {
-    const { requests } = stubServer();
-    const item = await addItem(db, list.id, "Milk");
-    await removeItem(db, item);
-
-    await syncOutbox(db);
-    await flushPromises();
-
-    const del = requests.find((r) => r.init?.method === "DELETE");
-    expect(del?.url).toBe(`/api/lists/${list.id}/items/${item.id}`);
-    expect(await db.pendingOutboxEntries()).toHaveLength(0);
-  });
-
   it("keeps an entry pending when the server is unreachable so Sync retries later", async () => {
-    stubServer(() => new Response(null, { status: 503 }));
+    stubApi({}, { fallback: serverDown });
     await addItem(db, list.id, "Milk");
 
     await expect(syncOutbox(db)).rejects.toMatchObject({
@@ -146,12 +78,7 @@ describe("Items on a List", () => {
       createdAt: "2026-02-01T09:00:00.000Z",
       updatedAt: "2026-02-01T10:00:00.000Z",
     };
-    stubServer((url) => {
-      if (url === `/api/lists/${list.id}/items`) {
-        return jsonResponse({ items: [serverItem] });
-      }
-      return undefined;
-    });
+    stubApi({ [`GET /api/lists/${list.id}/items`]: { items: [serverItem] } });
 
     await syncItemsFromServer(db, list.id);
 

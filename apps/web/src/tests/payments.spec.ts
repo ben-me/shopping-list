@@ -5,12 +5,11 @@ vi.mock(
   async () => await import("./mocks/auth-client").then((m) => m.makeAuthClientMock()),
 );
 
-import { flushPromises } from "@vue/test-utils";
 import type { List, Payment } from "@shopping-list/api/domain";
 import { db } from "../db";
 import { addPayment, removePayment, syncPaymentsFromServer, updatePayment } from "../payments";
 import { syncOutbox } from "../lists";
-import { _resetSession } from "../session";
+import { resetStore, serverDown, stubApi } from "./support/app";
 
 const list: List = {
   id: "list-1",
@@ -20,48 +19,8 @@ const list: List = {
   updatedAt: new Date().toISOString(),
 };
 
-function jsonResponse(body: unknown, status = 200): Response {
-  return new Response(JSON.stringify(body), {
-    status,
-    headers: { "Content-Type": "application/json" },
-  });
-}
-
-/**
- * Record every request the sync makes so tests can assert the exact server
- * contract. The default handler answers any Payment PUT with the server's
- * canonical echo of the write.
- */
-function stubServer(
-  handler?: (url: string, init?: RequestInit) => Response | Promise<Response> | undefined,
-) {
-  const requests: { url: string; init?: RequestInit }[] = [];
-  const fetchImpl = vi.fn<typeof fetch>(async (input: string | URL | Request, init?) => {
-    const url = typeof input === "string" ? input : String(input);
-    requests.push({ url, init });
-    const handled = await handler?.(url, init);
-    if (handled) {
-      return handled;
-    }
-    if (init?.method === "PUT" && url.includes("/payments/")) {
-      return jsonResponse({ payment: { ...JSON.parse(String(init.body)), updatedAt: "server" } });
-    }
-    if (init?.method === "DELETE" && url.includes("/payments/")) {
-      return jsonResponse({ ok: true });
-    }
-    throw new Error(`No stub for ${url} ${init?.method}`);
-  });
-  vi.stubGlobal("fetch", fetchImpl);
-  return { requests, fetchImpl };
-}
-
 beforeEach(async () => {
-  await db.lists.clear();
-  await db.items.clear();
-  await db.payments.clear();
-  await db.outbox.clear();
-  await db.syncList(list);
-  _resetSession();
+  await resetStore([list]);
 });
 
 afterEach(() => {
@@ -70,7 +29,7 @@ afterEach(() => {
 
 describe("Payments on a List", () => {
   it("records a Payment offline: it appears immediately and is queued for Sync", async () => {
-    stubServer();
+    stubApi({});
 
     const payment = await addPayment(db, list.id, "user-1", "12.5", "2026-02-01T10:00:00.000Z");
 
@@ -93,7 +52,7 @@ describe("Payments on a List", () => {
   });
 
   it("rejects a Payment with an invalid euro amount or without a date", async () => {
-    stubServer();
+    stubApi({});
 
     await expect(addPayment(db, list.id, "user-1", "0", "2026-02-01")).rejects.toThrow(
       "Give the payment a positive amount",
@@ -113,7 +72,7 @@ describe("Payments on a List", () => {
   });
 
   it("cuts extra decimals to whole cents instead of rounding", async () => {
-    stubServer();
+    stubApi({});
 
     // The cut happens on the typed digits, before any float exists:
     // "12.999" cuts to €12.99 instead of rounding up to €13.00.
@@ -136,7 +95,7 @@ describe("Payments on a List", () => {
   });
 
   it("accepts a comma or a dot as the decimal mark and never the euro sign", async () => {
-    stubServer();
+    stubApi({});
 
     const comma = await addPayment(db, list.id, "user-1", "12,50", "2026-02-01");
     expect(comma.amountInCents).toBe(1250);
@@ -156,7 +115,7 @@ describe("Payments on a List", () => {
   });
 
   it("edits a Payment's amount and date offline and queues the change for Sync", async () => {
-    stubServer();
+    stubApi({});
     const payment = await addPayment(db, list.id, "user-1", "12.5", "2026-02-01T10:00:00.000Z");
 
     // "20.84" euros must land on exactly 2084 cents.
@@ -174,7 +133,7 @@ describe("Payments on a List", () => {
   });
 
   it("removes a Payment offline and queues the delete for Sync", async () => {
-    stubServer();
+    stubApi({});
     const payment = await addPayment(db, list.id, "user-1", "12.5", "2026-02-01T10:00:00.000Z");
 
     await removePayment(db, payment);
@@ -189,40 +148,8 @@ describe("Payments on a List", () => {
     });
   });
 
-  it("syncs a queued Payment to the server when the connection returns", async () => {
-    const { requests } = stubServer();
-    const payment = await addPayment(db, list.id, "user-1", "12.5", "2026-02-01T10:00:00.000Z");
-    await updatePayment(db, payment.id, list.id, { amountInEur: "9.9" });
-
-    await syncOutbox(db);
-    await flushPromises();
-
-    // Create-then-edit queues two writes on the same Payment, sent as one.
-    const puts = requests.filter((r) => r.init?.method === "PUT");
-    expect(puts).toHaveLength(1);
-    expect(puts[0]?.url).toBe(`/api/lists/${list.id}/payments/${payment.id}`);
-    expect(JSON.parse((puts[0]?.init?.body as string) ?? "{}")).toMatchObject({
-      amountInCents: 990,
-      paidAt: "2026-02-01T10:00:00.000Z",
-    });
-    expect(await db.pendingOutboxEntries()).toHaveLength(0);
-  });
-
-  it("syncs a queued Payment delete to the server when the connection returns", async () => {
-    const { requests } = stubServer();
-    const payment = await addPayment(db, list.id, "user-1", "12.5", "2026-02-01T10:00:00.000Z");
-    await removePayment(db, payment);
-
-    await syncOutbox(db);
-    await flushPromises();
-
-    const del = requests.find((r) => r.init?.method === "DELETE");
-    expect(del?.url).toBe(`/api/lists/${list.id}/payments/${payment.id}`);
-    expect(await db.pendingOutboxEntries()).toHaveLength(0);
-  });
-
   it("keeps a Payment entry pending when the server is unreachable so Sync retries later", async () => {
-    stubServer(() => new Response(null, { status: 503 }));
+    stubApi({}, { fallback: serverDown });
     await addPayment(db, list.id, "user-1", "12.5", "2026-02-01T10:00:00.000Z");
 
     await expect(syncOutbox(db)).rejects.toMatchObject({
@@ -254,12 +181,7 @@ describe("Payments on a List", () => {
         updatedAt: "2026-02-02T10:00:00.000Z",
       },
     ];
-    stubServer((url) => {
-      if (url === `/api/lists/${list.id}/payments`) {
-        return jsonResponse({ payments: serverPayments });
-      }
-      return undefined;
-    });
+    stubApi({ [`GET /api/lists/${list.id}/payments`]: { payments: serverPayments } });
 
     await syncPaymentsFromServer(db, list.id);
 
