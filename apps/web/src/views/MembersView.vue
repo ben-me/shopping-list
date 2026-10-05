@@ -1,13 +1,15 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from "vue";
+import { computed, onMounted, ref, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
-import type { ListInvitation, MemberDetails, Payment } from "@shopping-list/api/domain";
+import type { ListInvitation } from "@shopping-list/api/domain";
 import ListScreen from "../components/ListScreen.vue";
 import InvitationsPanel from "../components/InvitationsPanel.vue";
 import { useSyncPass } from "../connectivity";
+import { useLiveMembers } from "../composables/useLiveMembers";
+import { useLivePayments } from "../composables/useLivePayments";
 import { db } from "../db";
 import { createInvitation, listInvitations, revokeInvitation } from "../invitations";
-import { leaveList, localMembers, syncMembershipsFromServer } from "../members";
+import { leaveList, syncMembershipsFromServer } from "../members";
 import { session } from "../session";
 import { computeOwed } from "../utils/computeOwed";
 import { ignoreRejection, logRejection } from "../utils/fireAndForget";
@@ -18,11 +20,19 @@ import { submit } from "../utils/submit";
 const route = useRoute();
 const router = useRouter();
 const listId = computed(() => String(route.params.listId ?? ""));
-const members = ref<MemberDetails[]>([]);
+const members = useLiveMembers(listId);
 const invitations = ref<ListInvitation[]>([]);
-const payments = ref<Payment[]>([]);
+const payments = useLivePayments(listId);
 const error = ref<string | null>(null);
 const loaded = ref(false);
+/** The Store has answered once: the rows below are the List's Members, not a gap. */
+watch(
+  members,
+  () => {
+    loaded.value = true;
+  },
+  { once: true },
+);
 
 const standing = computed(() =>
   computeOwed(
@@ -74,35 +84,14 @@ const inviteForm = ref({
   email: "",
 });
 
-/** The server always lists the Owner first, so the first row names them. */
+/** The Owner is the first Member the Store lists, so the first row names them. */
 const isOwner = () => members.value[0]?.memberId === session.user?.id;
 
 /** The Owner panel and the leave action are opposites: exactly one of them shows. */
 const showInvitations = computed(() => loaded.value && isOwner());
 
-/** The server's Members while online; the Store's when the pull throws. */
-async function loadMembers() {
-  try {
-    members.value = await syncMembershipsFromServer(db, listId.value);
-  } catch {
-    const list = await db.getList(listId.value);
-    members.value = list ? await localMembers(db, list) : [];
-  }
-}
-
 async function loadInvitations() {
   invitations.value = await listInvitations(listId.value);
-}
-
-async function loadPayments() {
-  payments.value = await db.getPayments(listId.value);
-}
-
-async function loadPanel() {
-  await logRejection(loadMembers(), "Loading the members");
-  await logRejection(loadInvitations(), "Loading the invitations");
-  await logRejection(loadPayments(), "Loading the payments");
-  loaded.value = true;
 }
 
 async function onInvite() {
@@ -138,15 +127,18 @@ async function onLeave() {
 }
 
 useSyncPass(async () => {
-  await ignoreRejection(loadMembers());
+  await ignoreRejection(syncMembershipsFromServer(db, listId.value));
   await ignoreRejection(loadInvitations());
-  await ignoreRejection(loadPayments());
 });
 
 onMounted(() => {
-  // No Sync pass of its own: loadPanel reads what this screen renders, and a
-  // pass would re-pull it plus the app-wide Lists and inbox it does not show.
-  logRejection(loadPanel(), "Loading the members");
+  // Invitations only ever come from the server, so they keep a read of their
+  // own; the Members and Payments above are read live and repaint themselves.
+  // The Membership pull names the Members the Store holds no name for, which
+  // is every one of them on a cold start, and replaces the set when someone
+  // has joined or left elsewhere.
+  void ignoreRejection(syncMembershipsFromServer(db, listId.value));
+  logRejection(loadInvitations(), "Loading the invitations");
 });
 </script>
 

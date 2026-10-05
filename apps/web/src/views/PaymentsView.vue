@@ -5,9 +5,11 @@ import type { Payment } from "@shopping-list/api/domain";
 import ListScreen from "../components/ListScreen.vue";
 import PaymentRow from "../components/PaymentRow.vue";
 import { runSyncPass, useSyncPass } from "../connectivity";
+import { useLiveMembers } from "../composables/useLiveMembers";
+import { useLivePayments } from "../composables/useLivePayments";
 import { db } from "../db";
 import { syncOutbox } from "../lists";
-import { memberIdsOf, syncMembershipsFromServer, UNKNOWN_MEMBER_NAME } from "../members";
+import { syncMembershipsFromServer, UNKNOWN_MEMBER_NAME } from "../members";
 import { addPayment, removePayment, syncPaymentsFromServer, updatePayment } from "../payments";
 import { session } from "../session";
 import { computeOwed } from "../utils/computeOwed";
@@ -18,9 +20,13 @@ import { submit } from "../utils/submit";
 
 const route = useRoute();
 const listId = computed(() => String(route.params.listId ?? ""));
-const members = ref<string[]>([]);
-const payments = ref<Payment[]>([]);
-const memberNames = ref<Record<string, string>>({});
+const members = useLiveMembers(listId);
+const payments = useLivePayments(listId);
+/** The Members the Split divides across, and the names the ledger labels rows with. */
+const memberIds = computed(() => members.value.map((member) => member.memberId));
+const memberNames = computed(() =>
+  Object.fromEntries(members.value.map((member) => [member.memberId, member.name])),
+);
 const paymentForm = ref({
   amount: "",
   date: new Date().toISOString().slice(0, 10),
@@ -32,7 +38,7 @@ const paymentError = ref<string | null>(null);
 const isoFromDate = (date: string) =>
   date === "" ? "" : new Date(`${date}T12:00:00.000Z`).toISOString();
 const isOwn = (payment: Payment) => payment.memberId === session.user?.id;
-const standing = computed(() => computeOwed(members.value, payments.value));
+const standing = computed(() => computeOwed(memberIds.value, payments.value));
 
 const memberLabel = (memberId: string) => {
   if (memberId === session.user?.id) {
@@ -54,16 +60,6 @@ const myStanding = computed(() => {
   return figure ? owedPresentation(figure.amountInCents, userPaymentStatus) : null;
 });
 
-async function loadMembers() {
-  const [list, names] = await Promise.all([db.getList(listId.value), db.getMemberNames()]);
-  members.value = list ? await memberIdsOf(db, list) : [];
-  memberNames.value = names;
-}
-
-async function loadPayments() {
-  payments.value = (await db.getPayments(listId.value)).slice().reverse();
-}
-
 async function onRecordPayment() {
   const user = session.user;
   if (!user) {
@@ -83,7 +79,6 @@ async function onRecordPayment() {
     return;
   }
   paymentForm.value.amount = "";
-  await logRejection(loadPayments(), "Loading the payments");
   ignoreRejection(syncOutbox(db));
 }
 
@@ -93,13 +88,11 @@ async function onSaveEdit(payment: Payment, amount: string, date: string) {
     amountInEur: amount,
     paidAt: isoFromDate(date),
   });
-  await logRejection(loadPayments(), "Loading the payments");
   ignoreRejection(syncOutbox(db));
 }
 
 async function onDeletePayment(payment: Payment) {
   await logRejection(removePayment(db, payment), "Removing the payment");
-  await logRejection(loadPayments(), "Loading the payments");
   ignoreRejection(syncOutbox(db));
 }
 
@@ -107,13 +100,9 @@ useSyncPass(async (db) => {
   await ignoreRejection(syncPaymentsFromServer(db, listId.value));
   // A new Member redivides the standing, and brings their name with it.
   await ignoreRejection(syncMembershipsFromServer(db, listId.value));
-  await logRejection(loadMembers(), "Loading the members");
-  await logRejection(loadPayments(), "Loading the payments");
 });
 
 onMounted(() => {
-  logRejection(loadMembers(), "Loading the members");
-  logRejection(loadPayments(), "Loading the payments");
   // A list-scoped pass: this screen drains the outbox and pulls its own
   // Payments and Memberships, but not the app-wide Lists index or inbox.
   void ignoreRejection(runSyncPass(db, "list"));

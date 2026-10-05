@@ -5,7 +5,7 @@ vi.mock(
   async () => await import("./mocks/auth-client").then((m) => m.makeAuthClientMock()),
 );
 
-import { flushPromises } from "@vue/test-utils";
+import { flushPromises, type VueWrapper } from "@vue/test-utils";
 import type { List, ListInvitation, MemberDetails } from "@shopping-list/api/domain";
 import { db } from "../db";
 import type { SessionUser } from "../session";
@@ -21,15 +21,10 @@ const list: List = {
   updatedAt: new Date().toISOString(),
 };
 
+/** The Owner leads: that order is the Store's, not the server payload's. */
 const members: MemberDetails[] = [
   { memberId: user.id, name: "Test User", joinedAt: "2026-01-01T00:00:00.000Z" },
   { memberId: "user-2", name: "Ada", joinedAt: "2026-01-02T00:00:00.000Z" },
-];
-
-/** The Owner first — the server lists them first, and the screen reads that. */
-const ownerFirstMembers: MemberDetails[] = [
-  { memberId: "user-2", name: "Ada", joinedAt: "2026-01-01T00:00:00.000Z" },
-  { memberId: user.id, name: "Test User", joinedAt: "2026-01-02T00:00:00.000Z" },
 ];
 
 function membersRoute(listMembers: MemberDetails[]) {
@@ -47,6 +42,16 @@ function memberStub() {
 async function mountMembers() {
   const { wrapper } = await mountApp(`/list/${list.id}/members`);
   return wrapper;
+}
+
+/**
+ * The screen reads the Store, and the Store learns the Members' names from the
+ * pull the mount starts: so wait for the names to land rather than for a clock.
+ */
+async function awaitNames(wrapper: VueWrapper) {
+  await vi.waitFor(() => {
+    expect(wrapper.text()).toContain("Ada");
+  });
 }
 
 beforeEach(async () => {
@@ -77,10 +82,9 @@ describe("MembersView", () => {
   it("shows every Member's name, marking the signed-in user", async () => {
     memberStub();
     const wrapper = await mountMembers();
-    await settle();
+    await awaitNames(wrapper);
 
     expect(wrapper.text()).toContain("Test User (you)");
-    expect(wrapper.text()).toContain("Ada");
   });
 
   it("shows the names and the standing offline, from the local Store", async () => {
@@ -103,7 +107,7 @@ describe("MembersView", () => {
       { memberId: user.id, name: "Test User" },
       { memberId: "user-2", name: "Ada" },
     ]);
-    // Whatever the last sync stored is all there is.
+    // Nothing else to read: the Store is the only source, online or off.
     stubApi({}, { user, fallback: serverDown });
 
     const wrapper = await mountMembers();
@@ -196,9 +200,10 @@ describe("MembersView", () => {
     );
 
     const wrapper = await mountMembers();
-    await settle();
+    await vi.waitFor(() => {
+      expect(wrapper.text()).toContain("Other Owner");
+    });
 
-    expect(wrapper.text()).toContain("Other Owner");
     expect(wrapper.find('input[name="invite-email"]').exists()).toBe(false);
     expect(wrapper.findAll('button[name="revoke-invitation"]')).toHaveLength(0);
     expect(wrapper.find('button[name="leave-list"]').exists()).toBe(true);
@@ -209,7 +214,7 @@ describe("MembersView", () => {
     let left = false;
     stubApi(
       {
-        ...membersRoute(ownerFirstMembers),
+        ...membersRoute(members),
         [`GET /api/lists/${list.id}/invitations`]: { invitations: [] },
         [`DELETE /api/lists/${list.id}/membership`]: () => {
           left = true;
@@ -252,7 +257,7 @@ describe("MembersView", () => {
     });
 
     const wrapper = await mountMembers();
-    await settle();
+    await awaitNames(wrapper);
 
     const rows = wrapper.findAll("ul.rows > li");
     expect(rows).toHaveLength(2);

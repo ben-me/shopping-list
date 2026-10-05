@@ -170,7 +170,7 @@ describe("PaymentsView", () => {
     });
 
     const wrapper = await mountPayments();
-    await flushPromises();
+    await settle();
 
     const rowByAmount = (amount: string) =>
       wrapper.findAll("ul li").filter((row) => row.text().includes(amount))[0];
@@ -249,16 +249,17 @@ describe("PaymentsView", () => {
     });
 
     const wrapper = await mountPayments();
-    await flushPromises();
-    // Names are server-only: the mount's Sync pass is what labels the rows.
-    await runSyncPass(db);
-    await flushPromises();
+    await settle();
 
     const rowByAmount = (amount: string) =>
       wrapper.findAll("ul li").filter((row) => row.text().includes(amount))[0]!;
+    // Names come from the server; the mount's Sync pass pulls them and the
+    // Store repaints the rows. Wait for that, not for a clock.
+    await vi.waitFor(() => {
+      expect(rowByAmount("7,00").find("span").text()).toBe("Two");
+    });
     // Your own Payment reads "You"; another Member's carries their name.
     expect(rowByAmount("12,50").find("span").text()).toBe("You");
-    expect(rowByAmount("7,00").find("span").text()).toBe("Two");
     expect(rowByAmount("7,00").text()).not.toContain("user-2");
   });
 
@@ -315,10 +316,7 @@ describe("PaymentsView", () => {
     });
 
     const wrapper = await mountPayments();
-    await flushPromises();
-    // Names are server-only: the mount's Sync pass is what labels the rows.
-    await runSyncPass(db);
-    await flushPromises();
+    await settle();
 
     // Running total and your own net, exactly as computeOwed figures them.
     expect(wrapper.find(".total-paid").text()).toContain("4,00");
@@ -389,18 +387,11 @@ describe("PaymentsView", () => {
     expect(wrapper.find(".own-standing").text()).toContain("Settled up");
   });
 
-  it("re-divides your own net when Membership changes arrive on Sync", async () => {
-    stubApi(
-      {
-        // The server still returns the List (Sync prunes local Lists the
-        // server no longer returns); only Memberships and Payments change.
-        "GET /api/lists": { lists: [list] },
-        [`GET /api/lists/${list.id}/items`]: { items: [] },
-        [`GET /api/lists/${list.id}/payments`]: { payments: [] },
-        [`PUT /api/lists/${list.id}/payments/*`]: {},
-      },
-      { user, fallback: serverDown },
-    );
+  it("re-divides your own net as Memberships reach the Store", async () => {
+    // The Memberships and the Payment come from the Store, so the server has
+    // nothing to add: the screen divides the pot it finds there.
+    stubOfflineServer();
+
     await db.syncMembership({
       listId: list.id,
       memberId: "user-2",
@@ -417,7 +408,6 @@ describe("PaymentsView", () => {
     });
 
     const wrapper = await mountPayments();
-    await flushPromises();
     await settle();
 
     // Two Members split the pot: You paid it all, so the group owes you half.
@@ -425,14 +415,13 @@ describe("PaymentsView", () => {
     expect(wrapper.find(".own-standing").text()).toContain("You are owed");
     expect(wrapper.find(".own-standing").text()).toContain("6,00");
 
-    // A third Member joins; the next Sync pass re-divides the same pot.
+    // A third Member joins; the pot re-divides for them.
     await db.syncMembership({
       listId: list.id,
       memberId: "user-3",
       joinedAt: "2026-01-02T00:00:00.000Z",
     });
-    await runSyncPass(db);
-    await flushPromises();
+    await settle();
 
     expect(wrapper.find(".total-paid").text()).toContain("12,00");
     expect(wrapper.find(".own-standing").text()).toContain("You are owed");
