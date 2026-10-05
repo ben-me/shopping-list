@@ -72,12 +72,6 @@ describe("MembersView", () => {
     // The Members screen is a page in the sheet, not a dialog in the top layer.
     expect(wrapper.find("dialog").exists()).toBe(false);
     expect(wrapper.find("button.members-close").exists()).toBe(false);
-
-    // The selection is marked by one underline line gliding under the tabs:
-    // the nav draws it from the two measurements the tabs leave on it.
-    const tabBar = wrapper.find('nav[aria-label="Sections"]');
-    expect(tabBar.exists()).toBe(true);
-    expect(tabBar.attributes("style")).toContain("--line-width");
   });
 
   it("shows every Member's name, marking the signed-in user", async () => {

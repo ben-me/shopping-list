@@ -1,5 +1,7 @@
 import "fake-indexeddb/auto";
 
+import { jsonResponse } from "./support/app";
+
 import { db } from "../db";
 import * as storeOwner from "../store-owner";
 import {
@@ -12,6 +14,7 @@ import {
   signUp,
   type SessionUser,
 } from "../session";
+
 
 /**
  * Mock the better-auth client module: the real client captures `fetch` at
@@ -51,13 +54,6 @@ const user: SessionUser = {
   emailVerified: true,
   image: null,
 };
-
-function jsonResponse(body: unknown, status = 200): Response {
-  return new Response(JSON.stringify(body), {
-    status,
-    headers: { "Content-Type": "application/json" },
-  });
-}
 
 function stubFetch(response: Response) {
   const fetchImpl = vi.fn<typeof fetch>(async () => response);

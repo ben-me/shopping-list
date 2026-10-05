@@ -1,5 +1,5 @@
 /**
- * Shared scaffolding for the specs.
+ * Shared scaffolding for the component specs.
  *
  * Every screen spec used to carry its own copy of the same four helpers: a
  * JSON response builder, a timer tick, a `fetch` stub written as a chain of
@@ -77,6 +77,12 @@ export interface StubApiOptions {
   fallback?: RouteReply;
 }
 
+/**
+ * Stubs global `fetch` with the given route table. A spec that needs the
+ * session to change mid-test (sign-in, sign-out) overrides
+ * `GET /api/auth/get-session` in the table; a spec about offline behaviour
+ * passes a `fallback` instead of naming every route.
+ */
 /** One request the stub answered, in the shape a spec asserts the server contract with. */
 export interface RecordedRequest {
   method: string;
@@ -91,7 +97,7 @@ export interface RecordedRequest {
  * passes a `fallback` instead of naming every route.
  *
  * Returns the requests it answered, in order, so a spec can assert the exact
- * server contract (`sync-outbox.spec.ts`) rather than only what came back.
+ * server contract rather than only what came back.
  */
 export function stubApi(routes: RouteTable = {}, options: StubApiOptions = {}) {
   const user = options.user ?? null;
