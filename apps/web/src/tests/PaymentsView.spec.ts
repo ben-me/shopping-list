@@ -289,6 +289,28 @@ describe("PaymentsView", () => {
     expect(reloaded.text()).not.toContain("user-2");
   });
 
+  it("names a departed Member's Payment, whose Membership is gone but whose name is not", async () => {
+    stubOfflineServer();
+    // Ada's Membership is gone, so the pot divides across the Owner alone —
+    // but her Payment stays in it, and the row still says whose it was.
+    await db.putMemberNames([{ memberId: "user-2", name: "Ada" }]);
+    await db.putPayment({
+      id: "pay-departed",
+      listId: list.id,
+      memberId: "user-2",
+      amountInCents: 700,
+      paidAt: "2026-02-02T10:00:00.000Z",
+      createdAt: "2026-02-02T09:00:00.000Z",
+      updatedAt: "2026-02-02T09:00:00.000Z",
+    });
+
+    const wrapper = await mountPayments();
+    await settle();
+
+    const row = wrapper.findAll("ul li").filter((r) => r.text().includes("7,0"))[0]!;
+    expect(row.find("span").text()).toBe("Ada");
+  });
+
   it("keeps your own net in the foot of the screen, under the running total", async () => {
     stubNamedMembers();
     await db.syncMembership({

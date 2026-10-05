@@ -5,6 +5,7 @@ import type { Payment } from "@shopping-list/api/domain";
 import ListScreen from "../components/ListScreen.vue";
 import PaymentRow from "../components/PaymentRow.vue";
 import { runSyncPass, useSyncPass } from "../connectivity";
+import { useLiveMemberNames } from "../composables/useLiveMemberNames";
 import { useLiveMembers } from "../composables/useLiveMembers";
 import { useLivePayments } from "../composables/useLivePayments";
 import { db } from "../db";
@@ -22,11 +23,10 @@ const route = useRoute();
 const listId = computed(() => String(route.params.listId ?? ""));
 const members = useLiveMembers(listId);
 const payments = useLivePayments(listId);
-/** The Members the Split divides across, and the names the ledger labels rows with. */
+/** The Split divides across the Members the List has now; a row is labelled by
+ *  name, and a name outlives the Membership that carried it. */
 const memberIds = computed(() => members.value.map((member) => member.memberId));
-const memberNames = computed(() =>
-  Object.fromEntries(members.value.map((member) => [member.memberId, member.name])),
-);
+const memberNames = useLiveMemberNames();
 const paymentForm = ref({
   amount: "",
   date: new Date().toISOString().slice(0, 10),
