@@ -1,5 +1,7 @@
 import "fake-indexeddb/auto";
 
+import { jsonResponse } from "./support/app";
+
 import { db } from "../db";
 import * as storeOwner from "../store-owner";
 import {
@@ -12,6 +14,7 @@ import {
   signUp,
   type SessionUser,
 } from "../session";
+
 
 /**
  * Mock the better-auth client module: the real client captures `fetch` at
@@ -51,13 +54,6 @@ const user: SessionUser = {
   emailVerified: true,
   image: null,
 };
-
-function jsonResponse(body: unknown, status = 200): Response {
-  return new Response(JSON.stringify(body), {
-    status,
-    headers: { "Content-Type": "application/json" },
-  });
-}
 
 function stubFetch(response: Response) {
   const fetchImpl = vi.fn<typeof fetch>(async () => response);
@@ -218,6 +214,29 @@ describe("session", () => {
 
     expect(session.user).toEqual(secondUser);
     expect(await db.getLists()).toEqual([]);
+  });
+
+  it("keeps the Store when the same user opens the app again on the device", async () => {
+    // No recorded account yet, and a pre-fix install's rows already on disk:
+    // the first boot must keep them, not wipe what it cannot attribute.
+    const mine = {
+      id: "list-backstop",
+      ownerId: user.id,
+      name: "Mine",
+      createdAt: "2026-01-01T00:00:00.000Z",
+      updatedAt: "2026-01-01T00:00:00.000Z",
+    };
+    await db.syncList(mine);
+    fetchImpl = stubFetch(jsonResponse({ session: { token: "tok" }, user }));
+
+    await restoreSession();
+    expect(await db.getLists()).toContainEqual(mine);
+
+    // The device hand-over backstop runs again on boot and must recognise
+    // this user as the one who owns the Store.
+    await restoreSession();
+
+    expect(await db.getLists()).toContainEqual(mine);
   });
 
   it("signs out even when the server is unreachable — and still wipes the Store", async () => {

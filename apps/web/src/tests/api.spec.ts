@@ -1,6 +1,8 @@
 import { apiFetch } from "../api";
 import type { List } from "@shopping-list/api/domain";
 
+
+import { jsonResponse } from "./support/app";
 const list: List = {
   id: "list-1",
   ownerId: "user-1",
@@ -8,13 +10,6 @@ const list: List = {
   createdAt: new Date().toISOString(),
   updatedAt: new Date().toISOString(),
 };
-
-function jsonResponse(body: unknown, status = 200): Response {
-  return new Response(JSON.stringify(body), {
-    status,
-    headers: { "Content-Type": "application/json" },
-  });
-}
 
 function stubFetch(response: Response) {
   const fetchImpl = vi.fn<typeof fetch>(async () => response);

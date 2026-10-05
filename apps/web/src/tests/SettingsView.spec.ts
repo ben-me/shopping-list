@@ -7,7 +7,6 @@ vi.mock(
 
 import { flushPromises } from "@vue/test-utils";
 import type { List, PendingInvitation } from "@shopping-list/api/domain";
-import { db } from "../db";
 import { pendingInvitationCount } from "../pending-invitations";
 import type { SessionUser } from "../session";
 import { mountApp, resetStore, settle, stubApi } from "./support/app";
@@ -96,34 +95,6 @@ describe("SettingsView", () => {
     expect(router.currentRoute.value.name).toBe("settings");
     expect(wrapper.find('section[aria-label="Add a user"]').exists()).toBe(false);
     expect(wrapper.find('section[aria-label="Invitations for you"]').exists()).toBe(false);
-  });
-
-  it("shows the Lists the user joined on the home; leaving lives in the List", async () => {
-    const joinedList: List = {
-      id: "list-2",
-      ownerId: "user-2",
-      name: "Holiday shop",
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
-    };
-    await db.syncList(joinedList);
-    await db.syncMembership({
-      listId: joinedList.id,
-      memberId: user.id,
-      joinedAt: new Date().toISOString(),
-    });
-    stubSettingsApi({ lists: [joinedList] });
-
-    const { wrapper, router } = await mountApp("/");
-    await flushPromises();
-    await settle();
-
-    // Joined Lists are Lists first: they belong on the home, not in Settings.
-    expect(wrapper.text()).toContain("Holiday shop");
-
-    await router.push("/settings");
-    await flushPromises();
-    expect(wrapper.text()).not.toContain("Lists you joined");
   });
 
   it("lets the invitee accept a pending invitation and clears the inbox", async () => {

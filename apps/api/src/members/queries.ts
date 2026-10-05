@@ -3,26 +3,6 @@ import type { List, MemberDetails, Membership } from "../domain";
 import { now, type Db } from "../db";
 import * as schema from "../schema";
 
-export async function getMembership(db: Db, key: MembershipKey): Promise<Membership | undefined> {
-  const row = await db
-    .select()
-    .from(schema.memberships)
-    .where(
-      and(eq(schema.memberships.listId, key.listId), eq(schema.memberships.memberId, key.memberId)),
-    )
-    .get();
-  return row ? toMembership(row) : undefined;
-}
-
-export async function getMembershipsByList(db: Db, listId: string): Promise<Membership[]> {
-  const rows = await db
-    .select()
-    .from(schema.memberships)
-    .where(eq(schema.memberships.listId, listId))
-    .orderBy(asc(schema.memberships.joinedAt));
-  return rows.map(toMembership);
-}
-
 /**
  * Everyone with access to a List, named: the Owner first (creation time as
  * joinedAt), then joined Members in joined order — the same order

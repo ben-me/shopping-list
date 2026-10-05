@@ -8,13 +8,8 @@ import {
   revokeInvitation,
 } from "../invitations";
 
-function jsonResponse(body: unknown, status = 200): Response {
-  return new Response(JSON.stringify(body), {
-    status,
-    headers: { "Content-Type": "application/json" },
-  });
-}
 
+import { jsonResponse } from "./support/app";
 function stubApi(handler: (url: string, init?: RequestInit) => Response) {
   const fetchImpl = vi.fn<typeof fetch>(
     async (input: string | URL | Request, init?: RequestInit) => {

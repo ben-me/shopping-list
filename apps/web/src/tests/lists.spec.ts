@@ -1,17 +1,13 @@
 import "fake-indexeddb/auto";
 
+import { jsonResponse } from "./support/app";
+
 import type { Item, List } from "@shopping-list/api/domain";
 import { createList, syncFromServer, syncOutbox } from "../lists";
 import { ShoppingDb } from "../store";
 
-let dbNumber = 0;
 
-function jsonResponse(body: unknown, status = 200): Response {
-  return new Response(JSON.stringify(body), {
-    status,
-    headers: { "Content-Type": "application/json" },
-  });
-}
+let dbNumber = 0;
 
 function stubFetch(makeResponse: () => Response) {
   const fetchImpl = vi.fn<typeof fetch>(async () => makeResponse());

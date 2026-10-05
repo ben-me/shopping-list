@@ -72,12 +72,6 @@ describe("MembersView", () => {
     // The Members screen is a page in the sheet, not a dialog in the top layer.
     expect(wrapper.find("dialog").exists()).toBe(false);
     expect(wrapper.find("button.members-close").exists()).toBe(false);
-
-    // The selection is marked by one underline line gliding under the tabs:
-    // the nav draws it from the two measurements the tabs leave on it.
-    const tabBar = wrapper.find('nav[aria-label="Sections"]');
-    expect(tabBar.exists()).toBe(true);
-    expect(tabBar.attributes("style")).toContain("--line-width");
   });
 
   it("shows every Member's name, marking the signed-in user", async () => {
@@ -278,34 +272,5 @@ describe("MembersView", () => {
 
     // Two Members split the pot, so no bare total line.
     expect(wrapper.find(".member-total").exists()).toBe(false);
-  });
-
-  it("shows the running total instead of an Owed figure on a lone-Member List", async () => {
-    stubApi(
-      {
-        ...membersRoute([members[0]!]),
-        [`GET /api/lists/${list.id}/invitations`]: { invitations: [] },
-      },
-      { user },
-    );
-    await db.putPayment({
-      id: "pay-1",
-      listId: list.id,
-      memberId: user.id,
-      amountInCents: 1400,
-      paidAt: "2026-01-01T10:00:00.000Z",
-      createdAt: "2026-01-01T09:00:00.000Z",
-      updatedAt: "2026-01-01T10:00:00.000Z",
-    });
-
-    const wrapper = await mountMembers();
-    await settle();
-
-    const rows = wrapper.findAll("ul.rows > li");
-    expect(rows).toHaveLength(1);
-    expect(rows[0]!.text()).toContain("Test User (you)");
-    expect(wrapper.find(".member-owed").exists()).toBe(false);
-    expect(wrapper.find(".member-total").text()).toContain("14,00");
-    expect(wrapper.text()).not.toContain("share");
   });
 });

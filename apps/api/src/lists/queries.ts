@@ -59,14 +59,6 @@ export async function updateList(
   return rows[0] ? toList(rows[0]) : undefined;
 }
 
-export async function deleteList(db: Db, id: string): Promise<boolean> {
-  const rows = await db
-    .delete(schema.lists)
-    .where(eq(schema.lists.id, id))
-    .returning({ id: schema.lists.id });
-  return rows.length > 0;
-}
-
 export interface CreateListInput {
   /** The client picks the id when creating offline-first so Sync can upsert. */
   id?: string;

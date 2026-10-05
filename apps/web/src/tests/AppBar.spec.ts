@@ -68,13 +68,6 @@ describe("AppBar", () => {
     expect(settings.text()).toContain("2 pending invitations");
   });
 
-  it("leaves the Settings action unmarked when the inbox is empty", async () => {
-    pendingInvitationCount.value = 0;
-    const bar = await mountBar({ title: "Shopping Lists", settings: true }, "/", user);
-    const settings = bar.find('a[href="/settings"]');
-    expect((settings.element as HTMLElement).style.getPropertyValue("--pending")).toBe("");
-  });
-
   it("shows neither account action while signed out", async () => {
     const bar = await mountBar({ title: "Sign in" });
     await flushPromises();

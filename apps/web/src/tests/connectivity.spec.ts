@@ -1,9 +1,12 @@
 import "fake-indexeddb/auto";
 
+import { jsonResponse } from "./support/app";
+
 import type { List } from "@shopping-list/api/domain";
 import { db } from "../db";
 import { addItem } from "../items";
 import { onSyncPass, online, runSyncPass, startSyncWatcher, SYNC_POLL_MS } from "../connectivity";
+
 
 const list: List = {
   id: "list-1",
@@ -12,13 +15,6 @@ const list: List = {
   createdAt: new Date().toISOString(),
   updatedAt: new Date().toISOString(),
 };
-
-function jsonResponse(body: unknown, status = 200): Response {
-  return new Response(JSON.stringify(body), {
-    status,
-    headers: { "Content-Type": "application/json" },
-  });
-}
 
 /**
  * Record every request the sync makes so tests can assert the exact server

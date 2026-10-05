@@ -86,6 +86,34 @@ describe("ListsView", () => {
     expect(router.currentRoute.value.name).toBe("sign-in");
     expect(wrapper.text()).toContain("Sign in");
   });
+
+  it("shows the Lists the user joined on the home; leaving lives in the List", async () => {
+    const joinedList: List = {
+      id: "list-2",
+      ownerId: "user-2",
+      name: "Holiday shop",
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    };
+    await db.syncList(joinedList);
+    await db.syncMembership({
+      listId: joinedList.id,
+      memberId: user.id,
+      joinedAt: new Date().toISOString(),
+    });
+    stubApi({ "GET /api/lists": { lists: [joinedList] } }, { user });
+
+    const { wrapper, router } = await mountApp("/");
+    await flushPromises();
+    await settle();
+
+    // Joined Lists are Lists first: they belong on the home, not in Settings.
+    expect(wrapper.text()).toContain("Holiday shop");
+
+    await router.push("/settings");
+    await flushPromises();
+    expect(wrapper.text()).not.toContain("Lists you joined");
+  });
 });
 
 describe("switching between Lists", () => {

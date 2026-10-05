@@ -1,9 +1,12 @@
 import "fake-indexeddb/auto";
 
+import { jsonResponse } from "./support/app";
+
 import type { List } from "@shopping-list/api/domain";
 import { localMembers, leaveList, memberIdsOf, syncMembershipsFromServer } from "../members";
 import { ShoppingDb } from "../store";
 import now from "@/utils/now";
+
 
 let dbNumber = 0;
 
@@ -48,13 +51,6 @@ describe("memberIdsOf", () => {
     expect(await memberIdsOf(db, list)).toEqual(["user-1", "user-3"]);
   });
 });
-
-function jsonResponse(body: unknown, status = 200): Response {
-  return new Response(JSON.stringify(body), {
-    status,
-    headers: { "Content-Type": "application/json" },
-  });
-}
 
 describe("syncMembershipsFromServer", () => {
   it("replaces the local Membership set with the server's truth", async () => {
