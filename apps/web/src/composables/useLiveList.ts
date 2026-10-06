@@ -14,15 +14,13 @@ import { db } from "../db";
  * List at all.
  */
 export function useLiveList(listId: Ref<string>): Ref<List | null> {
-  const list = ref<List | null>(null) as Ref<List | null>;
-  let subscription: { unsubscribe(): void } | null = null;
+  const list = ref<List | null>(null);
 
   const stop = watch(
     listId,
-    (id) => {
-      subscription?.unsubscribe();
+    (id, _prev, onCleanup) => {
       list.value = null;
-      subscription = liveQuery(() => db.getList(id)).subscribe({
+      const subscription = liveQuery(() => db.getList(id)).subscribe({
         next: (loaded: List | undefined) => {
           list.value = loaded ?? null;
         },
@@ -30,15 +28,12 @@ export function useLiveList(listId: Ref<string>): Ref<List | null> {
           console.error("Reading the list failed", err);
         },
       });
+      onCleanup(() => subscription.unsubscribe());
     },
     { immediate: true },
   );
 
-  onScopeDispose(() => {
-    stop();
-    subscription?.unsubscribe();
-    subscription = null;
-  });
+  onScopeDispose(stop);
 
   return list;
 }

@@ -11,15 +11,13 @@ import { db } from "../db";
  * another List are never shown.
  */
 export function useLiveItems(listId: Ref<string>): Ref<Item[]> {
-  const items = ref<Item[]>([]) as Ref<Item[]>;
-  let subscription: { unsubscribe(): void } | null = null;
+  const items = ref<Item[]>([]);
 
   const stop = watch(
     listId,
-    (id) => {
-      subscription?.unsubscribe();
+    (id, _prev, onCleanup) => {
       items.value = [];
-      subscription = liveQuery(() => db.getItems(id)).subscribe({
+      const subscription = liveQuery(() => db.getItems(id)).subscribe({
         next: (rows: Item[]) => {
           items.value = rows;
         },
@@ -27,15 +25,12 @@ export function useLiveItems(listId: Ref<string>): Ref<Item[]> {
           console.error("Reading the items failed", err);
         },
       });
+      onCleanup(() => subscription.unsubscribe());
     },
     { immediate: true },
   );
 
-  onScopeDispose(() => {
-    stop();
-    subscription?.unsubscribe();
-    subscription = null;
-  });
+  onScopeDispose(stop);
 
   return items;
 }

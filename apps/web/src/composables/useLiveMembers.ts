@@ -14,15 +14,13 @@ import { localMembers } from "../members";
  * Members of another List are never shown.
  */
 export function useLiveMembers(listId: Ref<string>): Ref<MemberDetails[]> {
-  const members = ref<MemberDetails[]>([]) as Ref<MemberDetails[]>;
-  let subscription: { unsubscribe(): void } | null = null;
+  const members = ref<MemberDetails[]>([]);
 
   const stop = watch(
     listId,
-    (id) => {
-      subscription?.unsubscribe();
+    (id, _prev, onCleanup) => {
       members.value = [];
-      subscription = liveQuery(async () => {
+      const subscription = liveQuery(async () => {
         const list = await db.getList(id);
         return list ? await localMembers(db, list) : [];
       }).subscribe({
@@ -33,15 +31,12 @@ export function useLiveMembers(listId: Ref<string>): Ref<MemberDetails[]> {
           console.error("Reading the members failed", err);
         },
       });
+      onCleanup(() => subscription.unsubscribe());
     },
     { immediate: true },
   );
 
-  onScopeDispose(() => {
-    stop();
-    subscription?.unsubscribe();
-    subscription = null;
-  });
+  onScopeDispose(stop);
 
   return members;
 }

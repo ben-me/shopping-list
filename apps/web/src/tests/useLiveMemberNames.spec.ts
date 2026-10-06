@@ -1,7 +1,7 @@
 import "fake-indexeddb/auto";
 
 import { effectScope } from "vue";
-import { useLiveMemberNames } from "../composables/useLiveMemberNames";
+import { useLiveMemberNames } from "../views/PaymentsView.vue";
 import { db } from "../db";
 import { settle } from "./support/app";
 

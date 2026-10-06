@@ -11,15 +11,13 @@ import { db } from "../db";
  * rows belonging to another List are never shown.
  */
 export function useLivePayments(listId: Ref<string>): Ref<Payment[]> {
-  const payments = ref<Payment[]>([]) as Ref<Payment[]>;
-  let subscription: { unsubscribe(): void } | null = null;
+  const payments = ref<Payment[]>([]);
 
   const stop = watch(
     listId,
-    (id) => {
-      subscription?.unsubscribe();
+    (id, _prev, onCleanup) => {
       payments.value = [];
-      subscription = liveQuery(async () => (await db.getPayments(id)).reverse()).subscribe({
+      const subscription = liveQuery(async () => (await db.getPayments(id)).reverse()).subscribe({
         next: (rows: Payment[]) => {
           payments.value = rows;
         },
@@ -27,15 +25,12 @@ export function useLivePayments(listId: Ref<string>): Ref<Payment[]> {
           console.error("Reading the payments failed", err);
         },
       });
+      onCleanup(() => subscription.unsubscribe());
     },
     { immediate: true },
   );
 
-  onScopeDispose(() => {
-    stop();
-    subscription?.unsubscribe();
-    subscription = null;
-  });
+  onScopeDispose(stop);
 
   return payments;
 }
