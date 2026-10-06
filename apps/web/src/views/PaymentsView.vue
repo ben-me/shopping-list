@@ -1,39 +1,6 @@
-<script lang="ts">
-// Only this screen reads the Member names, so the composable lives with its
-// single reader instead of in src/composables.
-import { liveQuery } from "dexie";
-import { onScopeDispose, ref, type Ref } from "vue";
-import { db } from "../db";
-
-/**
- * Every Member name the device holds, keyed by Member id: names belong to the
- * Member, not to a List, so a name stays readable after its holder has left a
- * List — their Payments do. Dexie hands the current set back whenever
- * `memberNames` is written, so a Sync that refreshes a name reaches the rows
- * already on screen. Empty until the first read.
- */
-export function useLiveMemberNames(): Ref<Record<string, string>> {
-  const names = ref<Record<string, string>>({});
-  const subscription = liveQuery(() => db.getMemberNames()).subscribe({
-    next: (loaded: Record<string, string>) => {
-      names.value = loaded;
-    },
-    error: (err: unknown) => {
-      console.error("Reading the member names failed", err);
-    },
-  });
-
-  onScopeDispose(() => {
-    subscription.unsubscribe();
-  });
-
-  return names;
-}
-</script>
-
 <script setup lang="ts">
-// Vue (`ref` and `db` are imported by the block above and shared with this one)
-import { computed, onMounted } from "vue";
+import { computed, onMounted, onScopeDispose, ref, type Ref } from "vue";
+import { liveQuery } from "dexie";
 import { useRoute } from "vue-router";
 
 // Domain types
@@ -46,6 +13,7 @@ import { syncMembershipsFromServer, UNKNOWN_MEMBER_NAME } from "../members";
 import { addPayment, removePayment, syncPaymentsFromServer, updatePayment } from "../payments";
 import { syncOutbox } from "../lists";
 import { runSyncPass, useSyncPass } from "../connectivity";
+import { db } from "../db";
 import { session } from "../session";
 import { computeOwed } from "../utils/computeOwed";
 import { ignoreRejection, logRejection } from "../utils/fireAndForget";
@@ -153,6 +121,33 @@ onMounted(() => {
   // Payments and Memberships, but not the app-wide Lists index or inbox.
   void ignoreRejection(runSyncPass(db, "list"));
 });
+
+// Only this screen reads the Member names, so the composable lives with its
+// single reader instead of in src/composables.
+/**
+ * Every Member name the device holds, keyed by Member id: names belong to the
+ * Member, not to a List, so a name stays readable after its holder has left a
+ * List — their Payments do. Dexie hands the current set back whenever
+ * `memberNames` is written, so a Sync that refreshes a name reaches the rows
+ * already on screen. Empty until the first read.
+ */
+function useLiveMemberNames(): Ref<Record<string, string>> {
+  const names = ref<Record<string, string>>({});
+  const subscription = liveQuery(() => db.getMemberNames()).subscribe({
+    next: (loaded: Record<string, string>) => {
+      names.value = loaded;
+    },
+    error: (err: unknown) => {
+      console.error("Reading the member names failed", err);
+    },
+  });
+
+  onScopeDispose(() => {
+    subscription.unsubscribe();
+  });
+
+  return names;
+}
 </script>
 
 <template>
