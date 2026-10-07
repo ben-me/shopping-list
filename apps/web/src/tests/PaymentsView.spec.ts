@@ -87,8 +87,6 @@ describe("PaymentsView", () => {
     await flushPromises();
     expect(wrapper.find("h1").text()).toBe("Household");
 
-    // The layout outlives its screens, so switching sections never reads the
-    // List again and the app bar cannot flash an empty title.
     await router.push(`/list/${list.id}/payments`);
     await flushPromises();
     expect(wrapper.find("h1").text()).toBe("Household");
@@ -102,7 +100,6 @@ describe("PaymentsView", () => {
     const paymentsTab = wrapper.find('a[href="/list/list-1/payments"]');
     expect(paymentsTab.text()).toBe("Payments");
 
-    // The Payments screen is not rendered on the Items screen at all.
     expect(wrapper.find('input[name="payment-amount"]').exists()).toBe(false);
     expect(wrapper.find(".total-paid").exists()).toBe(false);
   });
@@ -200,7 +197,6 @@ describe("PaymentsView", () => {
       paidAt: expect.stringContaining("2026-02-03"),
     });
 
-    // Deleting my Payment removes it; theirs remains.
     await mine!.find('button[name="delete-payment"]').trigger("click");
     await flushPromises();
     await settle();
@@ -291,8 +287,6 @@ describe("PaymentsView", () => {
 
   it("names a departed Member's Payment, whose Membership is gone but whose name is not", async () => {
     stubOfflineServer();
-    // Ada's Membership is gone, so the pot divides across the Owner alone —
-    // but her Payment stays in it, and the row still says whose it was.
     await db.putMemberNames([{ memberId: "user-2", name: "Ada" }]);
     await db.putPayment({
       id: "pay-departed",
@@ -410,8 +404,6 @@ describe("PaymentsView", () => {
   });
 
   it("re-divides your own net as Memberships reach the Store", async () => {
-    // The Memberships and the Payment come from the Store, so the server has
-    // nothing to add: the screen divides the pot it finds there.
     stubOfflineServer();
 
     await db.syncMembership({
@@ -437,7 +429,6 @@ describe("PaymentsView", () => {
     expect(wrapper.find(".own-standing").text()).toContain("You are owed");
     expect(wrapper.find(".own-standing").text()).toContain("6,00");
 
-    // A third Member joins; the pot re-divides for them.
     await db.syncMembership({
       listId: list.id,
       memberId: "user-3",
