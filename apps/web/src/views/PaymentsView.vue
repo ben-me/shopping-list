@@ -1,12 +1,12 @@
 <script setup lang="ts">
-import { computed, onMounted, onScopeDispose, ref, type Ref } from "vue";
-import { liveQuery } from "dexie";
+import { computed, onMounted, ref } from "vue";
 import { useRoute } from "vue-router";
 
 // Domain types
 import type { Payment } from "@shopping-list/api/domain";
 
 // Cross-file logic
+import { useDexieLiveData } from "../composables/useDexieLiveData";
 import { useLiveMembers } from "../composables/useLiveMembers";
 import { useLivePayments } from "../composables/useLivePayments";
 import { syncMembershipsFromServer, UNKNOWN_MEMBER_NAME } from "../members";
@@ -32,7 +32,9 @@ const listId = computed(() => String(route.params.listId ?? ""));
 // Live reads
 const members = useLiveMembers(listId);
 const payments = useLivePayments(listId);
-const memberNames = useLiveMemberNames();
+
+// Only this screen reads the Member names, so the read lives with its one reader.
+const memberNames = useDexieLiveData([], () => db.getMemberNames(), {});
 
 // Form state
 const paymentForm = ref({
@@ -42,8 +44,6 @@ const paymentForm = ref({
 const paymentError = ref<string | null>(null);
 
 // Standing
-/** The Split divides across the Members the List has now; a row is labelled by
- *  name, and a name outlives the Membership that carried it. */
 const memberIds = computed(() => members.value.map((member) => member.memberId));
 const standing = computed(() => computeOwed(memberIds.value, payments.value));
 
@@ -55,8 +55,7 @@ const myStanding = computed(() => {
 });
 
 // Helpers
-/** The day as an instant, noon so a timezone either side of UTC cannot move it.
- *  A day that is not there stays a day that is not there: the form says so. */
+// Noon, so a timezone either side of UTC cannot move the day.
 const isoFromDate = (date: string) =>
   date === "" ? "" : new Date(`${date}T12:00:00.000Z`).toISOString();
 const isOwn = (payment: Payment) => payment.memberId === session.user?.id;
@@ -112,42 +111,15 @@ async function onDeletePayment(payment: Payment) {
 // Sync wiring and lifecycle
 useSyncPass(async (db) => {
   await ignoreRejection(syncPaymentsFromServer(db, listId.value));
-  // A new Member redivides the standing, and brings their name with it.
+  // A new Member redivides the standing and brings their name with it.
   await ignoreRejection(syncMembershipsFromServer(db, listId.value));
 });
 
 onMounted(() => {
   // A list-scoped pass: this screen drains the outbox and pulls its own
-  // Payments and Memberships, but not the app-wide Lists index or inbox.
+  // Payments and Memberships, not the app-wide Lists index or inbox.
   void ignoreRejection(runSyncPass(db, "list"));
 });
-
-// Only this screen reads the Member names, so the composable lives with its
-// single reader instead of in src/composables.
-/**
- * Every Member name the device holds, keyed by Member id: names belong to the
- * Member, not to a List, so a name stays readable after its holder has left a
- * List — their Payments do. Dexie hands the current set back whenever
- * `memberNames` is written, so a Sync that refreshes a name reaches the rows
- * already on screen. Empty until the first read.
- */
-function useLiveMemberNames(): Ref<Record<string, string>> {
-  const names = ref<Record<string, string>>({});
-  const subscription = liveQuery(() => db.getMemberNames()).subscribe({
-    next: (loaded: Record<string, string>) => {
-      names.value = loaded;
-    },
-    error: (err: unknown) => {
-      console.error("Reading the member names failed", err);
-    },
-  });
-
-  onScopeDispose(() => {
-    subscription.unsubscribe();
-  });
-
-  return names;
-}
 </script>
 
 <template>

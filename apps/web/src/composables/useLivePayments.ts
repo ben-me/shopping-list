@@ -1,36 +1,9 @@
-import { liveQuery } from "dexie";
-import { onScopeDispose, ref, watch, type Ref } from "vue";
+import type { Ref } from "vue";
 import type { Payment } from "@shopping-list/api/domain";
 import { db } from "../db";
+import { useDexieLiveData } from "./useDexieLiveData";
 
-/**
- * The Payments of a List, straight from the database, newest first: Dexie hands
- * back the current rows whenever `payments` is written, so a record, an edit, a
- * delete and a Payment pulled from the server all reach the ledger through this
- * one subscription. Empty until the first read, and emptied on a List change so
- * rows belonging to another List are never shown.
- */
+/** The Payments of a List, live from the Store, newest first. */
 export function useLivePayments(listId: Ref<string>): Ref<Payment[]> {
-  const payments = ref<Payment[]>([]);
-
-  const stop = watch(
-    listId,
-    (id, _prev, onCleanup) => {
-      payments.value = [];
-      const subscription = liveQuery(async () => (await db.getPayments(id)).reverse()).subscribe({
-        next: (rows: Payment[]) => {
-          payments.value = rows;
-        },
-        error: (err: unknown) => {
-          console.error("Reading the payments failed", err);
-        },
-      });
-      onCleanup(() => subscription.unsubscribe());
-    },
-    { immediate: true },
-  );
-
-  onScopeDispose(stop);
-
-  return payments;
+  return useDexieLiveData([listId], async () => (await db.getPayments(listId.value)).reverse(), []);
 }

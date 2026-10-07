@@ -1,36 +1,9 @@
-import { liveQuery } from "dexie";
-import { onScopeDispose, ref, watch, type Ref } from "vue";
+import type { Ref } from "vue";
 import type { Item } from "@shopping-list/api/domain";
 import { db } from "../db";
+import { useDexieLiveData } from "./useDexieLiveData";
 
-/**
- * The Items of a List, straight from the database: Dexie hands back the current
- * rows whenever `items` is written, so a tap, an add, a remove and a copy
- * arriving from the server all reach the screen through this one subscription.
- * Empty until the first read, and emptied on a List change so rows belonging to
- * another List are never shown.
- */
+/** The Items of a List, live from the Store. */
 export function useLiveItems(listId: Ref<string>): Ref<Item[]> {
-  const items = ref<Item[]>([]);
-
-  const stop = watch(
-    listId,
-    (id, _prev, onCleanup) => {
-      items.value = [];
-      const subscription = liveQuery(() => db.getItems(id)).subscribe({
-        next: (rows: Item[]) => {
-          items.value = rows;
-        },
-        error: (err: unknown) => {
-          console.error("Reading the items failed", err);
-        },
-      });
-      onCleanup(() => subscription.unsubscribe());
-    },
-    { immediate: true },
-  );
-
-  onScopeDispose(stop);
-
-  return items;
+  return useDexieLiveData([listId], () => db.getItems(listId.value), []);
 }

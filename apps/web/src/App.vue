@@ -4,16 +4,11 @@ import { onSyncPass, online, startSyncWatcher } from "./connectivity";
 import { db } from "./db";
 import { refreshPendingInvitationCount } from "./pending-invitations";
 
-// Sync silently in the background for as long as the app is open: queued
+// Sync quietly in the background for as long as the app is open: queued
 // offline writes drain and remote state is pulled in whenever the connection
-// returns — no user action, no error surface.
+// returns.
 let stopSyncWatcher: (() => void) | null = null;
-// Invitations only ever arrive from the server, so every **global** Sync pass
-// is the moment the Settings badge can learn about a new one. The badge is
-// app-wide state that list screens never render, so it is marked globalOnly:
-// it runs on the app-wide passes (Lists home, Settings, reconnect, the
-// background poll) but not on the lighter passes List screens start. Never
-// blocks them.
+// Global passes only: the badge is app-wide state the List screens never render.
 let stopInviteCountRefresh: (() => void) | null = null;
 
 onMounted(() => {

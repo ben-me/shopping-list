@@ -59,8 +59,7 @@ const standing = computed(() =>
   ),
 );
 
-/* The access list doubles as the standing table: each Member carries their Share
-   and Owed figure. A lone Member has neither; the screen shows the total. */
+/* The access list doubles as the standing table. */
 const memberRows = computed(() => {
   const { shareInCents, owed } = standing.value;
   const figures = new Map(owed.map((figure) => [figure.memberId, figure.amountInCents]));
@@ -90,10 +89,6 @@ const totalPaid = computed(() =>
 const showInvitations = computed(() => loaded.value && isOwner());
 
 // Helpers
-/**
- * How this screen words an Owed figure: a Member row names them in the third
- * person and carries the figure inside the wording.
- */
 const owedVoice = {
   owes: (figureInCents: number) => `owes ${formatEuro(figureInCents)}`,
   owed: (figureInCents: number) => `is owed ${formatEuro(figureInCents)}`,
@@ -128,7 +123,7 @@ async function onRevoke(invitation: ListInvitation) {
   await logRejection(loadInvitations(), "Loading the invitations");
 }
 
-/* Online-only, like the invite flow: the server drops the Membership first. */
+// Online-only: the server drops the Membership first.
 async function onLeave() {
   const left = await submit({ error, busy: leavePending }, "Could not leave the list", () =>
     leaveList(db, listId.value),
@@ -147,11 +142,8 @@ useSyncPass(async () => {
 });
 
 onMounted(() => {
-  // Invitations only ever come from the server, so they keep a read of their
-  // own; the Members and Payments above are read live and repaint themselves.
-  // The Membership pull names the Members the Store holds no name for, which
-  // is every one of them on a cold start, and replaces the set when someone
-  // has joined or left elsewhere.
+  // Pull Memberships so a cold start names its Members, and load the
+  // server-held Invitations; the live reads above repaint themselves.
   void ignoreRejection(syncMembershipsFromServer(db, listId.value));
   logRejection(loadInvitations(), "Loading the invitations");
 });
