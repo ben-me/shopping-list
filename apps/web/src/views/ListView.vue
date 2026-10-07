@@ -4,7 +4,7 @@ import { useRoute } from "vue-router";
 import type { Item } from "@shopping-list/api/domain";
 import ListScreen from "../components/ListScreen.vue";
 import { runSyncPass, useSyncPass } from "../connectivity";
-import { useLiveItems } from "../composables/useLiveItems";
+import { useDexieLiveData } from "../composables/useDexieLiveData";
 import { db } from "../db";
 import { addItem, removeItem, syncItemsFromServer } from "../items";
 import { syncOutbox } from "../lists";
@@ -13,7 +13,7 @@ import { submit } from "../utils/submit";
 
 const route = useRoute();
 const listId = computed(() => String(route.params.listId ?? ""));
-const items = useLiveItems(listId);
+const items = useDexieLiveData([listId], () => db.getItems(listId.value), []);
 const itemForm = ref({
   name: "",
 });
@@ -30,13 +30,8 @@ async function onAdd() {
   ignoreRejection(syncOutbox(db));
 }
 
-/**
- * The tick box has already flipped by the time this runs, so the new state is
- * read from the input - `item` still holds the old one. Not awaited: the live
- * query redraws the row when the write lands. A failed write leaves the
- * database unchanged, so the box is put back by hand, since nothing would
- * redraw it.
- */
+// The tick box has already flipped; the new state is read from the input.
+// A failed write leaves the database unchanged, so the box is put back by hand.
 function onToggle(item: Item, event: Event) {
   const input = event.target as HTMLInputElement;
   ignoreRejection(

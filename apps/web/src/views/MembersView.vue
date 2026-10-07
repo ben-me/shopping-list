@@ -1,13 +1,18 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from "vue";
+// Vue
+import { computed, onMounted, ref, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
-import type { ListInvitation, MemberDetails, Payment } from "@shopping-list/api/domain";
-import ListScreen from "../components/ListScreen.vue";
-import InvitationsPanel from "../components/InvitationsPanel.vue";
+
+// Domain types
+import type { ListInvitation } from "@shopping-list/api/domain";
+
+// Cross-file logic
+import { useLiveMembers } from "../composables/useLiveMembers";
+import { useLivePayments } from "../composables/useLivePayments";
+import { leaveList, syncMembershipsFromServer } from "../members";
+import { createInvitation, listInvitations, revokeInvitation } from "../invitations";
 import { useSyncPass } from "../connectivity";
 import { db } from "../db";
-import { createInvitation, listInvitations, revokeInvitation } from "../invitations";
-import { leaveList, localMembers, syncMembershipsFromServer } from "../members";
 import { session } from "../session";
 import { computeOwed } from "../utils/computeOwed";
 import { ignoreRejection, logRejection } from "../utils/fireAndForget";
@@ -15,15 +20,38 @@ import { formatEuro } from "../utils/formatEuro";
 import { owedPresentation } from "../utils/owedPresentation";
 import { submit } from "../utils/submit";
 
+// Component-local
+import ListScreen from "../components/ListScreen.vue";
+import InvitationsPanel from "../components/InvitationsPanel.vue";
+
+// Route input
 const route = useRoute();
 const router = useRouter();
 const listId = computed(() => String(route.params.listId ?? ""));
-const members = ref<MemberDetails[]>([]);
+
+// Live reads
+const members = useLiveMembers(listId);
+const payments = useLivePayments(listId);
+
+// Local state
 const invitations = ref<ListInvitation[]>([]);
-const payments = ref<Payment[]>([]);
 const error = ref<string | null>(null);
 const loaded = ref(false);
+/** The Store has answered once: the rows below are the List's Members, not a gap. */
+watch(
+  members,
+  () => {
+    loaded.value = true;
+  },
+  { once: true },
+);
+const leavePending = ref(false);
+const invitePending = ref(false);
+const inviteForm = ref({
+  email: "",
+});
 
+// Standing
 const standing = computed(() =>
   computeOwed(
     members.value.map((member) => member.memberId),
@@ -31,18 +59,7 @@ const standing = computed(() =>
   ),
 );
 
-/**
- * How this screen words an Owed figure: a Member row names them in the third
- * person and carries the figure inside the wording.
- */
-const owedVoice = {
-  owes: (figureInCents: number) => `owes ${formatEuro(figureInCents)}`,
-  owed: (figureInCents: number) => `is owed ${formatEuro(figureInCents)}`,
-  settled: "settled",
-};
-
-/* The access list doubles as the standing table: each Member carries their Share
-   and Owed figure. A lone Member has neither; the screen shows the total. */
+/* The access list doubles as the standing table. */
 const memberRows = computed(() => {
   const { shareInCents, owed } = standing.value;
   const figures = new Map(owed.map((figure) => [figure.memberId, figure.amountInCents]));
@@ -68,41 +85,22 @@ const totalPaid = computed(() =>
   standing.value.shareInCents === null ? formatEuro(standing.value.totalInCents) : null,
 );
 
-const leavePending = ref(false);
-const invitePending = ref(false);
-const inviteForm = ref({
-  email: "",
-});
-
-/** The server always lists the Owner first, so the first row names them. */
-const isOwner = () => members.value[0]?.memberId === session.user?.id;
-
 /** The Owner panel and the leave action are opposites: exactly one of them shows. */
 const showInvitations = computed(() => loaded.value && isOwner());
 
-/** The server's Members while online; the Store's when the pull throws. */
-async function loadMembers() {
-  try {
-    members.value = await syncMembershipsFromServer(db, listId.value);
-  } catch {
-    const list = await db.getList(listId.value);
-    members.value = list ? await localMembers(db, list) : [];
-  }
-}
+// Helpers
+const owedVoice = {
+  owes: (figureInCents: number) => `owes ${formatEuro(figureInCents)}`,
+  owed: (figureInCents: number) => `is owed ${formatEuro(figureInCents)}`,
+  settled: "settled",
+};
 
+/** The Owner is the first Member the Store lists, so the first row names them. */
+const isOwner = () => members.value[0]?.memberId === session.user?.id;
+
+// Handlers
 async function loadInvitations() {
   invitations.value = await listInvitations(listId.value);
-}
-
-async function loadPayments() {
-  payments.value = await db.getPayments(listId.value);
-}
-
-async function loadPanel() {
-  await logRejection(loadMembers(), "Loading the members");
-  await logRejection(loadInvitations(), "Loading the invitations");
-  await logRejection(loadPayments(), "Loading the payments");
-  loaded.value = true;
 }
 
 async function onInvite() {
@@ -125,7 +123,7 @@ async function onRevoke(invitation: ListInvitation) {
   await logRejection(loadInvitations(), "Loading the invitations");
 }
 
-/* Online-only, like the invite flow: the server drops the Membership first. */
+// Online-only: the server drops the Membership first.
 async function onLeave() {
   const left = await submit({ error, busy: leavePending }, "Could not leave the list", () =>
     leaveList(db, listId.value),
@@ -137,16 +135,17 @@ async function onLeave() {
   await router.push({ name: "lists" });
 }
 
+// Sync wiring and lifecycle
 useSyncPass(async () => {
-  await ignoreRejection(loadMembers());
+  await ignoreRejection(syncMembershipsFromServer(db, listId.value));
   await ignoreRejection(loadInvitations());
-  await ignoreRejection(loadPayments());
 });
 
 onMounted(() => {
-  // No Sync pass of its own: loadPanel reads what this screen renders, and a
-  // pass would re-pull it plus the app-wide Lists and inbox it does not show.
-  logRejection(loadPanel(), "Loading the members");
+  // Pull Memberships so a cold start names its Members, and load the
+  // server-held Invitations; the live reads above repaint themselves.
+  void ignoreRejection(syncMembershipsFromServer(db, listId.value));
+  logRejection(loadInvitations(), "Loading the invitations");
 });
 </script>
 

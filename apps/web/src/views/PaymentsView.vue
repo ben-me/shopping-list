@@ -1,14 +1,19 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from "vue";
 import { useRoute } from "vue-router";
+
+// Domain types
 import type { Payment } from "@shopping-list/api/domain";
-import ListScreen from "../components/ListScreen.vue";
-import PaymentRow from "../components/PaymentRow.vue";
+
+// Cross-file logic
+import { useDexieLiveData } from "../composables/useDexieLiveData";
+import { useLiveMembers } from "../composables/useLiveMembers";
+import { useLivePayments } from "../composables/useLivePayments";
+import { syncMembershipsFromServer, UNKNOWN_MEMBER_NAME } from "../members";
+import { addPayment, removePayment, syncPaymentsFromServer, updatePayment } from "../payments";
+import { syncOutbox } from "../lists";
 import { runSyncPass, useSyncPass } from "../connectivity";
 import { db } from "../db";
-import { syncOutbox } from "../lists";
-import { memberIdsOf, syncMembershipsFromServer, UNKNOWN_MEMBER_NAME } from "../members";
-import { addPayment, removePayment, syncPaymentsFromServer, updatePayment } from "../payments";
 import { session } from "../session";
 import { computeOwed } from "../utils/computeOwed";
 import { ignoreRejection, logRejection } from "../utils/fireAndForget";
@@ -16,36 +21,31 @@ import { formatEuro } from "../utils/formatEuro";
 import { owedPresentation } from "../utils/owedPresentation";
 import { submit } from "../utils/submit";
 
+// Component-local
+import ListScreen from "../components/ListScreen.vue";
+import PaymentRow from "../components/PaymentRow.vue";
+
+// Route input
 const route = useRoute();
 const listId = computed(() => String(route.params.listId ?? ""));
-const members = ref<string[]>([]);
-const payments = ref<Payment[]>([]);
-const memberNames = ref<Record<string, string>>({});
+
+// Live reads
+const members = useLiveMembers(listId);
+const payments = useLivePayments(listId);
+
+// Only this screen reads the Member names, so the read lives with its one reader.
+const memberNames = useDexieLiveData([], () => db.getMemberNames(), {});
+
+// Form state
 const paymentForm = ref({
   amount: "",
   date: new Date().toISOString().slice(0, 10),
 });
 const paymentError = ref<string | null>(null);
 
-/** The day as an instant, noon so a timezone either side of UTC cannot move it.
- *  A day that is not there stays a day that is not there: the form says so. */
-const isoFromDate = (date: string) =>
-  date === "" ? "" : new Date(`${date}T12:00:00.000Z`).toISOString();
-const isOwn = (payment: Payment) => payment.memberId === session.user?.id;
-const standing = computed(() => computeOwed(members.value, payments.value));
-
-const memberLabel = (memberId: string) => {
-  if (memberId === session.user?.id) {
-    return "You";
-  }
-  return memberNames.value[memberId] ?? UNKNOWN_MEMBER_NAME;
-};
-
-const userPaymentStatus = {
-  owes: () => "You owe",
-  owed: () => "You are owed",
-  settled: "Settled up",
-};
+// Standing
+const memberIds = computed(() => members.value.map((member) => member.memberId));
+const standing = computed(() => computeOwed(memberIds.value, payments.value));
 
 /** The Owed wording for your own net: what you hand over, or what you're owed. */
 const myStanding = computed(() => {
@@ -54,16 +54,24 @@ const myStanding = computed(() => {
   return figure ? owedPresentation(figure.amountInCents, userPaymentStatus) : null;
 });
 
-async function loadMembers() {
-  const [list, names] = await Promise.all([db.getList(listId.value), db.getMemberNames()]);
-  members.value = list ? await memberIdsOf(db, list) : [];
-  memberNames.value = names;
-}
+// Helpers
+// Noon, so a timezone either side of UTC cannot move the day.
+const isoFromDate = (date: string) =>
+  date === "" ? "" : new Date(`${date}T12:00:00.000Z`).toISOString();
+const isOwn = (payment: Payment) => payment.memberId === session.user?.id;
+const memberLabel = (memberId: string) => {
+  if (memberId === session.user?.id) {
+    return "You";
+  }
+  return memberNames.value[memberId] ?? UNKNOWN_MEMBER_NAME;
+};
+const userPaymentStatus = {
+  owes: () => "You owe",
+  owed: () => "You are owed",
+  settled: "Settled up",
+};
 
-async function loadPayments() {
-  payments.value = (await db.getPayments(listId.value)).slice().reverse();
-}
-
+// Handlers
 async function onRecordPayment() {
   const user = session.user;
   if (!user) {
@@ -83,7 +91,6 @@ async function onRecordPayment() {
     return;
   }
   paymentForm.value.amount = "";
-  await logRejection(loadPayments(), "Loading the payments");
   ignoreRejection(syncOutbox(db));
 }
 
@@ -93,29 +100,24 @@ async function onSaveEdit(payment: Payment, amount: string, date: string) {
     amountInEur: amount,
     paidAt: isoFromDate(date),
   });
-  await logRejection(loadPayments(), "Loading the payments");
   ignoreRejection(syncOutbox(db));
 }
 
 async function onDeletePayment(payment: Payment) {
   await logRejection(removePayment(db, payment), "Removing the payment");
-  await logRejection(loadPayments(), "Loading the payments");
   ignoreRejection(syncOutbox(db));
 }
 
+// Sync wiring and lifecycle
 useSyncPass(async (db) => {
   await ignoreRejection(syncPaymentsFromServer(db, listId.value));
-  // A new Member redivides the standing, and brings their name with it.
+  // A new Member redivides the standing and brings their name with it.
   await ignoreRejection(syncMembershipsFromServer(db, listId.value));
-  await logRejection(loadMembers(), "Loading the members");
-  await logRejection(loadPayments(), "Loading the payments");
 });
 
 onMounted(() => {
-  logRejection(loadMembers(), "Loading the members");
-  logRejection(loadPayments(), "Loading the payments");
   // A list-scoped pass: this screen drains the outbox and pulls its own
-  // Payments and Memberships, but not the app-wide Lists index or inbox.
+  // Payments and Memberships, not the app-wide Lists index or inbox.
   void ignoreRejection(runSyncPass(db, "list"));
 });
 </script>
