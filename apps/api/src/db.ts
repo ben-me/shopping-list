@@ -1,16 +1,16 @@
 import { drizzle, type DrizzleD1Database } from "drizzle-orm/d1";
-import * as schema from "./schema";
+import { relations } from "./relations";
 
-/** A drizzle client over the D1 driver, typed with the full domain schema. */
-export type Db = DrizzleD1Database<typeof schema>;
+/** A drizzle client over the D1 driver, typed with the full domain relations. */
+export type Db = DrizzleD1Database<typeof relations>;
 
 /**
- * @param dbBinding the D1 binding from `env.devDb`
+ * @param dbBinding the D1 binding from `env.db`
  * @returns a drizzle client over the D1 driver, typed with the full schema so
  * callers get typed query helpers over every table.
  */
 export function createD1Connection(dbBinding: D1Database): Db {
-  return drizzle(dbBinding, { schema });
+  return drizzle(dbBinding, { relations });
 }
 
 /** ISO timestamp for persisted rows. */

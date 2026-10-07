@@ -6,7 +6,7 @@ import {
   text,
   uniqueIndex,
 } from "drizzle-orm/sqlite-core";
-import { relations, sql } from "drizzle-orm";
+import { sql } from "drizzle-orm";
 
 /**
  * Better Auth tables (user, session, account, verification) plus the Shopping
@@ -208,78 +208,3 @@ export const payments = sqliteTable(
   ],
 );
 
-// ───────────────── Relations ─────────────────────────────────────────────────
-
-export const userRelations = relations(user, ({ many }) => ({
-  sessions: many(session),
-  accounts: many(account),
-  ownedLists: many(lists),
-  memberships: many(memberships),
-  issuedInvitations: many(invitations),
-  payments: many(payments),
-}));
-
-export const sessionRelations = relations(session, ({ one }) => ({
-  user: one(user, {
-    fields: [session.userId],
-    references: [user.id],
-  }),
-}));
-
-export const accountRelations = relations(account, ({ one }) => ({
-  user: one(user, {
-    fields: [account.userId],
-    references: [user.id],
-  }),
-}));
-
-export const listsRelations = relations(lists, ({ one, many }) => ({
-  owner: one(user, {
-    fields: [lists.ownerId],
-    references: [user.id],
-  }),
-  memberships: many(memberships),
-  invitations: many(invitations),
-  items: many(items),
-  payments: many(payments),
-}));
-
-export const membershipsRelations = relations(memberships, ({ one }) => ({
-  list: one(lists, {
-    fields: [memberships.listId],
-    references: [lists.id],
-  }),
-  member: one(user, {
-    fields: [memberships.memberId],
-    references: [user.id],
-  }),
-}));
-
-export const invitationsRelations = relations(invitations, ({ one }) => ({
-  list: one(lists, {
-    fields: [invitations.listId],
-    references: [lists.id],
-  }),
-  invitedBy: one(user, {
-    fields: [invitations.invitedById],
-    references: [user.id],
-  }),
-}));
-
-export const itemsRelations = relations(items, ({ one }) => ({
-  list: one(lists, {
-    fields: [items.listId],
-    references: [lists.id],
-  }),
-}));
-
-export const paymentsRelations = relations(payments, ({ one }) => ({
-  list: one(lists, {
-    fields: [payments.listId],
-    references: [lists.id],
-  }),
-  member: one(user, {
-    fields: [payments.memberId],
-    references: [user.id],
-  }),
-}));

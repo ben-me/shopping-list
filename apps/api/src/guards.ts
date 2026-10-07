@@ -31,7 +31,7 @@ export async function requireUser(c: AppContext, next: Next) {
 }
 
 export async function requireMember(c: AppContext, next: Next) {
-  const db = createD1Connection(c.env.devDb);
+  const db = createD1Connection(c.env.db);
   const list = await getList(db, c.req.param("listId") ?? "");
   if (!list) {
     throw new NotFoundError("List not found");

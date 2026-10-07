@@ -11,7 +11,7 @@ export type { AppContext };
 
 export function getRequestContext(c: AppContext) {
   return {
-    db: createD1Connection(c.env.devDb),
+    db: createD1Connection(c.env.db),
     listId: c.req.param("listId") ?? "",
     itemId: c.req.param("itemId") ?? "",
     paymentId: c.req.param("paymentId") ?? "",

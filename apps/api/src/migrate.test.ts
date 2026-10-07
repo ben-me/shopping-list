@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { drizzle } from "drizzle-orm/d1";
 import { runMigrations, startMiniflare } from "./test-support";
 import * as schema from "./schema";
+import { relations } from "./relations";
 
 describe("domain schema migrations on D1", () => {
   let mf: Miniflare;
@@ -16,7 +17,7 @@ describe("domain schema migrations on D1", () => {
   });
 
   it("runs the versioned migrations against a fresh D1 database", async () => {
-    const binding = await mf.getD1Database("devDb");
+    const binding = await mf.getD1Database("db");
     await runMigrations(binding);
     const db = drizzle(binding);
 
@@ -42,9 +43,9 @@ describe("domain schema migrations on D1", () => {
   });
 
   it("builds a typed client over the migrated schema and round-trips the domain tables", async () => {
-    const binding = await mf.getD1Database("devDb");
+    const binding = await mf.getD1Database("db");
     await runMigrations(binding);
-    const db = drizzle(binding, { schema });
+    const db = drizzle(binding, { relations });
 
     const now = "2026-08-27T09:00:00.000Z";
 
@@ -89,21 +90,19 @@ describe("domain schema migrations on D1", () => {
       updatedAt: now,
     });
 
-    const item = await db.query.items.findFirst({ where: (t, { eq }) => eq(t.id, "it-1") });
-    const payment = await db.query.payments.findFirst({
-      where: (t, { eq }) => eq(t.id, "p-1"),
-    });
+    const item = await db.query.items.findFirst({ where: { id: "it-1" } });
+    const payment = await db.query.payments.findFirst({ where: { id: "p-1" } });
 
     expect(item).toMatchObject({ id: "it-1", listId: list.id, name: "Milk", checked: false });
     expect(payment).toMatchObject({ amountInCents: 1275, memberId: "u-buyer" });
   });
 
   it("is idempotent — running the migrations twice does not error or duplicate", async () => {
-    const binding = await mf.getD1Database("devDb");
+    const binding = await mf.getD1Database("db");
     await runMigrations(binding);
     await runMigrations(binding);
 
-    const db = drizzle(binding, { schema });
+    const db = drizzle(binding, { relations });
     const names = await db.all<{ name: string }>(
       `SELECT name FROM sqlite_master WHERE type = 'table'`,
     );

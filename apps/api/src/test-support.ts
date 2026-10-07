@@ -14,7 +14,7 @@ const migrationsFolder = fileURLToPath(new URL("../drizzle", import.meta.url).hr
 
 export function testEnvFor(dbBinding: D1Database): AuthEnv {
   return {
-    devDb: dbBinding,
+    db: dbBinding,
     BETTER_AUTH_SECRET: "0123456789abcdef0123456789abcdef",
     BETTER_AUTH_URL: "http://localhost:8787",
     BETTER_AUTH_TRUSTED_ORIGINS: "http://localhost:5173",
@@ -158,7 +158,7 @@ export async function wipeDomainTables(db: Db) {
 
 export async function startTestApp(dbName: string) {
   const mf = await startMiniflare(dbName);
-  const binding = await mf.getD1Database("devDb");
+  const binding = await mf.getD1Database("db");
   await runMigrations(binding);
   return {
     mf,
@@ -178,7 +178,7 @@ export async function startMiniflare(dbName: string) {
           script: `
             export default { fetch() { return new Response("ok"); } };
           `,
-          d1Databases: { devDb: dbName },
+          d1Databases: { db: dbName },
         },
       ],
     }),
