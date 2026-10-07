@@ -4,7 +4,7 @@ import { useRoute } from "vue-router";
 import type { Item } from "@shopping-list/api/domain";
 import ListScreen from "../components/ListScreen.vue";
 import { runSyncPass, useSyncPass } from "../connectivity";
-import { useLiveItems } from "../composables/useLiveItems";
+import { useDexieLiveData } from "../composables/useDexieLiveData";
 import { db } from "../db";
 import { addItem, removeItem, syncItemsFromServer } from "../items";
 import { syncOutbox } from "../lists";
@@ -13,7 +13,7 @@ import { submit } from "../utils/submit";
 
 const route = useRoute();
 const listId = computed(() => String(route.params.listId ?? ""));
-const items = useLiveItems(listId);
+const items = useDexieLiveData([listId], () => db.getItems(listId.value), []);
 const itemForm = ref({
   name: "",
 });

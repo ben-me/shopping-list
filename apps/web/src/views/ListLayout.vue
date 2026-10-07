@@ -3,7 +3,8 @@ import { computed } from "vue";
 import { useRoute } from "vue-router";
 import AppBar from "../components/AppBar.vue";
 import ListTabs from "../components/ListTabs.vue";
-import { useLiveList } from "../composables/useLiveList";
+import { useDexieLiveData } from "../composables/useDexieLiveData";
+import { db } from "../db";
 import { listColors, type ListColors } from "../utils/listColors";
 
 /**
@@ -13,7 +14,7 @@ import { listColors, type ListColors } from "../utils/listColors";
  */
 const route = useRoute();
 const listId = computed(() => String(route.params.listId ?? ""));
-const list = useLiveList(listId);
+const list = useDexieLiveData([listId], () => db.getList(listId.value), undefined);
 const colors = computed<ListColors | null>(() => (list.value ? listColors(list.value.id) : null));
 </script>
 

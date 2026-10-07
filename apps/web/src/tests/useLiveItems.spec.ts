@@ -2,7 +2,7 @@ import "fake-indexeddb/auto";
 
 import { effectScope, ref } from "vue";
 import type { Item } from "@shopping-list/api/domain";
-import { useLiveItems } from "../composables/useLiveItems";
+import { useDexieLiveData } from "../composables/useDexieLiveData";
 import { db } from "../db";
 import { settle } from "./support/app";
 
@@ -17,10 +17,12 @@ function item(id: string, name: string): Item {
   };
 }
 
-/** Mount the hook in its own scope, the way a screen's setup does. */
+/** Mount the read in its own scope, the way a screen's setup does. */
 function mountLiveItems(listId = ref("list-1")) {
   const scope = effectScope();
-  const items = scope.run(() => useLiveItems(listId))!;
+  const items = scope.run(() =>
+    useDexieLiveData([listId], () => db.getItems(listId.value), []),
+  )!;
   return { items, listId, stop: () => scope.stop() };
 }
 
