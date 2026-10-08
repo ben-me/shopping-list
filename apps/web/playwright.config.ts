@@ -1,13 +1,12 @@
 import { defineConfig, devices } from "@playwright/test";
 
 /**
- * The e2e stack runs on its own ports — set by `dev:e2e` in each package — and
- * its own D1 store, so a run never touches or collides with the dev stack on
- * :5173 / :8787. Exported for specs that send the better-auth CSRF origin.
+ * The e2e pins of the dev layout (:5173 / :8787 interactive), started by
+ * `dev:e2e` in apps/api. Exported for specs that send the better-auth CSRF
+ * origin.
  */
 export const WEB_ORIGIN = "http://localhost:5174";
-const API_ORIGIN = "http://localhost:8788";
-const API_HEALTH = `${API_ORIGIN}/health`;
+const API_HEALTH = "http://localhost:8788/health";
 
 export default defineConfig({
   testDir: "./e2e",
@@ -30,17 +29,12 @@ export default defineConfig({
 
   webServer: [
     {
-      // Fresh isolated D1 each run: the bootstrap spec needs an empty user table.
-      command:
-        "pnpm --filter @shopping-list/api run db:reset:e2e && pnpm --filter @shopping-list/api run db:migrate:e2e && pnpm --filter @shopping-list/api run dev:e2e",
+      // `dev:e2e` deletes the e2e stage's own state (not the shared local
+      // dir!), so every run starts on a fresh D1 with an empty user table.
+      command: "pnpm --filter @shopping-list/api run dev:e2e",
       url: API_HEALTH,
-      timeout: 120 * 1000,
-    },
-    {
-      command: "pnpm --filter @shopping-list/web run dev:e2e",
-      url: WEB_ORIGIN,
-      env: { API_PROXY_TARGET: API_ORIGIN },
-      timeout: 120 * 1000,
+      reuseExistingServer: !process.env.CI,
+      timeout: 180 * 1000,
     },
   ],
 });

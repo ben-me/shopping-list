@@ -1,60 +1,37 @@
-# dev/personal/shopping-list
+# Shopping List
 
-This template should help get you started developing with Vue 3 in Vite.
+A progressive web app for a household to share what they need to buy and keep
+track of who paid what. See [CONTEXT.md](CONTEXT.md) for the domain language
+and [docs/spec.md](docs/spec.md) for the product spec.
 
-## Type Support for `.vue` Imports in TS
+- **`apps/web`** — Vue SPA (vite), offline-first with Dexie + a PWA service worker
+- **`apps/api`** — hono API running as a Cloudflare Worker, backed by D1
 
-TypeScript cannot handle type information for `.vue` imports by default, so we replace the `tsc` CLI with `vue-tsc` for type checking. In editors, we need [Volar](https://marketplace.visualstudio.com/items?itemName=Vue.volar) to make the TypeScript language service aware of `.vue` types.
+## Development
 
-## Customize configuration
-
-See [Vite Configuration Reference](https://vite.dev/config/).
-
-## Project Setup
+Local dev and deployment run through [Alchemy](https://alchemy.run) (declared
+in [`alchemy.run.ts`](alchemy.run.ts)):
 
 ```sh
 pnpm install
+cp .env.example .env            # then set BETTER_AUTH_SECRET
+pnpm dev                        # API workerd on :8787 + vite on :5173 (proxies /api/*)
 ```
 
-### Compile and Hot-Reload for Development
+Data lives in the local D1 simulator (`.alchemy/local/`) — the deployed
+database is never touched by dev or e2e. The e2e suite runs the same layout as
+its own stage on :8788 / :5174 with a fresh local database per run.
+
+## Tests
 
 ```sh
-pnpm dev
+pnpm test            # unit + e2e
+pnpm test:unit       # unit only
+pnpm test:e2e        # playwright (starts its own isolated dev stack)
 ```
 
-### Type-Check, Compile and Minify for Production
+## Deploy
 
 ```sh
-pnpm build
-```
-
-### Run Unit Tests with [Vitest](https://vitest.dev/)
-
-```sh
-pnpm test:unit
-```
-
-### Run End-to-End Tests with [Playwright](https://playwright.dev)
-
-```sh
-# Install browsers for the first run
-npx playwright install
-
-# When testing on CI, must build the project first
-pnpm build
-
-# Runs the end-to-end tests
-pnpm test:e2e
-# Runs the tests only on Chromium
-pnpm test:e2e --project=chromium
-# Runs the tests of a specific file
-pnpm test:e2e tests/example.spec.ts
-# Runs the tests in debug mode
-pnpm test:e2e --debug
-```
-
-### Lint with [Oxlint](https://oxc.rs/docs/guide/usage/linter/)
-
-```sh
-pnpm lint
+pnpm deploy          # one Worker hosting the SPA + API, D1 created and migrated by Alchemy
 ```

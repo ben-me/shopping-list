@@ -16,17 +16,9 @@
     }
   },
   "scripts": {
-    "dev": "wrangler dev",
-    "dev:e2e": "wrangler dev --port 8788 --persist-to .wrangler/e2e --env-file .dev.vars.e2e --var BETTER_AUTH_URL:http://localhost:8788 --var BETTER_AUTH_TRUSTED_ORIGINS:http://localhost:5174",
-    "deploy": "wrangler deploy --minify",
-    "build": "wrangler deploy --dry-run",
-    "cf-typegen": "wrangler types --env-interface CloudflareBindings",
+    "dev": "cd ../.. && alchemy dev",
+    "dev:e2e": "cd ../.. && alchemy state delete -r ShoppingList/e2e && ALCHEMY_STAGE=e2e alchemy dev --stage e2e --env-file apps/api/.dev.vars.e2e",
     "db:generate": "drizzle-kit generate",
-    "db:migrate": "wrangler d1 migrations apply dev-db-shopping-list --local",
-    "db:migrate:remote": "wrangler d1 migrations apply dev-db-shopping-list --remote",
-    "db:reset": "rm -rf .wrangler/state/v3/d1",
-    "db:migrate:e2e": "wrangler d1 migrations apply dev-db-shopping-list --local --persist-to .wrangler/e2e",
-    "db:reset:e2e": "rm -rf .wrangler/e2e",
     "test:unit": "vitest run",
     "type-check": "tsc --noEmit",
     "fmt": "oxfmt",
@@ -37,18 +29,17 @@
   "dependencies": {
     "@better-auth/drizzle-adapter": "^1.7.1",
     "better-auth": "catalog:",
-    "drizzle-orm": "^0.45.2",
+    "drizzle-orm": "1.0.0-rc.5-ab785fc",
     "hono": "^4.13.5"
   },
   "devDependencies": {
     "@cloudflare/workers-types": "^5.20260826.1",
     "@types/node": "catalog:",
-    "drizzle-kit": "^0.31.10",
+    "drizzle-kit": "1.0.0-rc.5-ab785fc",
     "miniflare": "5.20260825.0-alpha",
     "oxfmt": "catalog:",
     "oxlint": "catalog:",
     "typescript": "catalog:",
-    "vitest": "catalog:",
-    "wrangler": "^4.110.0"
+    "vitest": "catalog:"
   }
 }

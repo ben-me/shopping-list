@@ -25,6 +25,13 @@ export type Bindings = AuthEnv;
 export function createApp() {
   const app = new Hono<{ Bindings: AuthEnv; Variables: AppVariables }>();
 
+  // A cached GET can replay pre-write state right after an outbox drain (e2e
+  // showed exactly that through the vite proxy), so no response is cacheable.
+  app.use("*", async (c, next) => {
+    await next();
+    c.header("Cache-Control", "no-store");
+  });
+
   app.use(
     "*",
     cors({
