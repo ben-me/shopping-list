@@ -15,13 +15,13 @@ describe("D1 connection via drizzle", () => {
   });
 
   it("establishes a drizzle D1 connection from an env-provided binding", async () => {
-    const binding = await mf.getD1Database("devDb");
+    const binding = await mf.getD1Database("db");
     const db = createD1Connection(binding);
     expect(db).toBeDefined();
   });
 
   it("resolves a query without a live network (dry-run binding)", async () => {
-    const binding = await mf.getD1Database("devDb");
+    const binding = await mf.getD1Database("db");
     const db = createD1Connection(binding);
     const row = await ping(db);
     expect(row).toEqual({ ok: 1 });

@@ -33,6 +33,9 @@ test("an empty database bootstraps the Admin, then sign-up closes for good", asy
     await input(page, "password").fill(ADMIN_PASSWORD);
     await page.getByRole("button", { name: "Sign up" }).click();
     await expect(page.getByRole("button", { name: "Sign out" })).toBeVisible();
+    // The router must have left /sign-in before signing out, or the pending
+    // push resolves in place and the view keeps its old state.
+    await expect.poll(() => page.url(), { timeout: 5000 }).toBe(`${WEB_ORIGIN}/`);
     await page.getByRole("button", { name: "Sign out" }).click();
     await expect(page.getByRole("heading", { name: "Sign in" })).toBeVisible();
   });

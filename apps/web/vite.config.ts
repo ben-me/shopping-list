@@ -7,7 +7,17 @@ import { VitePWA } from "vite-plugin-pwa";
 import { configDefaults } from "vitest/config";
 
 // https://vite.dev/config/
+
+// The e2e stage (`dev:e2e` in apps/api sets ALCHEMY_STAGE) pins the dev
+// layout to :5174 / :8788 so it never collides with interactive dev.
+const isE2E = process.env.ALCHEMY_STAGE === "e2e";
+
 export default defineConfig({
+  server: {
+    host: true,
+    port: isE2E ? 5174 : 5173,
+    proxy: { "/api": `http://localhost:${isE2E ? 8788 : 8787}` },
+  },
   plugins: [
     vue(),
     vueDevTools(),
@@ -63,11 +73,6 @@ export default defineConfig({
     alias: {
       "@": fileURLToPath(new URL("./src", import.meta.url)),
     },
-  },
-  server: {
-    host: true,
-    // e2e points this at its own API worker; the default is the dev worker.
-    proxy: { "/api": process.env.API_PROXY_TARGET ?? "http://localhost:8787" },
   },
   test: {
     environment: "jsdom",

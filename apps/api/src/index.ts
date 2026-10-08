@@ -25,6 +25,13 @@ export type Bindings = AuthEnv;
 export function createApp() {
   const app = new Hono<{ Bindings: AuthEnv; Variables: AppVariables }>();
 
+  // A cached GET can replay pre-write state right after an outbox drain (e2e
+  // showed exactly that through the vite proxy), so no response is cacheable.
+  app.use("*", async (c, next) => {
+    await next();
+    c.header("Cache-Control", "no-store");
+  });
+
   app.use(
     "*",
     cors({
@@ -50,7 +57,7 @@ export function createApp() {
   });
 
   app.get("/health", async (c) => {
-    const db = createD1Connection(c.env.devDb);
+    const db = createD1Connection(c.env.db);
     const pingResult = await ping(db);
     return c.json({ ok: true, service: "shopping-list-api", db: pingResult?.ok === 1 });
   });
@@ -59,7 +66,7 @@ export function createApp() {
 
   // Sign-up is open only while no users exist; afterwards the Admin provisions accounts (ADR 0003).
   app.get("/api/signup-status", async (c) => {
-    const db = createD1Connection(c.env.devDb);
+    const db = createD1Connection(c.env.db);
     const hasUsers = await usersExist(db);
     return c.json({ signUpOpen: !hasUsers });
   });

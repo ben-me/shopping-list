@@ -3,16 +3,17 @@ import { admin } from "better-auth/plugins";
 import { drizzleAdapter } from "@better-auth/drizzle-adapter";
 import { drizzle } from "drizzle-orm/d1";
 import * as schema from "./schema";
+import { relations } from "./relations";
 
 /**
  * Environment the auth instance needs to build a D1-backed store.
  *
- * `devDb` is the D1 database binding from `wrangler.jsonc`. The better-auth
+ * `db` is the D1 database binding (bound as `db` in `alchemy.run.ts`). The better-auth
  * settings are read from the worker `vars` so they can differ between local
  * dev and deployment without touching code.
  */
 export type AuthEnv = {
-  devDb: D1Database;
+  db: D1Database;
   BETTER_AUTH_SECRET: string;
   BETTER_AUTH_URL: string;
   BETTER_AUTH_TRUSTED_ORIGINS?: string | string[];
@@ -25,7 +26,7 @@ export function getTrustedOrigins(env: AuthEnv): string[] {
 }
 
 /**
- * Build a better-auth instance backed by the D1 `devDb` binding.
+ * Build a better-auth instance backed by the D1 `db` binding.
  *
  * In a Cloudflare Worker the D1 binding is only available per request (via
  * `env`), so the instance is constructed per request inside the auth route
@@ -38,7 +39,7 @@ export function getTrustedOrigins(env: AuthEnv): string[] {
  * better-auth's server-side user creation for the Admin's provisioning route.
  */
 export async function createAuth(env: AuthEnv) {
-  const db = drizzle(env.devDb, { schema: schema });
+  const db = drizzle(env.db, { relations });
 
   const trustedOrigins = getTrustedOrigins(env);
   const usersExist =

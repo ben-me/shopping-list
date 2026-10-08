@@ -2,6 +2,7 @@ import type { Miniflare } from "miniflare";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { drizzle } from "drizzle-orm/d1";
 import { createAuth, type AuthEnv } from "./auth";
+import { relations } from "./relations";
 import { runMigrations, startMiniflare, testEnvFor } from "./test-support";
 import * as schema from "./schema";
 
@@ -16,7 +17,7 @@ describe("better-auth wired to D1", () => {
 
   beforeEach(async () => {
     mf = await startMiniflare("local-d1-auth-db");
-    binding = await mf.getD1Database("devDb");
+    binding = await mf.getD1Database("db");
     await runMigrations(binding);
     env = testEnvFor(binding);
   });
@@ -35,7 +36,7 @@ describe("better-auth wired to D1", () => {
     expect(user.email).toBe(email);
     expect(token).toBeTruthy();
 
-    const db = drizzle(binding, { schema: schema });
+    const db = drizzle(binding, { relations });
     const users = await db.select().from(schema.user);
     const sessions = await db.select().from(schema.session);
     expect(users).toHaveLength(1);

@@ -1,10 +1,16 @@
 import { expect, test } from "@playwright/test";
 import { addItem, createList, itemRow, signUp } from "./support";
 
-const serviceWorkerReady = `(async () => {
-  const { serviceWorkerReady } = await import("/src/pwa.ts");
-  return serviceWorkerReady();
-})()`;
+/** Worker state polled live from the browser. */
+const workerActive = `navigator.serviceWorker.getRegistration().then((r) => Boolean(r?.active))`;
+const loadControlled = `Boolean(navigator.serviceWorker.controller)`;
+const shellCacheWarmed = `caches.keys().then(async (keys) => {
+  for (const key of keys) {
+    const cache = await caches.open(key);
+    if ((await cache.keys()).length > 0) return true;
+  }
+  return false;
+})`;
 
 /**
  * The PWA shell: after a first visit the service worker has cached the app
@@ -18,12 +24,12 @@ test("after a first visit, a cold start with no network opens the app on last-sy
 }) => {
   await test.step("first visit: the service worker becomes active and the shell cache warms", async () => {
     await page.goto("/");
-    // In dev there is nothing to precache, so a first visit needs one
-    // reload: the reload is controlled from the start, and the worker's
-    // NetworkFirst route caches every asset it fetches. Production precaches
-    // the shell at install and needs no reload.
+    // Dev precaches nothing at install: activate the worker, then reload into
+    // its control so the NetworkFirst route warms the shell cache.
+    await expect.poll(() => page.evaluate(workerActive), { timeout: 15_000 }).toBe(true);
     await page.reload();
-    await expect.poll(() => page.evaluate(serviceWorkerReady)).toBe(true);
+    await expect.poll(() => page.evaluate(loadControlled)).toBe(true);
+    await expect.poll(() => page.evaluate(shellCacheWarmed), { timeout: 15_000 }).toBe(true);
   });
 
   await signUp(page, "E2E PWA", request);

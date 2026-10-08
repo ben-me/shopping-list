@@ -2,35 +2,33 @@
 
 The Shopping List API. A [hono](https://hono.dev) application that runs as a
 **Cloudflare Worker** and is the source of truth for the domain (Lists, Items,
-Payments). Backed by **Cloudflare D1** (sqlite). The same `wrangler` target is
-used for local development and deployment.
+Payments). Backed by **Cloudflare D1** (sqlite).
 
-## Commands
+Deployment and local dev are driven by [Alchemy](https://alchemy.run) from the
+repo root — [`alchemy.run.ts`](../../alchemy.run.ts) declares the D1 database,
+its migrations, and the Worker(s):
+
+- **Deploy** (`pnpm deploy` at the root): one Worker hosts the API entrypoint
+  (`src/index.ts`) **and** the built SPA (`apps/web`) on one origin — no
+  `wrangler.jsonc` here.
+- **Dev** (`pnpm dev`): the two default dev servers — this Worker in workerd
+  on **:8787** (hono, D1 from the LOCAL simulator) and the vite dev server on
+  **:5173** (which proxies `/api/*` to :8787, so the browser stays
+  same-origin). `pnpm dev` from `apps/api/` runs the same stack.
+- **E2E** (`pnpm test:e2e`): the same layout as its own Alchemy stage on
+  **:8788 / :5174** so it never collides with interactive dev; each run gets
+  a fresh local D1 (stage-scoped state delete) and never touches the
+  deployed database.
+
+## Commands (run from `apps/api/`)
 
 ```sh
-pnpm dev            # run the Worker locally with wrangler dev
-pnpm deploy         # deploy to Cloudflare Workers
-pnpm build          # wrangler deploy --dry-run (proves the Worker bundles and the D1 binding resolves without a live deploy)
+pnpm dev            # the dev stack (API workerd :8787 + vite :5173)
+pnpm dev:e2e        # the isolated e2e stack (what the e2e suite starts)
+pnpm db:generate    # generate a versioned D1 migration from src/schema.ts
 pnpm type-check     # type-check (tsc --noEmit)
 pnpm lint           # lint (oxlint)
 pnpm fmt            # format (oxfmt)
-pnpm cf-typegen     # regenerate CloudflareBindings types from wrangler config
-pnpm db:generate    # generate a versioned D1 migration from src/schema.ts
-pnpm db:migrate     # apply pending migrations to the local (dev) D1
-pnpm db:reset       # wipe the local (dev) D1
-```
-
-### E2E isolation
-
-`pnpm test:e2e` starts its own worker (:8788, D1 store in
-`apps/api/.wrangler/e2e` via `--persist-to`) and its own vite dev server
-(:5174 pointed at it). The dev stack (:5173 / :8787,
-`apps/api/.wrangler/state`) is never read, reset, or removed.
-
-```sh
-pnpm dev:e2e        # the isolated e2e worker (what the e2e suite starts)
-pnpm db:migrate:e2e # apply pending migrations to the isolated e2e D1
-pnpm db:reset:e2e   # wipe the isolated e2e D1 (fresh state per e2e run)
 ```
 
 ## Provisioning accounts (ADR 0003)
@@ -51,11 +49,11 @@ sign-up, and session endpoints are exposed. Auth is backed by the same D1
 store, so sessions persist across requests.
 
 - The auth instance is built per request in [`src/auth.ts`](src/auth.ts) from
-  the request's `env` — the D1 `devDb` binding and the better-auth settings
+  the request's `env` — the D1 `db` binding and the better-auth settings
   (`BETTER_AUTH_SECRET`, `BETTER_AUTH_URL`, `BETTER_AUTH_TRUSTED_ORIGINS`).
-  Non-secret config lives in `wrangler.jsonc` `vars`; the **secret** is
-  documented in [`.env.example`](.env.example) locally and is set with
-  `wrangler secret put BETTER_AUTH_SECRET` for the deployed worker.
+  The **secret** is documented in the root [`example env file`](../../.env.example)
+  and bound via `alchemy.run.ts` (`env` in the resource, resolved from the
+  root `.env`).
 - The auth tables (user, session, account, verification) and the domain tables
   all live in a single file, [`src/schema.ts`](src/schema.ts), plus their
   drizzle relations. Keeping them in one file lets `db:generate` create
@@ -90,29 +88,15 @@ Migrations are **versioned SQL** generated with `drizzle-kit` into the
 pnpm db:generate
 ```
 
-and are **applied to D1** with wrangler's native migration runner, pointed at
-the `drizzle/` folder via `migrations_dir` in `wrangler.jsonc`.
-
-```sh
-pnpm db:migrate           # local D1 (what `pnpm dev` serves)
-pnpm db:migrate:remote    # the remote D1 database
-```
-
-`wrangler` tracks applied migrations in the D1 `d1_migrations` table, so
-applying is re-runnable and only pending migrations run. The `db.test.ts` /
-`migrate.test.ts` / `auth.test.ts` suite additionally proves the generated SQL
-executes against D1 (a local D1 from `miniflare`), round-trips all domain tables,
+and are **applied to D1** on every `alchemy dev` / `alchemy deploy` run by
+Alchemy's migration runner, pointed at the `drizzle/` folder via `migrations`
+in `alchemy.run.ts` (both the dev simulators and the deployed database).
+Applied migrations are recorded in Alchemy's `__alchemy_migrations`
+bookkeeping table, so applying is re-runnable and only pending migrations
+run. The `db.test.ts` / `migrate.test.ts` / `auth.test.ts` suite additionally
+proves the generated SQL executes against D1, round-trips all domain tables,
 and lets better-auth sign up / sign in / read sessions against the same store.
 
-[For generating/synchronizing types based on your Worker configuration run](https://developers.cloudflare.com/workers/wrangler/commands/#types):
-
-```sh
-pnpm cf-typegen
-```
-
-Pass the `CloudflareBindings` as generics when instantiating `Hono`:
-
-```ts
-// src/index.ts
-const app = new Hono<{ Bindings: CloudflareBindings }>();
-```
+The hono app reads its bindings from the request `env` (`src/index.ts`'s
+`AuthEnv`); Alchemy supplies them as Worker `env` bindings declared in
+`alchemy.run.ts` — no generated types file needed.
