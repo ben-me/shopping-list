@@ -5,7 +5,6 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "dev:e2e": "vite --port 5174 --strictPort",
     "build": "pnpm type-check && pnpm build-only",
     "preview": "vite preview",
     "test:unit": "vitest",
@@ -16,9 +15,9 @@
     "fmt": "oxfmt",
     "fmt:check": "oxfmt --check",
     "lint": "oxlint && pnpm run lint:css",
+    "lint:fix": "oxlint --fix",
     "lint:css": "stylelint \"src/**/*.{css,vue}\"",
-    "lint:css:fix": "stylelint \"src/**/*.{css,vue}\" --fix",
-    "lint:fix": "oxlint --fix"
+    "lint:css:fix": "stylelint \"src/**/*.{css,vue}\" --fix"
   },
   "dependencies": {
     "@shopping-list/api": "workspace:*",
