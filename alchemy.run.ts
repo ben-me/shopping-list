@@ -9,6 +9,7 @@ import * as Effect from "effect/Effect";
  */
 export const Db = Cloudflare.D1.Database("db", {
   name: "db-shopping-list",
+  jurisdiction: "eu",
   migrations: "./apps/api/drizzle",
 });
 
@@ -67,6 +68,7 @@ export default Alchemy.Stack(
     } else {
       appOutput = yield* Cloudflare.Website.Vite("App", {
         rootDir: "./apps/web",
+        domain: "sl.mehler.dev",
         // Resolves relative to rootDir (apps/web): the hono entry becomes the
         // Vite plugin's worker entry, so one `vite build` emits client assets
         // and the API bundle.
