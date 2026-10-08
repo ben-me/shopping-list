@@ -13,3 +13,7 @@ Reference `docs/css-conventions.md` for detailed CSS conventions.
 ## HTML Conventions
 
 Reference `docs/html-conventions.md` for detailed HTML conventions.
+
+## Alchemy Conventions
+
+Reference `https://alchemy.run/llms.txt` for detailed Alchemy conventions.
