@@ -1,11 +1,15 @@
+import { shallowRef } from "vue";
+
 /**
  * Test double for the better-auth client (`src/auth-client.ts`).
  *
  * The real client captures `fetch` at creation time, which defeats
- * `vi.stubGlobal` after import. This mock mirrors the client's session-atom
- * contract while delegating the actual HTTP requests to (stubbed) global
- * fetch at call time, so the route-map stubbing used across specs keeps
- * working.
+ * `vi.stubGlobal` after import. This mock mirrors the client's public
+ * contract — `useSession()` exposing atom snapshots through a Vue ref, a
+ * one-shot `hydrateSession`, and actions that refetch the session ~10ms
+ * after success — while delegating the actual HTTP requests to (stubbed)
+ * global fetch at call time, so the route-map stubbing used across specs
+ * keeps working.
  */
 interface Snapshot {
   data: unknown;
@@ -15,107 +19,85 @@ interface Snapshot {
   refetch: () => Promise<void>;
 }
 
-type Listener = (snapshot: Snapshot) => void;
+/** A flight that landed after a newer flight must not apply. */
+type Flight = symbol;
 
-/** A flight that landed after a newer flight or a `_reset` must not apply. */
-interface Flight {
-  token: symbol;
-  generation: number;
+let snapshot: Snapshot = {
+  data: null,
+  error: null,
+  isPending: true,
+  isRefetching: false,
+  refetch: () => fetchSession(),
+};
+
+const listeners = new Set<(snapshot: Snapshot) => void>();
+
+let activeFlight: Flight | null = null;
+let hydrated = false;
+
+function emit() {
+  for (const listener of listeners) {
+    listener(snapshot);
+  }
+}
+
+async function fetchSession() {
+  const flight: Flight = Symbol();
+  // Starting a flight cancels any in-flight one, like the atom's
+  // AbortController: a sign-in/sign-out while the boot fetch is in flight
+  // supersedes and discards it.
+  activeFlight = flight;
+  snapshot = {
+    ...snapshot,
+    error: null,
+    isPending: snapshot.data === null,
+    isRefetching: true,
+  };
+  emit();
+  try {
+    const response = await fetch("/api/auth/get-session", { credentials: "include" });
+    const body = (await response.json().catch(() => null)) as unknown;
+    if (activeFlight !== flight) {
+      return;
+    }
+    snapshot = {
+      ...snapshot,
+      data: response.ok ? (body ?? null) : null,
+      error: response.ok ? null : (body as { message?: string; status?: number }),
+      isPending: false,
+      isRefetching: false,
+    };
+    emit();
+  } catch (error) {
+    if (activeFlight !== flight) {
+      return;
+    }
+    // Network failure: the atom keeps the last data and reports the error.
+    snapshot = {
+      ...snapshot,
+      data: snapshot.data,
+      error,
+      isPending: false,
+      isRefetching: false,
+    };
+    emit();
+  }
+}
+
+function subscribeAtom(listener: (snapshot: Snapshot) => void): () => void {
+  listeners.add(listener);
+  listener(snapshot);
+  // Unlike the real atom's onMount (one fetch per mount), every fresh hook
+  // instance here re-fetches: a spec's next boot must run under that spec's
+  // own stubs, not a leftover snapshot from the previous one.
+  void fetchSession();
+  return () => {
+    listeners.delete(listener);
+  };
 }
 
 // fallow-ignore-next-line unused-export -- loaded dynamically by the specs (vi.mock factory import), which static analysis cannot see
 export function makeAuthClientMock() {
-  const initial = (): Snapshot => ({
-    data: null,
-    error: null,
-    isPending: true,
-    isRefetching: false,
-    refetch: () => fetchSession(),
-  });
-
-  let snapshot = initial();
-  const listeners = new Set<Listener>();
-  let mounted = false;
-  let generation = 0;
-  let activeFlight: Flight | null = null;
-  let hydrated = false;
-
-  function emit() {
-    for (const listener of listeners) {
-      listener(snapshot);
-    }
-  }
-
-  function stale(flight: Flight): boolean {
-    return activeFlight !== flight || flight.generation !== generation;
-  }
-
-  async function fetchSession() {
-    const flight: Flight = { token: Symbol("flight"), generation };
-    activeFlight = flight;
-    snapshot = {
-      ...snapshot,
-      error: null,
-      isPending: snapshot.data === null,
-      isRefetching: true,
-    };
-    emit();
-    try {
-      const response = await fetch("/api/auth/get-session", { credentials: "include" });
-      const body = (await response.json().catch(() => null)) as unknown;
-      if (stale(flight)) {
-        return;
-      }
-      snapshot = {
-        ...snapshot,
-        data: response.ok ? (body ?? null) : null,
-        error: response.ok ? null : (body as { message?: string; status?: number }),
-        isPending: false,
-        isRefetching: false,
-      };
-      emit();
-    } catch (error) {
-      if (stale(flight)) {
-        return;
-      }
-      snapshot = {
-        ...snapshot,
-        data: snapshot.data,
-        error,
-        isPending: false,
-        isRefetching: false,
-      };
-      emit();
-    }
-  }
-
-  function reset() {
-    // Back to pre-mount: the next subscription mounts it fresh under the next spec's stubs.
-    generation += 1;
-    activeFlight = null;
-    hydrated = false;
-    mounted = false;
-    listeners.clear();
-    snapshot = initial();
-  }
-
-  const sessionAtom = {
-    get: () => snapshot,
-    subscribe(listener: Listener) {
-      listeners.add(listener);
-      listener(snapshot);
-      if (!mounted) {
-        mounted = true;
-        // Sync start: a 0ms timer pushes the whole boot one macrotask later than the views read.
-        void fetchSession();
-      }
-      return () => {
-        listeners.delete(listener);
-      };
-    },
-    _reset: reset,
-  };
-
   async function request(path: string, init?: RequestInit) {
     const response = await fetch(path, { credentials: "include", ...init });
     const body = await response.json().catch(() => null);
@@ -157,10 +139,13 @@ export function makeAuthClientMock() {
         };
         emit();
       },
-      $store: {
-        atoms: {
-          session: sessionAtom,
-        },
+      useSession() {
+        // Mirrors `useStore`: a shallow ref fed by an atom subscription.
+        const state = shallowRef<Snapshot | undefined>(undefined);
+        subscribeAtom((next) => {
+          state.value = next;
+        });
+        return state;
       },
     },
   };

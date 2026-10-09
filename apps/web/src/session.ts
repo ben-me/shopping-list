@@ -1,4 +1,4 @@
-import { reactive } from "vue";
+import { reactive, watch } from "vue";
 import type { Router } from "vue-router";
 import { apiFetch } from "./api";
 import { authClient } from "./auth-client";
@@ -16,7 +16,7 @@ export interface SessionUser {
   role?: string;
 }
 
-/** The session atom behind `useSession()`, read directly so side effects run sync with it. */
+/** The value `authClient.useSession()` exposes. */
 interface SessionSnapshot {
   data: { session: unknown; user: unknown } | null;
   error: { status?: number; message?: string } | null;
@@ -24,16 +24,15 @@ interface SessionSnapshot {
   isRefetching: boolean;
 }
 
-interface SessionStore {
-  get(): SessionSnapshot;
-  subscribe(listener: (snapshot: SessionSnapshot) => void): () => void;
-}
+// The no-argument `useSession()` overload. ReturnType<> can't name it because
+// the hook has a second overload, so go through a wrapper function.
+const connectUseSession = () => authClient.useSession();
 
-const sessionStore = (
-  authClient.$store as unknown as {
-    atoms: { session: SessionStore };
-  }
-).atoms.session;
+type UseSessionHandle = ReturnType<typeof connectUseSession>;
+
+let sessionState: UseSessionHandle | null = null;
+let stopSessionWatch: (() => void) | null = null;
+let releaseBoot: (() => void) | null = null;
 
 export const session = reactive<{ user: SessionUser | null }>({
   user: null,
@@ -47,21 +46,27 @@ function canHydrateFromCache(snapshot: SessionSnapshot): boolean {
   return snapshot.error !== null && snapshot.data === null;
 }
 
+function asSnapshot(value: unknown): SessionSnapshot | undefined {
+  return value as SessionSnapshot | undefined;
+}
+
 function sessionUserOf(snapshot: SessionSnapshot): SessionUser | null {
   return (snapshot.data?.user as SessionUser | undefined) ?? null;
 }
 
 let bootPromise: Promise<void> | null = null;
 
-/** Wait for the atom's first fetch once; on a failed fetch, seed it with the cached user. */
+/** Wait for the first useSession() fetch once; on a failed fetch, seed it with the cached user. */
 export function bootSession(): Promise<void> {
   bootPromise ??= (async () => {
-    startSessionObserver();
+    startSessionWatch();
     // A settled observation records itself immediately; read the cache before it can clear it.
     const cacheCandidate = cachedUser();
-    await untilSettled();
-    const snapshot = sessionStore.get();
-    if (canHydrateFromCache(snapshot) && cacheCandidate) {
+    await new Promise<void>((resolve) => {
+      releaseBoot = resolve;
+    });
+    const snapshot = asSnapshot(sessionState?.value);
+    if (snapshot && canHydrateFromCache(snapshot) && cacheCandidate) {
       hydrateFromCache(cacheCandidate);
     }
     await adoptChain;
@@ -69,40 +74,6 @@ export function bootSession(): Promise<void> {
   return bootPromise;
 }
 
-function untilSettled(): Promise<void> {
-  return new Promise<void>((resolve) => {
-    let unbind: (() => void) | undefined;
-    let stopped = false;
-    const stop = () => {
-      stopped = true;
-      unbind?.();
-    };
-    unbind = sessionStore.subscribe((snapshot) => {
-      if (!snapshot.isPending && !stopped) {
-        stop();
-        resolve();
-      }
-    });
-    if (stopped) {
-      unbind();
-    }
-  });
-}
-
-let sessionObserver: (() => void) | null = null;
-
-function startSessionObserver(): void {
-  sessionObserver ??= sessionStore.subscribe(onSessionAtom);
-}
-
-function onSessionAtom(snapshot: SessionSnapshot): void {
-  if (snapshot.isPending) {
-    return;
-  }
-  void recordUser(sessionUserOf(snapshot));
-}
-
-/** Undefined until the first settled observation, so a signed-out boot never clears the Store. */
 let lastUserSerial: string | null | undefined = undefined;
 
 let adoptChain: Promise<void> = Promise.resolve();
@@ -118,6 +89,28 @@ function recordUser(user: SessionUser | null): Promise<void> {
   const job = user ? adoptUser(user) : Promise.resolve(cacheUser(null));
   adoptChain = adoptChain.then(() => job).catch(() => undefined);
   return job;
+}
+
+function onSessionState(value: unknown): void {
+  const snapshot = asSnapshot(value);
+  if (!snapshot || snapshot.isPending) {
+    return;
+  }
+  releaseBoot?.();
+  releaseBoot = null;
+  void recordUser(sessionUserOf(snapshot));
+}
+
+function startSessionWatch(): void {
+  if (sessionState) {
+    return;
+  }
+  // The hook mounts the atom — better-auth schedules the first get-session
+  // fetch here, inside the boot, and runs the focus/online/broadcast
+  // revalidation from then on. Outside a component scope the subscription
+  // simply lives as long as the ref does.
+  sessionState = authClient.useSession();
+  stopSessionWatch = watch(sessionState, onSessionState, { flush: "sync" });
 }
 
 async function adoptUser(user: SessionUser): Promise<void> {
@@ -212,14 +205,15 @@ async function clearLocalStore() {
   }
 }
 
-/** Test isolation hook: forget the user and the boot, and unmount the atom so the next boot re-fetches. */
+/** Test isolation hook: forget the user and the boot; the next boot re-creates the hook's subscription. */
 export function _resetSession(): void {
   bootPromise = null;
-  sessionObserver?.();
-  sessionObserver = null;
+  stopSessionWatch?.();
+  stopSessionWatch = null;
+  releaseBoot = null;
+  sessionState = null;
   lastUserSerial = undefined;
   session.user = null;
-  (sessionStore as { _reset?: () => void })._reset?.();
 }
 
 function cacheUser(user: SessionUser | null): void {
