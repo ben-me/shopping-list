@@ -180,11 +180,11 @@ textarea:focus {
   padding-inline: var(--space-3);
 
   section {
-    display: grid;
-    gap: var(--space-3);
-    align-content: start;
-    padding-block: var(--space-4);
-  }
+  display: grid;
+  gap: var(--space-3);
+  align-content: start;
+  padding-block: var(--space-4);
+ }
 }
 
 .page ul {

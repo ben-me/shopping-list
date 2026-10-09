@@ -20,7 +20,9 @@ function item(id: string, name: string): Item {
 /** Mount the read in its own scope, the way a screen's setup does. */
 function mountLiveItems(listId = ref("list-1")) {
   const scope = effectScope();
-  const items = scope.run(() => useDexieLiveData([listId], () => db.getItems(listId.value), []))!;
+  const items = scope.run(() =>
+    useDexieLiveData([listId], () => db.getItems(listId.value), []),
+  )!;
   return { items, listId, stop: () => scope.stop() };
 }
 

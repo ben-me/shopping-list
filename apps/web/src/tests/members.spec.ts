@@ -7,6 +7,7 @@ import { localMembers, leaveList, memberIdsOf, syncMembershipsFromServer } from 
 import { ShoppingDb } from "../store";
 import now from "@/utils/now";
 
+
 let dbNumber = 0;
 
 const list: List = {

@@ -7,6 +7,7 @@ import { db } from "../db";
 import { addItem } from "../items";
 import { onSyncPass, online, runSyncPass, startSyncWatcher, SYNC_POLL_MS } from "../connectivity";
 
+
 const list: List = {
   id: "list-1",
   ownerId: "user-1",
