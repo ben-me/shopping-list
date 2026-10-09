@@ -35,6 +35,14 @@ export let signingOut = false;
 let activeRestore: Promise<void> | null = null;
 
 /**
+ * Bumped by every action that sets the session authoritatively (sign-in,
+ * sign-up, sign-out). A session fetch captures the epoch when it starts and
+ * throws its result away if the epoch has moved on, so a slow fetch that
+ * lands after a sign-in or sign-out cannot clobber the fresher state.
+ */
+let sessionEpoch = 0;
+
+/**
  * Fetch the current session from the API. If a restore is already in
  * flight, concurrent callers share it rather than starting a new one. A
  * reachable server always wins: if it says there is no session, the user
@@ -44,22 +52,35 @@ export function restoreSession() {
   if (activeRestore) {
     return activeRestore;
   }
-  activeRestore = fetchSession().finally(() => {
+  activeRestore = fetchSession(sessionEpoch).finally(() => {
     // Clear the slot so the next call performs a fresh fetch.
     activeRestore = null;
   });
   return activeRestore;
 }
 
-async function fetchSession() {
+/**
+ * Revalidate the session in the background — stale-while-revalidate for
+ * callers (the route guard) that already have a session to resolve from and
+ * must never wait on the network. Concurrent calls share the in-flight
+ * fetch; nobody awaits the result.
+ */
+export function revalidateSession(): void {
+  void restoreSession();
+}
+
+async function fetchSession(epoch: number) {
   try {
     const { data } = await authClient.getSession();
+    if (epoch !== sessionEpoch) return;
     session.user = data?.user ?? null;
   } catch {
     // Server unreachable (offline): fall back to the cached user so the app
     // still opens on last-synced data rather than forcing a sign-in.
+    if (epoch !== sessionEpoch) return;
     session.user = cachedUser();
   }
+  if (epoch !== sessionEpoch) return;
   await adoptUser(session.user);
 }
 
@@ -77,6 +98,7 @@ async function adoptUser(user: SessionUser | null) {
 }
 
 export async function signIn(email: string, password: string) {
+  sessionEpoch += 1;
   const { data, error } = await authClient.signIn.email({ email, password });
   if (error) {
     throw new Error(error.message ?? "Sign-in failed");
@@ -86,6 +108,7 @@ export async function signIn(email: string, password: string) {
 }
 
 export async function signUp(name: string, email: string, password: string) {
+  sessionEpoch += 1;
   const { data, error } = await authClient.signUp.email({ name, email, password });
   if (error) {
     throw new Error(error.message ?? "Sign-up failed");
@@ -111,6 +134,7 @@ export async function isSignUpOpen(): Promise<boolean> {
 }
 
 export async function signOut() {
+  sessionEpoch += 1;
   try {
     await authClient.signOut();
   } finally {
@@ -141,6 +165,7 @@ async function clearLocalStore() {
 }
 
 export function _resetSession() {
+  sessionEpoch += 1;
   session.user = null;
   cacheUser(null);
 }

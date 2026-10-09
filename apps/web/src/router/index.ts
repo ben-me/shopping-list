@@ -1,5 +1,5 @@
 import { createRouter, createWebHistory, type RouterHistory } from "vue-router";
-import { restoreSession, session, signingOut } from "../session";
+import { revalidateSession, restoreSession, session, signingOut } from "../session";
 import ListsView from "../views/ListsView.vue";
 import ListLayout from "../views/ListLayout.vue";
 import ListView from "../views/ListView.vue";
@@ -38,8 +38,19 @@ export function createAppRouter(
     ],
   });
 
+  // The first navigation is the boot: the session must be known before any
+  // route resolves, so the guard waits for that one fetch. Every later
+  // navigation resolves synchronously from the session in hand and only
+  // revalidates in the background — a tab switch never waits on the network.
+  let sessionBooted = false;
+
   router.beforeEach(async (to) => {
-    await restoreSession();
+    if (sessionBooted) {
+      revalidateSession();
+    } else {
+      sessionBooted = true;
+      await restoreSession();
+    }
     if (to.meta.requiresAuth && !session.user) {
       return { name: "sign-in" };
     }

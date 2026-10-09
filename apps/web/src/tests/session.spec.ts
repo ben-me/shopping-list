@@ -15,7 +15,6 @@ import {
   type SessionUser,
 } from "../session";
 
-
 /**
  * Mock the better-auth client module: the real client captures `fetch` at
  * creation time, so stubbing global fetch after import has no effect. The
@@ -282,6 +281,78 @@ describe("session", () => {
 
     fetchImpl = stubUnreachableFetch();
     expect(await isSignUpOpen()).toBe(false);
+  });
+
+  it("a slow revalidation landing after a sign-in does not clobber the fresh session", async () => {
+    // The boot restore hangs; while it is in flight the user signs in.
+    let release!: () => void;
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    let sessionCalls = 0;
+    fetchImpl = vi.fn<typeof fetch>(async (input) => {
+      const url = String(input);
+      if (url.includes("/api/auth/get-session")) {
+        sessionCalls += 1;
+        if (sessionCalls === 1) {
+          await gate;
+          return jsonResponse(null);
+        }
+        return jsonResponse({ session: { token: "tok" }, user });
+      }
+      if (url.includes("/api/auth/sign-in/email")) {
+        return jsonResponse({ token: "tok", user });
+      }
+      throw new Error(`Unexpected fetch ${url}`);
+    });
+    vi.stubGlobal("fetch", fetchImpl);
+
+    const restore = restoreSession();
+    await signIn("[EMAIL]", "password123");
+    expect(session.user).toEqual(user);
+
+    // The stale fetch lands and says signed-out: it must not undo the sign-in.
+    release();
+    await restore;
+
+    expect(session.user).toEqual(user);
+    expect(JSON.parse(String(localStorage.getItem("shopping-list:session-user")))).toEqual(user);
+  });
+
+  it("a slow revalidation landing after a sign-out does not resurrect the session", async () => {
+    let release!: () => void;
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    let sessionCalls = 0;
+    fetchImpl = vi.fn<typeof fetch>(async (input) => {
+      const url = String(input);
+      if (url.includes("/api/auth/get-session")) {
+        sessionCalls += 1;
+        if (sessionCalls === 1) {
+          await gate;
+          return jsonResponse({ session: { token: "tok" }, user });
+        }
+        return jsonResponse(null);
+      }
+      if (url.includes("/api/auth/sign-out")) {
+        return jsonResponse({ success: true });
+      }
+      throw new Error(`Unexpected fetch ${url}`);
+    });
+    vi.stubGlobal("fetch", fetchImpl);
+
+    const restore = restoreSession();
+    await signOut();
+    expect(session.user).toBeNull();
+
+    // The stale fetch lands claiming the user is still signed in: it must
+    // not undo the sign-out.
+    release();
+    await restore;
+
+    expect(session.user).toBeNull();
+    expect(localStorage.getItem("shopping-list:session-user")).toBeNull();
   });
 
   it("allows a later restore to re-fetch after the first completed", async () => {
