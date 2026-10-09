@@ -20,11 +20,12 @@ import { createAppRouter } from "../../router";
 import { _resetSession, type SessionUser } from "../../session";
 
 export type RouteBody = Record<string, unknown> | null;
-/** A route answers with a body, a ready-made `Response`, or a function of the request. */
+/** A route answers with a body, a ready-made `Response`, a function of the request, or a promise of any of those. */
 export type RouteReply =
   | RouteBody
   | Response
-  | ((init: RequestInit | undefined) => RouteBody | Response);
+  | Promise<RouteBody | Response>
+  | ((init: RequestInit | undefined) => RouteBody | Response | Promise<RouteBody | Response>);
 /**
  * Keyed by `"METHOD /path"`, or by `"/path"` to answer any method. A key may
  * end in `*` to match a path prefix, which is how a spec acknowledges the
@@ -47,9 +48,11 @@ export function settle(ms = 25) {
 /** The reply for an unreachable server: a 503 with no body. */
 export const serverDown = () => new Response(null, { status: 503 });
 
-function toResponse(reply: RouteReply, init: RequestInit | undefined): Response {
+async function toResponse(reply: RouteReply, init: RequestInit | undefined): Promise<Response> {
   const body = typeof reply === "function" ? reply(init) : reply;
-  return body instanceof Response ? body : jsonResponse(body);
+  // A reply may resolve later (a gated session fetch, say) — await it first.
+  const settled = body instanceof Promise ? await body : body;
+  return settled instanceof Response ? settled : jsonResponse(settled);
 }
 
 function lookup(table: RouteTable, method: string, url: string): RouteReply | undefined {
