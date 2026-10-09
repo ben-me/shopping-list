@@ -17,13 +17,39 @@ export interface SessionUser {
 }
 
 /**
+ * Contract of the session atom behind `authClient.useSession()` — the same
+ * store components see through the hook (`{ data, error, isPending,
+ * isRefetching, refetch }`). `session.ts` reaches the atom directly instead
+ * of through the composable so the side effects below (Store scoping, cache
+ * sync) run synchronously with it, never a tick later than the state.
+ */
+interface SessionSnapshot {
+  data: { session: unknown; user: unknown } | null;
+  error: { status?: number; message?: string } | null;
+  isPending: boolean;
+  isRefetching: boolean;
+}
+
+interface SessionStore {
+  get(): SessionSnapshot;
+  subscribe(listener: (snapshot: SessionSnapshot) => void): () => void;
+}
+
+const sessionStore = (
+  authClient.$store as unknown as {
+    atoms: { session: SessionStore };
+  }
+).atoms.session;
+
+/**
  * Client-side session state. The server session lives in the better-auth
- * cookie; this reactive mirror is the single read surface for the UI and the
- * route guard. It is populated from `get-session` on boot and updated by the
- * sign-in/sign-up/sign-out actions below. The last known user is also cached
- * in localStorage so an offline boot (the server cannot be reached to confirm
- * the cookie) still restores the session and the app opens on last-synced
- * data instead of bouncing to sign-in.
+ * cookie and is mirrored by better-auth's native session atom, which fetches
+ * on boot, revalidates on window focus and when connectivity returns, dedupes
+ * concurrent flights and cancels superseded ones. `session` is the projection
+ * of that atom the UI and the route guard read; the last known user is also
+ * cached in localStorage so an offline boot (the atom starts empty and the
+ * server cannot be reached to confirm the cookie) still restores the session
+ * and the app opens on last-synced data instead of bouncing to sign-in.
  */
 export const session = reactive<{ user: SessionUser | null }>({
   user: null,
@@ -32,64 +58,126 @@ export const session = reactive<{ user: SessionUser | null }>({
 /** Set while a sign-out navigation is in flight; lets the route guard admit the guest-only sign-in route. */
 export let signingOut = false;
 
-let activeRestore: Promise<void> | null = null;
+/**
+ * A reachable server always wins: an answer of "no session" reports `{ data:
+ * null, error: null }`, while an unreachable one (offline, network failure)
+ * lands in `error` with `data` still `null`. Only the latter may resurrect
+ * the cached user — a signed-out answer must never be second-guessed.
+ */
+function canHydrateFromCache(snapshot: SessionSnapshot): boolean {
+  return snapshot.error !== null && snapshot.data === null;
+}
+
+function sessionUserOf(snapshot: SessionSnapshot): SessionUser | null {
+  return (snapshot.data?.user as SessionUser | undefined) ?? null;
+}
+
+let bootPromise: Promise<void> | null = null;
 
 /**
- * Bumped by every action that sets the session authoritatively (sign-in,
- * sign-up, sign-out). A session fetch captures the epoch when it starts and
- * throws its result away if the epoch has moved on, so a slow fetch that
- * lands after a sign-in or sign-out cannot clobber the fresher state.
+ * Boot the session: wait for the atom's first fetch once, and if it fails
+ * because the server is unreachable, seed the atom with the cached user so
+ * the app still opens offline. Every later call shares the first boot.
  */
-let sessionEpoch = 0;
+export function bootSession(): Promise<void> {
+  bootPromise ??= (async () => {
+    // Subscribing mounts the atom: better-auth schedules the first
+    // get-session fetch and starts the focus/online/broadcast revalidation.
+    startSessionObserver();
+    // Read the cache before the boot settles: a settled observation records
+    // itself immediately (a signed-out one clears the cache), and only a
+    // failed fetch — which is what hydration reacts to — can come from
+    // having read it beforehand.
+    const cacheCandidate = cachedUser();
+    await untilSettled();
+    const snapshot = sessionStore.get();
+    if (canHydrateFromCache(snapshot) && cacheCandidate) {
+      hydrateFromCache(cacheCandidate);
+      // Hydration notifies the atom synchronously; the work it schedules
+      // (cache write + Store scoping) is what the await below waits for.
+    }
+    await adoptChain;
+  })();
+  return bootPromise;
+}
 
 /**
- * Fetch the current session from the API. If a restore is already in
- * flight, concurrent callers share it rather than starting a new one. A
- * reachable server always wins: if it says there is no session, the user
- * is signed out (no stale cached user).
+ * Resolve once the atom has a settled answer for its first boot fetch: a
+ * session, a signed-out answer, or a failure to reach the server.
  */
-export function restoreSession() {
-  if (activeRestore) {
-    return activeRestore;
-  }
-  activeRestore = fetchSession(sessionEpoch).finally(() => {
-    // Clear the slot so the next call performs a fresh fetch.
-    activeRestore = null;
+function untilSettled(): Promise<void> {
+  return new Promise<void>((resolve) => {
+    // The subscription invokes the listener synchronously with the current
+    // (possibly already settled) snapshot, so stopping has to tolerate a
+    // listener that fires before the unsubscribe handle exists.
+    let unbind: (() => void) | undefined;
+    let stopped = false;
+    const stop = () => {
+      stopped = true;
+      unbind?.();
+    };
+    unbind = sessionStore.subscribe((snapshot) => {
+      if (!snapshot.isPending && !stopped) {
+        stop();
+        resolve();
+      }
+    });
+    if (stopped) {
+      unbind();
+    }
   });
-  return activeRestore;
 }
+
+let sessionObserver: (() => void) | null = null;
 
 /**
- * Revalidate the session in the background — stale-while-revalidate for
- * callers (the route guard) that already have a session to resolve from and
- * must never wait on the network. Concurrent calls share the in-flight
- * fetch; nobody awaits the result.
+ * Keep the mirror and its side effects in sync with the atom. Subscribing
+ * mounts the atom lazily — at the first boot, not at module import, so
+ * nothing hits the network before the app actually navigates.
  */
-export function revalidateSession(): void {
-  void restoreSession();
+function startSessionObserver(): void {
+  sessionObserver ??= sessionStore.subscribe(onSessionAtom);
 }
 
-async function fetchSession(epoch: number) {
-  try {
-    const { data } = await authClient.getSession();
-    if (epoch !== sessionEpoch) return;
-    session.user = data?.user ?? null;
-  } catch {
-    // Server unreachable (offline): fall back to the cached user so the app
-    // still opens on last-synced data rather than forcing a sign-in.
-    if (epoch !== sessionEpoch) return;
-    session.user = cachedUser();
-  }
-  if (epoch !== sessionEpoch) return;
-  await adoptUser(session.user);
-}
-
-/** Scope the Store to the session user; best-effort so the session always opens. */
-async function adoptUser(user: SessionUser | null) {
-  cacheUser(user);
-  if (!user) {
+function onSessionAtom(snapshot: SessionSnapshot): void {
+  if (snapshot.isPending) {
     return;
   }
+  void recordUser(sessionUserOf(snapshot));
+}
+
+/**
+ * Serial of the last recorded user. `undefined` until the very first settled
+ * observation, so a boot with no session cannot be mistaken for a sign-out
+ * and clear the store.
+ */
+let lastUserSerial: string | null | undefined = undefined;
+
+/** Adopting a user and wiping the cache are chained, so concurrent session events never interleave. */
+let adoptChain: Promise<void> = Promise.resolve();
+
+/**
+ * Record a session observation onto the mirror and its side effects: caching
+ * the user always, and (for a signed-in user) scoping the Store to them.
+ * The Store wipe on sign-out is deliberately *not* here — a reachable server
+ * reporting "no session" or a remotely revoked cookie must not destroy local
+ * data, only an explicit sign-out does.
+ */
+function recordUser(user: SessionUser | null): Promise<void> {
+  session.user = user;
+  const serial = user ? JSON.stringify(user) : null;
+  if (serial === lastUserSerial) {
+    return Promise.resolve();
+  }
+  lastUserSerial = serial;
+  const job = user ? adoptUser(user) : Promise.resolve(cacheUser(null));
+  adoptChain = adoptChain.then(() => job).catch(() => undefined);
+  return job;
+}
+
+/** Scope the Store to the session user; take care of the cache as well. */
+async function adoptUser(user: SessionUser): Promise<void> {
+  cacheUser(user);
   try {
     await ensureStoreForUser(db, user.id);
   } catch {
@@ -97,24 +185,48 @@ async function adoptUser(user: SessionUser | null) {
   }
 }
 
+/**
+ * Seed the atom with the cached user after a failed boot fetch. The fake
+ * session fields are only there to satisfy the atom's shape — nothing reads
+ * them, and the next successful refetch replaces the whole thing.
+ */
+function hydrateFromCache(user: SessionUser): void {
+  const epoch = new Date(0).toISOString();
+  try {
+    authClient.hydrateSession({
+      user,
+      session: {
+        id: "cached",
+        token: "",
+        userId: user.id,
+        expiresAt: epoch,
+        createdAt: epoch,
+        updatedAt: epoch,
+        ipAddress: null,
+        userAgent: null,
+      },
+    } as never);
+  } catch {
+    // Hydrating is an optimisation — the boot must succeed without it.
+  }
+}
+
 export async function signIn(email: string, password: string) {
-  sessionEpoch += 1;
   const { data, error } = await authClient.signIn.email({ email, password });
   if (error) {
     throw new Error(error.message ?? "Sign-in failed");
   }
-  session.user = data?.user as SessionUser;
-  await adoptUser(session.user);
+  // The client refetches the session on the sign-in atom signal; recording
+  // the user here scopes the Store before the post-sign-in screen renders.
+  await recordUser(data?.user as SessionUser | null);
 }
 
 export async function signUp(name: string, email: string, password: string) {
-  sessionEpoch += 1;
   const { data, error } = await authClient.signUp.email({ name, email, password });
   if (error) {
     throw new Error(error.message ?? "Sign-up failed");
   }
-  session.user = data?.user;
-  await adoptUser(session.user);
+  await recordUser(data?.user as SessionUser | null);
 }
 
 /**
@@ -134,13 +246,11 @@ export async function isSignUpOpen(): Promise<boolean> {
 }
 
 export async function signOut() {
-  sessionEpoch += 1;
   try {
     await authClient.signOut();
   } finally {
     // The session is dead client-side even if the request failed.
-    session.user = null;
-    cacheUser(null);
+    await recordUser(null);
     await clearLocalStore();
   }
 }
@@ -164,10 +274,20 @@ async function clearLocalStore() {
   }
 }
 
-export function _resetSession() {
-  sessionEpoch += 1;
+/**
+ * Test isolation hook, as the epoch bump was before: forget the recorded
+ * user and the boot. Unsubscribing also unmounts the atom, so the next boot
+ * re-subscribes and fetches fresh — the same lifecycle the atom re-runs on
+ * its own when its last subscriber goes away.
+ */
+export function _resetSession(): void {
+  bootPromise = null;
+  sessionObserver?.();
+  sessionObserver = null;
+  lastUserSerial = undefined;
   session.user = null;
-  cacheUser(null);
+  // The cached user deliberately survives: an offline boot must pick it up.
+  (sessionStore as { _reset?: () => void })._reset?.();
 }
 
 function cacheUser(user: SessionUser | null): void {
