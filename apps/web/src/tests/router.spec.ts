@@ -39,7 +39,6 @@ describe("router session guard", () => {
       },
     });
 
-    // The first navigation is the boot: it waits for the atom's first fetch.
     let booted = false;
     const app = mountApp("/").then((mounted) => {
       booted = true;
@@ -49,13 +48,10 @@ describe("router session guard", () => {
     expect(booted).toBe(false);
     expect(calls).toBe(1);
 
-    // Once the atom answers, the app opens signed in.
     release();
     const { router } = await app;
     expect(router.currentRoute.value.name).toBe("lists");
 
-    // Later navigations resolve from the session in hand — the guard never
-    // re-fetches, so the still-slow network cannot hold a tab switch.
     let navigated = false;
     const nav = router.push("/settings").then(() => {
       navigated = true;

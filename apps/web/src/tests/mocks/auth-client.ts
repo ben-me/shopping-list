@@ -3,11 +3,9 @@
  *
  * The real client captures `fetch` at creation time, which defeats
  * `vi.stubGlobal` after import. This mock mirrors the client's session-atom
- * contract — `{ data, error, isPending, isRefetching, refetch }` snapshots
- * delivered to subscribers, a one-shot `hydrateSession`, and actions that
- * trigger a session refetch on their atom signal — while delegating the
- * actual HTTP requests to (stubbed) global fetch at call time, so the
- * route-map stubbing used across specs keeps working.
+ * contract while delegating the actual HTTP requests to (stubbed) global
+ * fetch at call time, so the route-map stubbing used across specs keeps
+ * working.
  */
 interface Snapshot {
   data: unknown;
@@ -37,9 +35,7 @@ export function makeAuthClientMock() {
 
   let snapshot = initial();
   const listeners = new Set<Listener>();
-  /** Set once a subscriber mounts the atom, as the real atom's onMount would. */
   let mounted = false;
-  /** Bumped by `_reset`: flights of the previous life must never apply. */
   let generation = 0;
   let activeFlight: Flight | null = null;
   let hydrated = false;
@@ -56,9 +52,6 @@ export function makeAuthClientMock() {
 
   async function fetchSession() {
     const flight: Flight = { token: Symbol("flight"), generation };
-    // Starting a flight cancels any in-flight one, like the atom's
-    // AbortController: a sign-in/sign-out while the boot fetch is in flight
-    // supersedes and discards it.
     activeFlight = flight;
     snapshot = {
       ...snapshot,
@@ -85,7 +78,6 @@ export function makeAuthClientMock() {
       if (stale(flight)) {
         return;
       }
-      // Network failure: the atom keeps the last data and reports the error.
       snapshot = {
         ...snapshot,
         data: snapshot.data,
@@ -98,10 +90,7 @@ export function makeAuthClientMock() {
   }
 
   function reset() {
-    // Put the atom back into its pre-mount state: no subscribers, no
-    // scheduled fetches. The next subscription mounts it fresh, so the boot
-    // fetch always runs under the next spec's stubbed fetch — never a leaked
-    // timer from a previous one.
+    // Back to pre-mount: the next subscription mounts it fresh under the next spec's stubs.
     generation += 1;
     activeFlight = null;
     hydrated = false;
@@ -117,10 +106,7 @@ export function makeAuthClientMock() {
       listener(snapshot);
       if (!mounted) {
         mounted = true;
-        // The real atom schedules its mount fetch on a 0ms timer; here the
-        // fetch starts synchronously (still resolved through the stub). A
-        // timer would put the whole boot one macrotask later, racing every
-        // first-flush view read against its own data.
+        // Sync start: a 0ms timer pushes the whole boot one macrotask later than the views read.
         void fetchSession();
       }
       return () => {
@@ -136,8 +122,7 @@ export function makeAuthClientMock() {
     const result = response.ok
       ? { data: body, error: null }
       : { data: null, error: body as { message?: string; status?: number } };
-    // Like the real client, a successful auth action flips the session
-    // signal ~10ms later, which refetches the session atom.
+    // Like the real client, a successful auth action refetches the session ~10ms later.
     if (response.ok) {
       setTimeout(() => void fetchSession(), 10);
     }

@@ -38,11 +38,7 @@ export function createAppRouter(
     ],
   });
 
-  // The first navigation is the boot: the session must be known before any
-  // route resolves, so the guard waits for that one atom fetch. Every later
-  // navigation resolves synchronously from the session in hand — the atom
-  // revalidates in the background on focus and connectivity, never in the
-  // guard — so a tab switch never waits on the network.
+  // The first navigation is the boot; later ones must never wait on the network.
   let sessionBooted = false;
 
   router.beforeEach(async (to) => {

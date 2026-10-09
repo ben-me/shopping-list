@@ -83,8 +83,7 @@ describe("session", () => {
     expect(session.user).toEqual(user);
     expect(callsTo("/api/auth/get-session")).toHaveLength(1);
 
-    // Now the network dies: the fetch itself fails rather than the server
-    // answering "no session".
+    // The network dies: the fetch fails rather than the server answering "no session".
     fetchImpl = stubUnreachableFetch();
     _resetSession();
     await bootSession();
@@ -97,8 +96,7 @@ describe("session", () => {
     fetchImpl = stubFetch(jsonResponse({ session: { token: "tok" }, user }));
     await bootSession();
 
-    // The server is reachable and says there is no session: reachability
-    // wins, so neither the mirror nor the cache survives the boot.
+    // Reachability wins: neither the mirror nor the cache survives the boot.
     fetchImpl = stubFetch(jsonResponse(null));
     _resetSession();
     await bootSession();
@@ -106,7 +104,7 @@ describe("session", () => {
     expect(session.user).toBeNull();
     expect(localStorage.getItem("shopping-list:session-user")).toBeNull();
 
-    // A later offline boot therefore stays signed out too.
+    // A later offline boot stays signed out.
     fetchImpl = stubUnreachableFetch();
     _resetSession();
     await bootSession();
@@ -190,8 +188,7 @@ describe("session", () => {
   });
 
   it("keeps the Store when the same user opens the app again on the device", async () => {
-    // No recorded account yet, and a pre-fix install's rows already on disk:
-    // the first boot must keep them, not wipe what it cannot attribute.
+    // A pre-fix install's rows already on disk: the first boot keeps them.
     const mine = {
       id: "list-backstop",
       ownerId: user.id,
@@ -205,8 +202,7 @@ describe("session", () => {
     await bootSession();
     expect(await db.getLists()).toContainEqual(mine);
 
-    // The device hand-over backstop runs again on the next boot and must
-    // recognise this user as the one who owns the Store.
+    // The backstop recognises this user as the one who owns the Store.
     _resetSession();
     await bootSession();
 
@@ -259,7 +255,7 @@ describe("session", () => {
   });
 
   it("a boot fetch superseded by a sign-in cannot clobber the fresh session", async () => {
-    // The boot fetch hangs; while it is in flight the user signs in.
+    // The boot fetch hangs; the user signs in while it is in flight.
     let release!: () => void;
     const gate = new Promise<void>((resolve) => {
       release = resolve;
@@ -286,9 +282,7 @@ describe("session", () => {
     await signIn("[EMAIL]", "password123");
     expect(session.user).toEqual(user);
 
-    // The stale boot fetch lands saying signed-out: the atom already
-    // cancelled it (sign-in triggered the superseding fetch), so it must not
-    // undo the sign-in.
+    // The atom cancelled the stale boot fetch; it must not undo the sign-in.
     release();
     await boot;
     await settle();
@@ -324,8 +318,7 @@ describe("session", () => {
     await signOut();
     expect(session.user).toBeNull();
 
-    // The stale boot fetch lands claiming the user is still signed in: the
-    // atom cancelled it, so it must not undo the sign-out.
+    // The atom cancelled the stale boot fetch; it must not undo the sign-out.
     release();
     await boot;
     await settle();
