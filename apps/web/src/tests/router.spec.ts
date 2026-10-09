@@ -24,33 +24,34 @@ afterEach(() => {
 });
 
 describe("router session guard", () => {
-  it("resolves a navigation without waiting for the background session revalidation", async () => {
-    // The first session fetch answers immediately; every later one hangs
-    // until released, simulating a slow revalidation.
+  it("boots the session once, then resolves every navigation without the network", async () => {
+    // The boot fetch hangs until released; no other get-session is ever made.
     let calls = 0;
     let release!: () => void;
     const gate = new Promise<void>((resolve) => {
       release = resolve;
     });
-    stubApi(
-      {
-        "GET /api/auth/get-session": async () => {
-          calls += 1;
-          if (calls > 1) {
-            await gate;
-          }
-          return { user };
-        },
+    stubApi({
+      "GET /api/auth/get-session": async () => {
+        calls += 1;
+        await gate;
+        return { user };
       },
-      { user },
-    );
+    });
 
-    // The first navigation boots the session and may still wait for the network.
-    const { router } = await mountApp("/");
+    let booted = false;
+    const app = mountApp("/").then((mounted) => {
+      booted = true;
+      return mounted;
+    });
+    await flushPromises();
+    expect(booted).toBe(false);
+    expect(calls).toBe(1);
+
+    release();
+    const { router } = await app;
     expect(router.currentRoute.value.name).toBe("lists");
 
-    // A later navigation must resolve from the session in hand while the
-    // revalidation is still in flight.
     let navigated = false;
     const nav = router.push("/settings").then(() => {
       navigated = true;
@@ -59,9 +60,7 @@ describe("router session guard", () => {
     expect(navigated).toBe(true);
     expect(router.currentRoute.value.name).toBe("settings");
 
-    release();
     await nav;
-    await flushPromises();
-    expect(calls).toBe(2);
+    expect(calls).toBe(1);
   });
 });

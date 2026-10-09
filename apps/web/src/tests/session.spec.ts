@@ -1,50 +1,23 @@
 import "fake-indexeddb/auto";
 
-import { jsonResponse } from "./support/app";
+vi.mock(
+  "../auth-client",
+  async () => await import("./mocks/auth-client").then((m) => m.makeAuthClientMock()),
+);
 
+import { jsonResponse, settle } from "./support/app";
 import { db } from "../db";
 import * as storeOwner from "../store-owner";
 import {
   _resetSession,
+  bootSession,
   isSignUpOpen,
   session,
-  restoreSession,
   signIn,
   signOut,
   signUp,
   type SessionUser,
 } from "../session";
-
-/**
- * Mock the better-auth client module: the real client captures `fetch` at
- * creation time, so stubbing global fetch after import has no effect. The
- * mock mirrors the client's contract — methods resolve `{ data, error }` and
- * delegate the actual request to (stubbed) global fetch.
- */
-vi.mock("../auth-client", () => {
-  async function request(path: string, init?: RequestInit) {
-    const response = await fetch(path, { credentials: "include", ...init });
-    const body = await response.json().catch(() => null);
-    if (!response.ok) {
-      return { data: null, error: body as { message?: string; status?: number } };
-    }
-    return { data: body, error: null };
-  }
-  const post = (path: string) => (body: unknown) =>
-    request(path, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(body),
-    });
-  return {
-    authClient: {
-      getSession: () => request("/api/auth/get-session"),
-      signIn: { email: post("/api/auth/sign-in/email") },
-      signUp: { email: post("/api/auth/sign-up/email") },
-      signOut: post("/api/auth/sign-out"),
-    },
-  };
-});
 
 const user: SessionUser = {
   id: "user-1",
@@ -75,20 +48,16 @@ function callsTo(path: string) {
 
 let fetchImpl: ReturnType<typeof stubFetch>;
 
-function resetSession() {
-  _resetSession();
-  localStorage.clear();
-}
-
 afterEach(() => {
   vi.unstubAllGlobals();
-  resetSession();
+  _resetSession();
+  localStorage.clear();
 });
 
 describe("session", () => {
   it("restores the signed-in user from the server on boot", async () => {
     fetchImpl = stubFetch(jsonResponse({ session: { token: "tok" }, user }));
-    await restoreSession();
+    await bootSession();
 
     expect(callsTo("/api/auth/get-session")).toHaveLength(1);
     expect(session.user).toEqual(user);
@@ -96,28 +65,28 @@ describe("session", () => {
 
   it("treats a missing session as signed out", async () => {
     fetchImpl = stubFetch(jsonResponse(null));
-    await restoreSession();
+    await bootSession();
 
     expect(session.user).toBeNull();
   });
 
   it("keeps the app signed out when the server is unreachable on boot with no cached user", async () => {
     fetchImpl = stubFetch(jsonResponse({ message: "unavailable" }, 503));
-    await restoreSession();
+    await bootSession();
 
     expect(session.user).toBeNull();
   });
 
   it("falls back to the cached user when the server is unreachable, so the app still opens offline", async () => {
     fetchImpl = stubFetch(jsonResponse({ session: { token: "tok" }, user }));
-    await restoreSession();
+    await bootSession();
     expect(session.user).toEqual(user);
     expect(callsTo("/api/auth/get-session")).toHaveLength(1);
 
-    // Now the network dies: the fetch itself fails rather than the server
-    // answering "no session".
+    // The network dies: the fetch fails rather than the server answering "no session".
     fetchImpl = stubUnreachableFetch();
-    await restoreSession();
+    _resetSession();
+    await bootSession();
 
     expect(callsTo("/api/auth/get-session")).toHaveLength(1);
     expect(session.user).toEqual(user);
@@ -125,17 +94,20 @@ describe("session", () => {
 
   it("does not resurrect a cached user the server has signed out", async () => {
     fetchImpl = stubFetch(jsonResponse({ session: { token: "tok" }, user }));
-    await restoreSession();
+    await bootSession();
 
-    // The server is reachable and says there is no session.
+    // Reachability wins: neither the mirror nor the cache survives the boot.
     fetchImpl = stubFetch(jsonResponse(null));
-    await restoreSession();
+    _resetSession();
+    await bootSession();
 
     expect(session.user).toBeNull();
+    expect(localStorage.getItem("shopping-list:session-user")).toBeNull();
 
-    // And the cache is gone: a later offline boot stays signed out.
+    // A later offline boot stays signed out.
     fetchImpl = stubUnreachableFetch();
-    await restoreSession();
+    _resetSession();
+    await bootSession();
 
     expect(session.user).toBeNull();
   });
@@ -176,7 +148,7 @@ describe("session", () => {
 
   it("signs out clears the session, the cached user, and every row in the local Store", async () => {
     fetchImpl = stubFetch(jsonResponse({ session: { token: "tok" }, user }));
-    await restoreSession();
+    await bootSession();
     await db.syncList({
       id: "list-1",
       ownerId: user.id,
@@ -197,7 +169,7 @@ describe("session", () => {
   it("wipes the previous user's local data when a different user signs in", async () => {
     const secondUser: SessionUser = { id: "user-2", name: "Second User", email: "[EMAIL]" };
     fetchImpl = stubFetch(jsonResponse({ session: { token: "tok" }, user }));
-    await restoreSession();
+    await bootSession();
     await db.syncList({
       id: "list-1",
       ownerId: user.id,
@@ -216,8 +188,7 @@ describe("session", () => {
   });
 
   it("keeps the Store when the same user opens the app again on the device", async () => {
-    // No recorded account yet, and a pre-fix install's rows already on disk:
-    // the first boot must keep them, not wipe what it cannot attribute.
+    // A pre-fix install's rows already on disk: the first boot keeps them.
     const mine = {
       id: "list-backstop",
       ownerId: user.id,
@@ -228,12 +199,12 @@ describe("session", () => {
     await db.syncList(mine);
     fetchImpl = stubFetch(jsonResponse({ session: { token: "tok" }, user }));
 
-    await restoreSession();
+    await bootSession();
     expect(await db.getLists()).toContainEqual(mine);
 
-    // The device hand-over backstop runs again on boot and must recognise
-    // this user as the one who owns the Store.
-    await restoreSession();
+    // The backstop recognises this user as the one who owns the Store.
+    _resetSession();
+    await bootSession();
 
     expect(await db.getLists()).toContainEqual(mine);
   });
@@ -254,9 +225,9 @@ describe("session", () => {
     expect(await db.getLists()).toEqual([]);
   });
 
-  it("shares one in-flight restore between concurrent callers", async () => {
+  it("shares one boot between concurrent callers", async () => {
     fetchImpl = stubFetch(jsonResponse({ session: { token: "tok" }, user }));
-    await Promise.all([restoreSession(), restoreSession()]);
+    await Promise.all([bootSession(), bootSession()]);
 
     expect(callsTo("/api/auth/get-session")).toHaveLength(1);
     expect(session.user).toEqual(user);
@@ -268,7 +239,7 @@ describe("session", () => {
       .mockRejectedValue(new Error("IndexedDB unavailable"));
     fetchImpl = stubFetch(jsonResponse({ session: { token: "tok" }, user }));
 
-    await expect(restoreSession()).resolves.toBeUndefined();
+    await expect(bootSession()).resolves.toBeUndefined();
 
     expect(session.user).toEqual(user);
     spy.mockRestore();
@@ -283,8 +254,8 @@ describe("session", () => {
     expect(await isSignUpOpen()).toBe(false);
   });
 
-  it("a slow revalidation landing after a sign-in does not clobber the fresh session", async () => {
-    // The boot restore hangs; while it is in flight the user signs in.
+  it("a boot fetch superseded by a sign-in cannot clobber the fresh session", async () => {
+    // The boot fetch hangs; the user signs in while it is in flight.
     let release!: () => void;
     const gate = new Promise<void>((resolve) => {
       release = resolve;
@@ -307,19 +278,20 @@ describe("session", () => {
     });
     vi.stubGlobal("fetch", fetchImpl);
 
-    const restore = restoreSession();
+    const boot = bootSession();
     await signIn("[EMAIL]", "password123");
     expect(session.user).toEqual(user);
 
-    // The stale fetch lands and says signed-out: it must not undo the sign-in.
+    // The atom cancelled the stale boot fetch; it must not undo the sign-in.
     release();
-    await restore;
+    await boot;
+    await settle();
 
     expect(session.user).toEqual(user);
     expect(JSON.parse(String(localStorage.getItem("shopping-list:session-user")))).toEqual(user);
   });
 
-  it("a slow revalidation landing after a sign-out does not resurrect the session", async () => {
+  it("a boot fetch superseded by a sign-out cannot resurrect the session", async () => {
     let release!: () => void;
     const gate = new Promise<void>((resolve) => {
       release = resolve;
@@ -342,24 +314,16 @@ describe("session", () => {
     });
     vi.stubGlobal("fetch", fetchImpl);
 
-    const restore = restoreSession();
+    const boot = bootSession();
     await signOut();
     expect(session.user).toBeNull();
 
-    // The stale fetch lands claiming the user is still signed in: it must
-    // not undo the sign-out.
+    // The atom cancelled the stale boot fetch; it must not undo the sign-out.
     release();
-    await restore;
+    await boot;
+    await settle();
 
     expect(session.user).toBeNull();
     expect(localStorage.getItem("shopping-list:session-user")).toBeNull();
-  });
-
-  it("allows a later restore to re-fetch after the first completed", async () => {
-    fetchImpl = stubFetch(jsonResponse({ session: { token: "tok" }, user }));
-    await restoreSession();
-    await restoreSession();
-
-    expect(callsTo("/api/auth/get-session")).toHaveLength(2);
   });
 });
