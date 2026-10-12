@@ -16,8 +16,24 @@ export const online = ref(true);
  */
 export type SyncScope = "global" | "list";
 
+/** Server reads shared by one pass: the same key is the same request. */
+export interface ServerReads {
+  share<T>(key: string, read: () => Promise<T>): Promise<T>;
+}
+
+function createServerReads(): ServerReads {
+  const started = new Map<string, Promise<unknown>>();
+  return {
+    share<T>(key: string, read: () => Promise<T>): Promise<T> {
+      const flight = (started.get(key) as Promise<T> | undefined) ?? read();
+      started.set(key, flight);
+      return flight;
+    },
+  };
+}
+
 /** A per-view sync that runs after the shared part of every pass. */
-type ViewSync = (db: ShoppingDb) => Promise<void>;
+type ViewSync = (db: ShoppingDb, reads: ServerReads) => Promise<void>;
 interface ViewSyncEntry {
   handler: ViewSync;
   /** Read app-wide state (Lists index, invitation inbox): skipped by list-scoped passes. */
@@ -76,7 +92,7 @@ const syncPass = createSingleFlight<SyncScope>(widerScope);
  * overwrite the local state that queued writes describe. A successful drain is
  * followed by pruning synced outbox rows past the retention window, bounding the
  * table. Then the Lists index is pulled (global passes only — see
- * {@link SyncScope}) and every registered per-view sync runs in turn.
+ * {@link SyncScope}) and every registered per-view sync runs at once.
  *
  * Fails (and is silently ignored by callers) while offline — the outbox simply
  * keeps the queued writes for the next attempt.
@@ -92,12 +108,11 @@ async function runPass(db: ShoppingDb, scope: SyncScope): Promise<void> {
   if (scope === "global") {
     await syncFromServer(db);
   }
-  for (const entry of viewSyncs) {
-    if (entry.globalOnly && scope !== "global") {
-      continue;
-    }
-    await ignoreRejection(entry.handler(db));
-  }
+  const reads = createServerReads();
+  const handlers = [...viewSyncs]
+    .filter((entry) => !entry.globalOnly || scope === "global")
+    .map((entry) => ignoreRejection(entry.handler(db, reads)));
+  await Promise.all(handlers);
 }
 
 /**

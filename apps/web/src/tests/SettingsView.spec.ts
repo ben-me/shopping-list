@@ -97,6 +97,22 @@ describe("SettingsView", () => {
     expect(wrapper.find('section[aria-label="Invitations for you"]').exists()).toBe(false);
   });
 
+  it("reads the inbox once for the badge and the list in the same pass", async () => {
+    const { requests } = stubApi(
+      {
+        "GET /api/lists": { lists: [] },
+        "GET /api/invitations": { invitations: [] },
+      },
+      { user },
+    );
+
+    await mountApp("/settings");
+    await settle();
+
+    // One read for the badge's first paint, then one pass read shared with this list.
+    expect(requests.filter((r) => r.url === "/api/invitations")).toHaveLength(2);
+  });
+
   it("lets the invitee accept a pending invitation and clears the inbox", async () => {
     const invitation: PendingInvitation = {
       id: "inv-1",

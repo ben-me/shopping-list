@@ -5,7 +5,14 @@ import { jsonResponse } from "./support/app";
 import type { List } from "@shopping-list/api/domain";
 import { db } from "../db";
 import { addItem } from "../items";
-import { onSyncPass, online, runSyncPass, startSyncWatcher, SYNC_POLL_MS } from "../connectivity";
+import {
+  onSyncPass,
+  online,
+  runSyncPass,
+  startSyncWatcher,
+  SYNC_POLL_MS,
+  type ServerReads,
+} from "../connectivity";
 
 
 const list: List = {
@@ -195,6 +202,58 @@ describe("startSyncWatcher", () => {
     const get = requests.find((r) => r.init?.method === undefined || r.init?.method === "GET");
     expect(get?.url).toBe("/api/lists");
     stopViewSync();
+  });
+
+  it("starts every view sync at once instead of one after another", async () => {
+    stubServer((url) => (url === "/api/lists" ? jsonResponse({ lists: [] }) : undefined));
+    let release: (() => void) | undefined;
+    const gate = new Promise<void>((resolve) => (release = resolve));
+    const entered: string[] = [];
+    const stopA = onSyncPass(async () => {
+      entered.push("items");
+      await gate;
+    });
+    const stopB = onSyncPass(async () => {
+      entered.push("payments");
+      await gate;
+    });
+
+    const pass = runSyncPass(db);
+    await vi.waitFor(() => {
+      expect(entered).toHaveLength(2);
+    });
+    release?.();
+    await pass;
+
+    stopA();
+    stopB();
+  });
+
+  it("shares one read across the view syncs of a pass, and reads afresh next pass", async () => {
+    const { requests } = stubServer((url) => {
+      if (url === "/api/lists") {
+        return jsonResponse({ lists: [] });
+      }
+      return url === "/api/inbox" ? jsonResponse({ invitations: [] }) : undefined;
+    });
+    const readInbox = (reads: ServerReads) => reads.share("inbox", () => fetch("/api/inbox"));
+    const answered: Response[] = [];
+    const stopA = onSyncPass(async (_db, reads) => {
+      answered.push(await readInbox(reads));
+    });
+    const stopB = onSyncPass(async (_db, reads) => {
+      answered.push(await readInbox(reads));
+    });
+
+    await runSyncPass(db);
+
+    expect(requests.filter((r) => r.url === "/api/inbox")).toHaveLength(1);
+    expect(answered[0]).toBe(answered[1]);
+    await runSyncPass(db);
+    expect(requests.filter((r) => r.url === "/api/inbox")).toHaveLength(2);
+
+    stopA();
+    stopB();
   });
 
   it("a list-scoped pass drains and fans out but skips the app-wide Lists pull", async () => {

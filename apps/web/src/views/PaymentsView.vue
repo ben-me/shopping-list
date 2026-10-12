@@ -110,9 +110,11 @@ async function onDeletePayment(payment: Payment) {
 
 // Sync wiring and lifecycle
 useSyncPass(async (db) => {
-  await ignoreRejection(syncPaymentsFromServer(db, listId.value));
-  // A new Member redivides the standing and brings their name with it.
-  await ignoreRejection(syncMembershipsFromServer(db, listId.value));
+  await Promise.all([
+    ignoreRejection(syncPaymentsFromServer(db, listId.value)),
+    // A new Member redivides the standing and brings their name with it.
+    ignoreRejection(syncMembershipsFromServer(db, listId.value)),
+  ]);
 });
 
 onMounted(() => {

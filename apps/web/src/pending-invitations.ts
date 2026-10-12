@@ -1,5 +1,6 @@
 import { ref } from "vue";
 import type { PendingInvitation } from "@shopping-list/api/domain";
+import type { ServerReads } from "./connectivity";
 import { pendingInvitations } from "./invitations";
 
 /**
@@ -16,16 +17,17 @@ export const pendingInvitationCount = ref(0);
  * count can never disagree. Rejects while offline; callers decide what that
  * means for them.
  */
-export async function loadPendingInvitations(): Promise<PendingInvitation[]> {
-  const invitations = await pendingInvitations();
+export async function loadPendingInvitations(reads?: ServerReads): Promise<PendingInvitation[]> {
+  const read = reads ? reads.share("invitations", pendingInvitations) : pendingInvitations();
+  const invitations = await read;
   pendingInvitationCount.value = invitations.length;
   return invitations;
 }
 
 /** Refresh the badge from a fresh read; offline keeps the last count. */
-export async function refreshPendingInvitationCount(): Promise<void> {
+export async function refreshPendingInvitationCount(reads?: ServerReads): Promise<void> {
   try {
-    await loadPendingInvitations();
+    await loadPendingInvitations(reads);
   } catch {
     // Offline: the inbox cannot be read; the badge keeps its last count.
   }
