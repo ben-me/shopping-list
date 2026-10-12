@@ -10,6 +10,7 @@ import { db } from "../db";
 import * as storeOwner from "../store-owner";
 import {
   _resetSession,
+  BOOT_TIMEOUT_MS,
   bootSession,
   isSignUpOpen,
   session,
@@ -48,8 +49,27 @@ function callsTo(path: string) {
 
 let fetchImpl: ReturnType<typeof stubFetch>;
 
+/** Simulates a connection that never answers. */
+function stubHangingFetch() {
+  const fetchImpl = vi.fn<typeof fetch>(() => new Promise<Response>(() => {}));
+  vi.stubGlobal("fetch", fetchImpl);
+  return fetchImpl;
+}
+
+/** The session cache, as a previous boot on this device left it. */
+function cacheUserFor(user: SessionUser) {
+  localStorage.setItem("shopping-list:session-user", JSON.stringify(user));
+}
+
+/** The device as the browser reports it with no connection. */
+function stubOffline() {
+  Object.defineProperty(navigator, "onLine", { value: false, configurable: true });
+}
+
 afterEach(() => {
   vi.unstubAllGlobals();
+  vi.restoreAllMocks();
+  Reflect.deleteProperty(navigator, "onLine");
   _resetSession();
   localStorage.clear();
 });
@@ -108,6 +128,45 @@ describe("session", () => {
     fetchImpl = stubUnreachableFetch();
     _resetSession();
     await bootSession();
+
+    expect(session.user).toBeNull();
+  });
+
+  it("opens offline on the cached user without waiting for the session fetch", async () => {
+    cacheUserFor(user);
+    fetchImpl = stubHangingFetch();
+    stubOffline();
+
+    // The cache answers before the boot even waits: no deadline involved.
+    const boot = bootSession();
+
+    expect(session.user).toEqual(user);
+    expect(callsTo("/api/auth/get-session")).toHaveLength(1);
+    await boot;
+  });
+
+  it("falls back to the cached user when the session fetch never answers", async () => {
+    cacheUserFor(user);
+    // The browser thinks it is online, but nothing ever comes back.
+    fetchImpl = stubHangingFetch();
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+
+    const boot = bootSession();
+    await vi.advanceTimersByTimeAsync(BOOT_TIMEOUT_MS);
+    vi.useRealTimers();
+    await boot;
+
+    expect(session.user).toEqual(user);
+  });
+
+  it("opens signed out on a fresh device whose session fetch never answers", async () => {
+    fetchImpl = stubHangingFetch();
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+
+    const boot = bootSession();
+    await vi.advanceTimersByTimeAsync(BOOT_TIMEOUT_MS);
+    vi.useRealTimers();
+    await boot;
 
     expect(session.user).toBeNull();
   });

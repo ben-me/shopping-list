@@ -85,6 +85,15 @@ async function fetchSession() {
 }
 
 function subscribeAtom(listener: (snapshot: Snapshot) => void): () => void {
+  // A fresh hook instance is a fresh page load: start from an empty session.
+  snapshot = {
+    data: null,
+    error: null,
+    isPending: true,
+    isRefetching: false,
+    refetch: () => fetchSession(),
+  };
+  hydrated = false;
   listeners.add(listener);
   listener(snapshot);
   // Unlike the real atom's onMount (one fetch per mount), every fresh hook
