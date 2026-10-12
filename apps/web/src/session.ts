@@ -7,6 +7,9 @@ import { ensureStoreForUser } from "./store-owner";
 
 const SESSION_CACHE_KEY = "shopping-list:session-user";
 
+/** How long the first navigation waits for the session before settling on the cached user. */
+export const BOOT_TIMEOUT_MS = 3_000;
+
 export interface SessionUser {
   id: string;
   name: string;
@@ -56,24 +59,52 @@ function sessionUserOf(snapshot: SessionSnapshot): SessionUser | null {
 
 let sessionReadyPromise: Promise<void> | null = null;
 
-/** Wait for the first useSession() fetch once; on a failed fetch, seed it with the cached user. */
+/**
+ * Boot once, from the cached user when the network cannot answer in time: an
+ * offline boot must not sit on the browser's own DNS/connect timeout.
+ */
 export function bootSession(): Promise<void> {
   if (sessionReadyPromise === null) {
-    sessionReadyPromise = (async () => {
-      startSessionWatch();
-      // A settled observation records itself immediately; read the cache before it can clear it.
-      const cacheCandidate = cachedUser();
-      await new Promise<void>((resolve) => {
-        releaseBoot = resolve;
-      });
-      const snapshot = asSnapshot(sessionState?.value);
-      if (snapshot && canHydrateFromCache(snapshot) && cacheCandidate) {
-        hydrateFromCache(cacheCandidate);
-      }
-      await adoptChain;
-    })();
+    sessionReadyPromise = boot();
   }
   return sessionReadyPromise;
+}
+
+async function boot(): Promise<void> {
+  startSessionWatch();
+  // Read the cache before the settled snapshot can clear it.
+  const cacheCandidate = cachedUser();
+  if (cacheCandidate && navigator.onLine === false) {
+    // Offline: the device already knows who is signed in, so there is
+    // nothing to wait for.
+    hydrateFromCache(cacheCandidate);
+  } else {
+    await firstSessionObservation();
+    const snapshot = asSnapshot(sessionState?.value);
+    if (cacheCandidate && unanswered(snapshot)) {
+      hydrateFromCache(cacheCandidate);
+    }
+  }
+  await adoptChain;
+}
+
+function unanswered(snapshot: SessionSnapshot | undefined): boolean {
+  // A reachable server answers "no session" without either.
+  return snapshot === undefined || snapshot.isPending || canHydrateFromCache(snapshot);
+}
+
+/** The first settled observation, or the deadline. A late fetch still wins. */
+function firstSessionObservation(): Promise<void> {
+  return new Promise<void>((resolve) => {
+    const timer = setTimeout(() => {
+      releaseBoot = null;
+      resolve();
+    }, BOOT_TIMEOUT_MS);
+    releaseBoot = () => {
+      clearTimeout(timer);
+      resolve();
+    };
+  });
 }
 
 let lastUserSerial: string | null | undefined = undefined;
