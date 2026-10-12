@@ -48,7 +48,10 @@ test("the Owner invites a user who accepts in-app and gets equal edit rights", a
     // The pending Invitation lives in the Settings inbox, not on the home.
     await page.goto("/settings");
     await expect(page.getByText("Ada invited you to Weekend shop")).toBeVisible();
+    // The navigation below would cancel the accept if it were still in flight.
+    const accepted = page.waitForResponse((response) => response.url().includes("/accept"));
     await page.getByRole("button", { name: "Accept" }).click();
+    await accepted;
 
     // Accepting makes them a Member: the List appears and can be edited.
     await page.goto("/");

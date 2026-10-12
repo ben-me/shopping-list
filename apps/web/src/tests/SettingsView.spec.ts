@@ -109,8 +109,8 @@ describe("SettingsView", () => {
     await mountApp("/settings");
     await settle();
 
-    // One read for the badge's first paint, then one pass read shared with this list.
-    expect(requests.filter((r) => r.url === "/api/invitations")).toHaveLength(2);
+    // One pass covers the badge and this screen's list; nothing reads it twice.
+    expect(requests.filter((r) => r.url === "/api/invitations")).toHaveLength(1);
   });
 
   it("lets the invitee accept a pending invitation and clears the inbox", async () => {
