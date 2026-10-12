@@ -13,6 +13,17 @@ export const Db = Cloudflare.D1.Database("db", {
   migrations: "./apps/api/drizzle",
 });
 
+// Dev/e2e-only secret: these stages run a local workerd + D1 simulator, so a
+// bundled constant keeps them zero-setup (no .env). Deploys read the real
+// secret from Config.Redacted("BETTER_AUTH_SECRET") via the root .env.
+const LOCAL_BETTER_AUTH_SECRET =
+  "local-only-shopping-list-secret-for-devd-simulator";
+
+// "placeholder" is what state CLI ops (state list/read/delete) resolve when
+// no stage is given, so they also load without env.
+const isLocalStage = (stage: string) =>
+  stage === "e2e" || stage.startsWith("dev") || stage === "placeholder";
+
 /**
  * Live stages: one Worker — SPA (apps/web) + hono API (apps/api) on the same
  * origin, /api/* and /health worker-first, everything else assets with an SPA
@@ -32,20 +43,19 @@ export default Alchemy.Stack(
   Effect.gen(function* () {
     const db = yield* Db;
     const stack = yield* CurrentStack;
-    const isDevStage = stack.stage === "e2e" || stack.stage.startsWith("dev");
     const isE2E = stack.stage === "e2e";
     // Devcontainer publishes appPort via docker, which can only reach the
     // container interface — loopback binding (the default) is not.
     const devHost = "0.0.0.0";
 
     let appOutput;
-    if (isDevStage) {
+    if (isLocalStage(stack.stage)) {
       yield* Cloudflare.Worker("Api", {
         main: "./apps/api/src/index.ts",
         compatibility: { date: "2026-08-26", flags: ["nodejs_compat"] },
         env: {
           db: Db,
-          BETTER_AUTH_SECRET: Config.Redacted("BETTER_AUTH_SECRET"),
+          BETTER_AUTH_SECRET: LOCAL_BETTER_AUTH_SECRET,
           BETTER_AUTH_URL: `http://localhost:${isE2E ? 8788 : 8787}`,
           BETTER_AUTH_TRUSTED_ORIGINS: `http://localhost:${isE2E ? 5174 : 5173}`,
         },
