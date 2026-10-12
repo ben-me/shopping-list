@@ -7,4 +7,10 @@ import { createAuthClient } from "better-auth/vue";
  * `/api/auth/*`. In dev the Vite server proxies `/api` to the hono API on
  * localhost:8787, so requests (and the session cookie) stay same-origin.
  */
-export const authClient = createAuthClient();
+export const authClient = createAuthClient({
+  // Focus/online revalidation on, offline refetch and polling off.
+  sessionOptions: {
+    refetchOnWindowFocus: true,
+    refetchWhenOffline: false,
+  },
+});
