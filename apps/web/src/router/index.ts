@@ -38,14 +38,8 @@ export function createAppRouter(
     ],
   });
 
-  // The first navigation is the boot; later ones must never wait on the network.
-  let sessionBooted = false;
-
   router.beforeEach(async (to) => {
-    if (!sessionBooted) {
-      sessionBooted = true;
-      await bootSession();
-    }
+    await bootSession();
     if (to.meta.requiresAuth && !session.user) {
       return { name: "sign-in" };
     }

@@ -54,24 +54,26 @@ function sessionUserOf(snapshot: SessionSnapshot): SessionUser | null {
   return (snapshot.data?.user as SessionUser | undefined) ?? null;
 }
 
-let bootPromise: Promise<void> | null = null;
+let sessionReadyPromise: Promise<void> | null = null;
 
 /** Wait for the first useSession() fetch once; on a failed fetch, seed it with the cached user. */
 export function bootSession(): Promise<void> {
-  bootPromise ??= (async () => {
-    startSessionWatch();
-    // A settled observation records itself immediately; read the cache before it can clear it.
-    const cacheCandidate = cachedUser();
-    await new Promise<void>((resolve) => {
-      releaseBoot = resolve;
-    });
-    const snapshot = asSnapshot(sessionState?.value);
-    if (snapshot && canHydrateFromCache(snapshot) && cacheCandidate) {
-      hydrateFromCache(cacheCandidate);
-    }
-    await adoptChain;
-  })();
-  return bootPromise;
+  if (sessionReadyPromise === null) {
+    sessionReadyPromise = (async () => {
+      startSessionWatch();
+      // A settled observation records itself immediately; read the cache before it can clear it.
+      const cacheCandidate = cachedUser();
+      await new Promise<void>((resolve) => {
+        releaseBoot = resolve;
+      });
+      const snapshot = asSnapshot(sessionState?.value);
+      if (snapshot && canHydrateFromCache(snapshot) && cacheCandidate) {
+        hydrateFromCache(cacheCandidate);
+      }
+      await adoptChain;
+    })();
+  }
+  return sessionReadyPromise;
 }
 
 let lastUserSerial: string | null | undefined = undefined;
@@ -207,7 +209,7 @@ async function clearLocalStore() {
 
 /** Test isolation hook: forget the user and the boot; the next boot re-creates the hook's subscription. */
 export function _resetSession(): void {
-  bootPromise = null;
+  sessionReadyPromise = null;
   stopSessionWatch?.();
   stopSessionWatch = null;
   releaseBoot = null;
