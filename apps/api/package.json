@@ -17,7 +17,7 @@
   },
   "scripts": {
     "dev": "cd ../.. && alchemy dev",
-    "dev:e2e": "cd ../.. && out=$(alchemy state delete -r ShoppingList/e2e 2>&1) || { printf '%s\n' \"$out\" | grep -q 'path does not exist' || { printf '%s\n' \"$out\" >&2; exit 1; }; } && ALCHEMY_STAGE=e2e alchemy dev --stage e2e",
+    "dev:e2e": "cd ../.. && alchemy state delete -r ShoppingList/e2e && ALCHEMY_STAGE=e2e alchemy dev --stage e2e",
     "db:generate": "drizzle-kit generate",
     "test:unit": "vitest run",
     "type-check": "tsc --noEmit",
