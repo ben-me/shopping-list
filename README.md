@@ -14,9 +14,11 @@ in [`alchemy.run.ts`](alchemy.run.ts)):
 
 ```sh
 pnpm install
-cp .env.example .env            # then set BETTER_AUTH_SECRET
 pnpm dev                        # API workerd on :8787 + vite on :5173 (proxies /api/*)
 ```
+
+Dev and tests need no `.env` — dev/e2e stages run a local workerd + D1
+simulator with a bundled dev secret. The root `.env` is reserved for deploys.
 
 Data lives in the local D1 simulator (`.alchemy/local/`) — the deployed
 database is never touched by dev or e2e. The e2e suite runs the same layout as
@@ -33,5 +35,6 @@ pnpm test:e2e        # playwright (starts its own isolated dev stack)
 ## Deploy
 
 ```sh
-pnpm deploy          # one Worker hosting the SPA + API, D1 created and migrated by Alchemy
+cp .env.example .env            # then set the real BETTER_AUTH_SECRET
+pnpm deploy                     # one Worker hosting the SPA + API, D1 created and migrated by Alchemy
 ```
