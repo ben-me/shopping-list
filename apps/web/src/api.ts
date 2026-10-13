@@ -42,18 +42,15 @@ interface HeldRead {
 
 const heldReads = new Map<string, HeldRead>();
 
-export interface ReadIfModified<T> {
-  /** False when the server answered `304`: `body` is the payload the device already held. */
-  modified: boolean;
-  body: T | undefined;
-}
-
 /**
  * A read the server can answer "unchanged" to. The device remembers the last
  * tag per path and sends it as `If-None-Match`, so a poll that changes nothing
- * costs a `304` with no body — and callers know not to rewrite the Store.
+ * costs a `304` with no body, and `modified: false` tells the caller it already
+ * holds `body` and has nothing to rewrite.
  */
-export async function readIfModified<T>(path: string): Promise<ReadIfModified<T>> {
+export async function readIfModified<T>(
+  path: string,
+): Promise<{ modified: boolean; body: T | undefined }> {
   const held = heldReads.get(path);
   const response = await ofetch.raw<T>(
     path,

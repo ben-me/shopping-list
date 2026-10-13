@@ -12,6 +12,7 @@ import type {
   Payment,
   PendingInvitation,
 } from "@shopping-list/api/domain";
+import type { ShoppingDb } from "../store";
 import { db } from "../db";
 import { listInvitations } from "../invitations";
 import { syncItemsFromServer } from "../items";
@@ -28,38 +29,35 @@ import {
   type RouteTable,
 } from "./support/app";
 
+const at = "2026-02-01T09:00:00.000Z";
 const list: List = {
   id: "list-1",
   ownerId: "user-1",
   name: "Household",
-  createdAt: "2026-02-01T09:00:00.000Z",
-  updatedAt: "2026-02-01T09:00:00.000Z",
+  createdAt: at,
+  updatedAt: at,
 };
-
 const item: Item = {
   id: "item-1",
   listId: list.id,
   name: "Milk",
   checked: false,
-  createdAt: "2026-02-01T09:00:00.000Z",
-  updatedAt: "2026-02-01T09:00:00.000Z",
+  createdAt: at,
+  updatedAt: at,
 };
-
 const payment: Payment = {
   id: "payment-1",
   listId: list.id,
   memberId: "user-1",
   amountInCents: 1250,
-  paidAt: "2026-02-01T09:00:00.000Z",
-  createdAt: "2026-02-01T09:00:00.000Z",
-  updatedAt: "2026-02-01T09:00:00.000Z",
+  paidAt: at,
+  createdAt: at,
+  updatedAt: at,
 };
-
 const members: MemberDetails[] = [
-  { memberId: "user-1", name: "Test User", joinedAt: list.createdAt },
-  { memberId: "user-2", name: "Two", joinedAt: "2026-02-02T09:00:00.000Z" },
+  { memberId: "user-1", name: "Test User", joinedAt: at },
+  { memberId: "user-2", name: "Two", joinedAt: at },
 ];
-
 const inbox: PendingInvitation[] = [
   {
     id: "invitation-1",
@@ -67,13 +65,13 @@ const inbox: PendingInvitation[] = [
     listName: "Household",
     invitedById: "user-2",
     invitedByName: "Two",
-    createdAt: "2026-02-03T09:00:00.000Z",
+    createdAt: at,
   },
 ];
 
 /**
- * The server's side of the contract: the rows with a tag to start with, a
- * `304` once the caller sends that tag back. Keyed by path.
+ * A read the server has not moved: the rows with a tag to start with, a `304`
+ * once the caller hands that tag back.
  */
 function stubReads(bodies: Record<string, unknown>) {
   const table: RouteTable = {};
@@ -85,6 +83,13 @@ function stubReads(bodies: Record<string, unknown>) {
   return stubApi(table);
 }
 
+const storeReads = [
+  () => syncFromServer(db),
+  (db: ShoppingDb) => syncItemsFromServer(db, list.id),
+  (db: ShoppingDb) => syncPaymentsFromServer(db, list.id),
+  (db: ShoppingDb) => syncMembershipsFromServer(db, list.id),
+];
+
 beforeEach(async () => {
   await resetStore([list]);
 });
@@ -94,71 +99,57 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
-describe("a read the server answers 304 to", () => {
-  it("leaves the Lists index alone", async () => {
-    const { requests } = stubReads({ "/api/lists": { lists: [list] } });
-    await syncFromServer(db);
-    const syncList = vi.spyOn(db, "syncList");
+describe("the reads a Sync pass pulls into the Store", () => {
+  it("skips every Store write when the server answers them all unchanged", async () => {
+    const { requests } = stubReads({
+      "/api/lists": { lists: [list] },
+      [`/api/lists/${list.id}/items`]: { items: [item] },
+      [`/api/lists/${list.id}/payments`]: { payments: [payment] },
+      [`/api/lists/${list.id}/members`]: { members },
+    });
+    await Promise.all(storeReads.map((read) => read(db)));
 
-    await syncFromServer(db);
+    const storeWrites = [
+      vi.spyOn(db, "syncList"),
+      vi.spyOn(db, "removeList"),
+      vi.spyOn(db, "syncItem"),
+      vi.spyOn(db, "syncPayment"),
+      vi.spyOn(db, "replaceMemberships"),
+      vi.spyOn(db, "putMemberNames"),
+    ];
+    await Promise.all(storeReads.map((read) => read(db)));
 
-    expect(requests[1]?.headers["if-none-match"]).toBe('"/api/lists"');
-    expect(syncList).not.toHaveBeenCalled();
+    // Every read went back out with the tag the server gave it…
+    expect(requests.filter((request) => request.headers["if-none-match"])).toHaveLength(4);
+    // …and none of them rewrote a row it already had.
+    for (const write of storeWrites) {
+      expect(write).not.toHaveBeenCalled();
+    }
   });
+});
 
-  it("leaves a List's Items alone", async () => {
-    const { requests } = stubReads({ [`/api/lists/${list.id}/items`]: { items: [item] } });
-    await syncItemsFromServer(db, list.id);
-    const syncItem = vi.spyOn(db, "syncItem");
-
-    await syncItemsFromServer(db, list.id);
-
-    expect(requests[1]?.headers["if-none-match"]).toBe(`"/api/lists/${list.id}/items"`);
-    expect(syncItem).not.toHaveBeenCalled();
-  });
-
-  it("leaves a List's Payments alone", async () => {
-    const { requests } = stubReads({ [`/api/lists/${list.id}/payments`]: { payments: [payment] } });
-    await syncPaymentsFromServer(db, list.id);
-    const syncPayment = vi.spyOn(db, "syncPayment");
-
-    await syncPaymentsFromServer(db, list.id);
-
-    expect(requests[1]?.headers["if-none-match"]).toBe(`"/api/lists/${list.id}/payments"`);
-    expect(syncPayment).not.toHaveBeenCalled();
-  });
-
-  it("leaves a List's Memberships and names alone", async () => {
-    const { requests } = stubReads({ [`/api/lists/${list.id}/members`]: { members } });
-    await syncMembershipsFromServer(db, list.id);
-    const replaceMemberships = vi.spyOn(db, "replaceMemberships");
-    const putMemberNames = vi.spyOn(db, "putMemberNames");
-
-    await syncMembershipsFromServer(db, list.id);
-
-    expect(requests[1]?.headers["if-none-match"]).toBe(`"/api/lists/${list.id}/members"`);
-    expect(replaceMemberships).not.toHaveBeenCalled();
-    expect(putMemberNames).not.toHaveBeenCalled();
-  });
-
-  it("still hands the inbox back to the screen that renders it", async () => {
-    const { requests } = stubReads({ "/api/invitations": { invitations: inbox } });
-    await loadPendingInvitations();
+describe("a read with no Store copy", () => {
+  it("skips the pull but still hands the rows back to the screen that renders them", async () => {
+    const { requests } = stubReads({
+      "/api/invitations": { invitations: inbox },
+      [`/api/lists/${list.id}/invitations`]: { invitations: [] },
+    });
 
     await expect(loadPendingInvitations()).resolves.toEqual(inbox);
+    await expect(loadPendingInvitations()).resolves.toEqual(inbox);
+    await expect(listInvitations(list.id)).resolves.toEqual([]);
 
     expect(requests[1]?.headers["if-none-match"]).toBe('"/api/invitations"');
     expect(pendingInvitationCount.value).toBe(1);
   });
 
-  it("still hands a List's invitations back to the screen that renders them", async () => {
-    const { requests } = stubReads({
-      [`/api/lists/${list.id}/invitations`]: { invitations: [] },
-    });
-    await listInvitations(list.id);
+  it("reads afresh once the List it describes is dropped from the Store", async () => {
+    const { requests } = stubReads({ [`/api/lists/${list.id}/items`]: { items: [item] } });
+    await syncItemsFromServer(db, list.id);
 
-    await expect(listInvitations(list.id)).resolves.toEqual([]);
+    await db.removeList(list.id);
+    await syncItemsFromServer(db, list.id);
 
-    expect(requests[1]?.headers["if-none-match"]).toBe(`"/api/lists/${list.id}/invitations"`);
+    expect(requests.at(-1)?.headers["if-none-match"]).toBeUndefined();
   });
 });

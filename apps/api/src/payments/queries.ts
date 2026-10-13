@@ -1,4 +1,4 @@
-import { desc, eq } from "drizzle-orm";
+import { asc, desc, eq } from "drizzle-orm";
 import type { Payment } from "../domain";
 import { newId, now, type Db, touch } from "../db";
 import * as schema from "../schema";
@@ -13,7 +13,7 @@ export async function getPaymentsByList(db: Db, listId: string): Promise<Payment
     .select()
     .from(schema.payments)
     .where(eq(schema.payments.listId, listId))
-    .orderBy(desc(schema.payments.paidAt));
+    .orderBy(desc(schema.payments.paidAt), asc(schema.payments.id));
   return rows.map(toPayment);
 }
 

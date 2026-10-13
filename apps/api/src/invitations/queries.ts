@@ -21,7 +21,7 @@ export async function getInvitationsByListWithContext(
     .from(schema.invitations)
     .innerJoin(schema.user, eq(schema.invitations.invitedById, schema.user.id))
     .where(eq(schema.invitations.listId, listId))
-    .orderBy(asc(schema.invitations.createdAt));
+    .orderBy(asc(schema.invitations.createdAt), asc(schema.invitations.id));
   return rows.map((row) => toListInvitation(row.invitation, row.invitedByName));
 }
 
@@ -48,7 +48,7 @@ export async function getPendingInvitationsForEmail(
         eq(schema.invitations.status, "pending"),
       ),
     )
-    .orderBy(asc(schema.invitations.createdAt));
+    .orderBy(asc(schema.invitations.createdAt), asc(schema.invitations.id));
   return rows.map(
     (row) =>
       ({
