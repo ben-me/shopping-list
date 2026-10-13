@@ -14,7 +14,6 @@ import {
   type ServerReads,
 } from "../connectivity";
 
-
 const list: List = {
   id: "list-1",
   ownerId: "user-1",
