@@ -1,4 +1,5 @@
 import type { Db } from "../db";
+import { readRows } from "../etag";
 import { BadRequestError, NotFoundError } from "../errors";
 import { requireMember, requireUser } from "../guards";
 import type { App } from "../http";
@@ -10,7 +11,7 @@ export function registerItemRoutes(app: App) {
   app.get("/api/lists/:listId/items", requireUser, requireMember, async (c) => {
     const { db, listId } = getRequestContext(c);
     const items = await getItemsByList(db, listId);
-    return c.json({ items });
+    return readRows(c, "items", items);
   });
 
   // Sync upsert: the device generates the id, the server is the source of truth.

@@ -33,11 +33,23 @@ export type RouteReply =
  */
 export type RouteTable = Record<string, RouteReply>;
 
-export function jsonResponse(body: unknown, status = 200): Response {
+export function jsonResponse(
+  body: unknown,
+  status = 200,
+  headers: Record<string, string> = {},
+): Response {
   return new Response(JSON.stringify(body), {
     status,
-    headers: { "Content-Type": "application/json" },
+    headers: { "Content-Type": "application/json", ...headers },
   });
+}
+
+/** The reply for a read the server can prove unchanged: a 304 with no body. */
+export const notModified = () => new Response(null, { status: 304 });
+
+/** The tag a read sent back as `If-None-Match`, if any. */
+export function ifNoneMatch(init: RequestInit | undefined): string | null {
+  return new Headers(init?.headers).get("if-none-match");
 }
 
 /** Lets the timers the app schedules (Sync, debounced fetches) run out. */
@@ -91,6 +103,7 @@ export interface RecordedRequest {
   method: string;
   url: string;
   body: string | undefined;
+  headers: Record<string, string>;
 }
 
 /**
@@ -117,7 +130,12 @@ export function stubApi(routes: RouteTable = {}, options: StubApiOptions = {}) {
       const url =
         typeof input === "string" ? input : input instanceof Request ? input.url : String(input);
       const method = (init?.method ?? "GET").toUpperCase();
-      requests.push({ method, url, body: init?.body as string | undefined });
+      requests.push({
+        method,
+        url,
+        body: init?.body as string | undefined,
+        headers: Object.fromEntries(new Headers(init?.headers).entries()),
+      });
       const reply = lookup(table, method, url) ?? options.fallback;
       if (reply === undefined) {
         throw new Error(`No stub for ${method} ${url}`);
