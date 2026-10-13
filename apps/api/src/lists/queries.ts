@@ -1,4 +1,4 @@
-import { eq, inArray, or } from "drizzle-orm";
+import { asc, eq, inArray, or } from "drizzle-orm";
 import type { List } from "../domain";
 import { newId, now, type Db, touch } from "../db";
 import * as schema from "../schema";
@@ -23,7 +23,9 @@ export async function getListsForMember(db: Db, memberId: string): Promise<List[
             .where(eq(schema.memberships.memberId, memberId)),
         ),
       ),
-    );
+    )
+    // Row order is part of the read's fingerprint, so a tie needs a tiebreaker.
+    .orderBy(asc(schema.lists.id));
   const unique = new Map<string, List>();
   for (const row of rows) {
     unique.set(row.id, toList(row));

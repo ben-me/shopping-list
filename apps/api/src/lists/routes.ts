@@ -1,4 +1,3 @@
-import { readRows } from "../etag";
 import { BadRequestError, ForbiddenError, NotFoundError } from "../errors";
 import { requireMember, requireUser } from "../guards";
 import type { App } from "../http";
@@ -12,7 +11,7 @@ export function registerListRoutes(app: App) {
   app.get("/api/lists", requireUser, async (c) => {
     const { db } = getRequestContext(c);
     const lists = await getListsForMember(db, c.get("user").id);
-    return readRows(c, "lists", lists);
+    return c.json({ lists });
   });
 
   app.put("/api/lists/:listId", requireUser, async (c) => {
