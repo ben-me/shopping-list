@@ -18,6 +18,7 @@ export async function apiFetch<T = unknown>(
 ): Promise<T> {
   return ofetch<T>(path, {
     credentials: "include",
+    retry: 0,
     ...options,
     onResponseError(context) {
       const response = context.response;

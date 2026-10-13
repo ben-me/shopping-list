@@ -78,4 +78,14 @@ describe("apiFetch", () => {
     expect(error).toMatchObject({ name: "ApiError", status: 500 });
     expect(fetchImpl).toHaveBeenCalledTimes(1);
   });
+
+  it("never re-sends a failed read, leaving the retry to the next sync pass", async () => {
+    const fetchImpl = vi.fn<typeof fetch>(async () => {
+      throw new TypeError("Failed to fetch");
+    });
+    vi.stubGlobal("fetch", fetchImpl);
+
+    await expect(apiFetch("/lists")).rejects.toThrow("Failed to fetch");
+    expect(fetchImpl).toHaveBeenCalledTimes(1);
+  });
 });
