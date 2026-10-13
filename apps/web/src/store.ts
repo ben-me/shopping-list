@@ -1,5 +1,6 @@
 import Dexie, { type Table } from "dexie";
 import type { Item, List, Membership, Payment } from "@shopping-list/api/domain";
+import { forgetReads } from "./api";
 import now from "./utils/now";
 
 export type OutboxTarget = "list" | "item" | "payment";
@@ -329,6 +330,7 @@ export class ShoppingDb extends Dexie {
 
   /** Remove every row the device holds: a different User took the Store over. */
   async clearAll(): Promise<void> {
+    forgetReads();
     await Promise.all([
       this.lists.clear(),
       this.items.clear(),
@@ -344,6 +346,7 @@ export class ShoppingDb extends Dexie {
    * Member names stay: they belong to the Member, not the List.
    */
   async removeList(listId: string): Promise<void> {
+    forgetReads(listId);
     const outboxIds = (
       await this.outbox
         .filter(
