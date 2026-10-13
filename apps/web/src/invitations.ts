@@ -1,5 +1,5 @@
 import type { Invitation, ListInvitation, PendingInvitation } from "@shopping-list/api/domain";
-import { apiFetch } from "./api";
+import { apiFetch, readIfModified } from "./api";
 
 /**
  * The in-app Invitation flow (ADR 0003): invite existing users by email (the
@@ -10,7 +10,7 @@ import { apiFetch } from "./api";
  */
 
 export async function pendingInvitations(): Promise<PendingInvitation[]> {
-  const body = await apiFetch<{ invitations?: PendingInvitation[] }>("/api/invitations");
+  const { body } = await readIfModified<{ invitations?: PendingInvitation[] }>("/api/invitations");
   return body?.invitations ?? [];
 }
 
@@ -23,7 +23,7 @@ export async function declineInvitation(invitationId: string): Promise<void> {
 }
 
 export async function listInvitations(listId: string): Promise<ListInvitation[]> {
-  const body = await apiFetch<{ invitations?: ListInvitation[] }>(
+  const { body } = await readIfModified<{ invitations?: ListInvitation[] }>(
     `/api/lists/${listId}/invitations`,
   );
   return body?.invitations ?? [];

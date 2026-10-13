@@ -1,4 +1,5 @@
 import type { InvitationStatus, List } from "../domain";
+import { readRows } from "../etag";
 import { BadRequestError, ForbiddenError, NotFoundError } from "../errors";
 import { requireMember, requireUser } from "../guards";
 import type { App, AppContext } from "../http";
@@ -20,7 +21,7 @@ export function registerInvitationRoutes(app: App) {
   app.get("/api/invitations", requireUser, async (c) => {
     const { db } = getRequestContext(c);
     const invitations = await getPendingInvitationsForEmail(db, c.get("user").email);
-    return c.json({ invitations });
+    return readRows(c, "invitations", invitations);
   });
 
   app.post("/api/invitations/:invitationId/accept", requireUser, inviteDecision("accepted"));
@@ -31,7 +32,7 @@ export function registerInvitationRoutes(app: App) {
   app.get("/api/lists/:listId/invitations", requireUser, requireMember, async (c) => {
     const { db, listId } = getRequestContext(c);
     const invitations = await getInvitationsByListWithContext(db, listId);
-    return c.json({ invitations });
+    return readRows(c, "invitations", invitations);
   });
 
   app.post("/api/lists/:listId/invitations", requireUser, requireMember, async (c) => {

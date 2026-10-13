@@ -1,3 +1,4 @@
+import { readRows } from "../etag";
 import { ForbiddenError, NotFoundError } from "../errors";
 import { requireMember, requireUser } from "../guards";
 import type { App } from "../http";
@@ -9,7 +10,7 @@ export function registerMemberRoutes(app: App) {
   app.get("/api/lists/:listId/members", requireUser, requireMember, async (c) => {
     const { db } = getRequestContext(c);
     const members = await getMembersWithNames(db, c.get("list"));
-    return c.json({ members });
+    return readRows(c, "members", members);
   });
 
   app.delete("/api/lists/:listId/membership", requireUser, requireMember, async (c) => {

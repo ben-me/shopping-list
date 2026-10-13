@@ -1,4 +1,5 @@
 import type { PaymentUpdate } from "../domain";
+import { readRows } from "../etag";
 import { BadRequestError, ForbiddenError, NotFoundError } from "../errors";
 import { requireMember, requireUser } from "../guards";
 import type { App } from "../http";
@@ -16,7 +17,7 @@ export function registerPaymentRoutes(app: App) {
   app.get("/api/lists/:listId/payments", requireUser, requireMember, async (c) => {
     const { db, listId } = getRequestContext(c);
     const payments = await getPaymentsByList(db, listId);
-    return c.json({ payments });
+    return readRows(c, "payments", payments);
   });
 
   // Partial update so concurrent edits of one Payment reconcile per field (ADR 0001).
