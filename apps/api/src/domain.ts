@@ -12,6 +12,12 @@ export interface Item {
   name: string;
   checked: boolean;
   checkedAt?: string;
+  /**
+   * Where the Item sits in its List, ascending. Positions are an order key,
+   * not indices: a move rewrites only the moved Item, halving the gap to its new
+   * neighbours, so a pull never catches the List half-reordered.
+   */
+  position: number;
   createdAt: string;
   updatedAt: string;
 }
@@ -95,6 +101,6 @@ export interface Owed {
 }
 
 /** Sync upsert fields (ADR 0001): per-field reconcile; id from the URL, timestamps server-stamped. */
-export type ItemUpdate = Partial<Pick<Item, "name" | "checked" | "checkedAt">>;
+export type ItemUpdate = Partial<Pick<Item, "name" | "checked" | "checkedAt" | "position">>;
 
 export type PaymentUpdate = Partial<Pick<Payment, "amountInCents" | "paidAt">>;

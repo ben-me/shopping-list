@@ -25,6 +25,7 @@
     "dexie": "^4.4.5",
     "ofetch": "^1.5.1",
     "vue": "^3.5.40",
+    "vue-draggable-plus": "^0.6.1",
     "vue-router": "^5.2.0"
   },
   "devDependencies": {

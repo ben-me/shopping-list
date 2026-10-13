@@ -183,6 +183,8 @@ export const items = sqliteTable(
     name: text("name").notNull(),
     checked: integer("checked", { mode: "boolean" }).notNull().default(false),
     checkedAt: text("checked_at"),
+    /** Dense within the List; a tie falls back to `createdAt` ordering. */
+    position: integer("position").notNull().default(0),
     createdAt: text("created_at").notNull(),
     updatedAt: text("updated_at").notNull(),
   },
@@ -207,4 +209,3 @@ export const payments = sqliteTable(
     index("payments_member_id_idx").on(t.memberId),
   ],
 );
-

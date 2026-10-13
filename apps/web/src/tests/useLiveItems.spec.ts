@@ -12,6 +12,7 @@ function item(id: string, name: string): Item {
     listId: "list-1",
     name,
     checked: false,
+    position: 0,
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString(),
   };

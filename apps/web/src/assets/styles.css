@@ -193,6 +193,14 @@ textarea:focus {
   list-style: none;
 }
 
+/* Sortable carries this clone in the body while a row is dragged, outside the
+   scoped styles of the list it came from. */
+.sortable-fallback {
+  z-index: 1000;
+  border-radius: var(--radius-sm);
+  box-shadow: var(--shadow-md);
+}
+
 :where(.rows) > li {
   display: flex;
   align-items: center;

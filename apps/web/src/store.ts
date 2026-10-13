@@ -75,8 +75,9 @@ export class ShoppingDb extends Dexie {
     return this.payments.get(id);
   }
 
-  getItems(listId: string): Promise<Item[]> {
-    return this.items.where("listId").equals(listId).sortBy("createdAt");
+  async getItems(listId: string): Promise<Item[]> {
+    const items = await this.items.where("listId").equals(listId).toArray();
+    return items.sort(byListOrder);
   }
 
   getPayments(listId: string): Promise<Payment[]> {
@@ -139,6 +140,32 @@ export class ShoppingDb extends Dexie {
         operation: "update",
       });
       return updated;
+    });
+  }
+
+  /**
+   * Move one Item to the slot `index` of its List, giving it a position key that
+   * sorts between the two rows it lands between. One row written, one queued.
+   */
+  async moveItem(listId: string, itemId: string, index: number): Promise<void> {
+    await this.transaction("rw", this.items, this.outbox, async () => {
+      const order = (await this.items.where("listId").equals(listId).toArray()).sort(byListOrder);
+      const from = order.findIndex((item) => item.id === itemId);
+      if (from === -1 || from === index) {
+        return;
+      }
+      const [moved] = order.splice(from, 1);
+      const position = positionBetween(order[index - 1], order[index]);
+      if (!moved || position === moved.position) {
+        return;
+      }
+      await this.items.put({ ...moved, position, updatedAt: now() });
+      await this.queueOutboxWrite({
+        targetType: "item",
+        targetId: itemId,
+        listId,
+        operation: "update",
+      });
     });
   }
 
@@ -351,6 +378,22 @@ export class ShoppingDb extends Dexie {
   private async queueOutboxWrite(entry: OutboxWrite): Promise<void> {
     await this.outbox.add({ ...entry, queuedAt: new Date().toISOString(), syncedAt: null });
   }
+}
+
+/** Dense `position` first, with `createdAt` breaking a tie between devices. */
+function byListOrder(a: Item, b: Item): number {
+  return a.position - b.position || a.createdAt.localeCompare(b.createdAt);
+}
+
+/**
+ * A position key that sorts between two neighbours. An absent side is open, so
+ * the ends just step outwards and a middle slot halves the gap.
+ */
+function positionBetween(before: Item | undefined, after: Item | undefined): number {
+  if (!before) {
+    return after ? after.position - 1 : 0;
+  }
+  return after ? (before.position + after.position) / 2 : before.position + 1;
 }
 
 /** Group queued writes by target, oldest group first; update and delete stay apart. */

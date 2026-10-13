@@ -9,11 +9,16 @@ export async function addItem(db: ShoppingDb, listId: string, name: string): Pro
     throw new Error("Give the item a name");
   }
   const timestamp = now();
+  const position = (await db.getItems(listId)).reduce(
+    (max, item) => Math.max(max, item.position),
+    -1,
+  );
   const item: Item = {
     id: crypto.randomUUID(),
     listId,
     name: trimmed,
     checked: false,
+    position: position + 1,
     createdAt: timestamp,
     updatedAt: timestamp,
   };

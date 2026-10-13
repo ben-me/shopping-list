@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from "vue";
 import { useRoute } from "vue-router";
+import { useDraggable, type DraggableEvent } from "vue-draggable-plus";
 import type { Item } from "@shopping-list/api/domain";
 import ListScreen from "../components/ListScreen.vue";
 import { runSyncPass, useSyncPass } from "../connectivity";
@@ -18,6 +19,33 @@ const itemForm = ref({
   name: "",
 });
 const itemError = ref<string | null>(null);
+const rows = ref<HTMLElement | null>(null);
+
+useDraggable(rows, items, {
+  animation: 150,
+  delay: 250,
+  delayOnTouchOnly: true,
+  touchStartThreshold: 5,
+  forceFallback: true,
+  fallbackOnBody: true,
+  fallbackTolerance: 4,
+  filter: "button",
+  preventOnFilter: false,
+  onUpdate: onReorder,
+});
+
+// Sortable has already put the row in its new slot; the event names the row it
+// picked up and where it landed.
+function onReorder(event: DraggableEvent<Item>) {
+  const index = event.newDraggableIndex ?? event.newIndex;
+  if (index === undefined) {
+    return;
+  }
+  logRejection(
+    db.moveItem(listId.value, event.data.id, index).then(() => ignoreRejection(syncOutbox(db))),
+    "Reordering the items",
+  );
+}
 
 async function onAdd() {
   const added = await submit({ error: itemError }, "Could not add the item", () =>
@@ -82,8 +110,8 @@ onMounted(() => {
     </template>
 
     <p v-if="items.length === 0" class="empty">Nothing here yet.</p>
-    <ul v-else class="rows">
-      <li v-for="item in items" :key="item.id" :class="{ done: item.checked }">
+    <ul ref="rows" class="rows">
+      <li v-for="item in items" :key="item.id" class="item" :class="{ done: item.checked }">
         <label>
           <input
             type="checkbox"
@@ -104,12 +132,31 @@ form input[name="item"] {
   flex: 1;
 }
 
-ul > li {
+/* Holding a row must not select its text or raise the platform callout. */
+ul.rows {
+  user-select: none;
+  -webkit-touch-callout: none;
+}
+
+/* Sortable drags a copy of the row under the pointer; the row in the list is
+   left as the landing slot. Keep the space, drop the duplicate row. */
+.item.sortable-ghost {
+  visibility: hidden;
+}
+
+/* The row class carries every bit of the row's look: Sortable's drag clone is
+   carried outside the list, where a `ul > li` selector would not reach it. */
+.item {
   /* A ruled ledger row, edge to edge, with the type inset from the sheet edge.
      A touch tighter than the other screens' rows: the label below brings its
      own padding-block. */
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
   padding: var(--space-1) var(--space-4);
   border-bottom: 1px solid var(--color-rule);
+  background-color: var(--color-paper);
+  list-style: none;
 
   &:last-child {
     border-bottom: none;

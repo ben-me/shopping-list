@@ -144,6 +144,7 @@ describe("syncOutbox", () => {
       listId: "list-1",
       name: "Milk",
       checked: false,
+      position: 0,
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
     };
@@ -231,6 +232,7 @@ describe("syncFromServer", () => {
       listId: staleList.id,
       name: "Milk",
       checked: false,
+      position: 0,
       createdAt: "2026-09-01T00:00:00.000Z",
       updatedAt: "2026-09-01T00:00:00.000Z",
     }); // queued write for the stale List

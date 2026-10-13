@@ -20,6 +20,7 @@ function item(id: string, name: string): Item {
     listId: list.id,
     name,
     checked: false,
+    position: 0,
     createdAt: now(),
     updatedAt: now(),
   };
@@ -58,6 +59,45 @@ describe("ShoppingDb", () => {
     expect(await db.getLists()).toEqual([list]);
     expect(await db.getItems(list.id)).toEqual([milk, bread]);
     expect(await db.getPayments(list.id)).toEqual([pay1]);
+  });
+
+  it("moves one Item and queues only that row", async () => {
+    await db.putItem({ ...milk, position: 0 });
+    await db.putItem({ ...bread, position: 1 });
+    await db.drainOutbox(async () => true);
+
+    await db.moveItem(list.id, bread.id, 0);
+
+    const items = await db.getItems(list.id);
+    expect(items.map((i) => i.name)).toEqual(["Bread", "Milk"]);
+    expect(items[0]!.position).toBeLessThan(items[1]!.position);
+    expect(await db.pendingOutboxEntries()).toMatchObject([
+      { targetType: "item", targetId: bread.id, operation: "update" },
+    ]);
+  });
+
+  it("moves an Item between its neighbours without touching them", async () => {
+    await db.putItem({ ...milk, position: 0 });
+    await db.putItem({ ...bread, position: 5 });
+    const eggs = { ...item("item-3", "Eggs"), position: 4 };
+    await db.putItem(eggs);
+    await db.drainOutbox(async () => true);
+
+    await db.moveItem(list.id, bread.id, 1);
+
+    expect((await db.getItem(bread.id))?.position).toBe(2);
+    expect((await db.getItem(milk.id))?.position).toBe(0);
+    expect((await db.getItem(eggs.id))?.position).toBe(4);
+  });
+
+  it("queues nothing when a move ends where it started", async () => {
+    await db.putItem({ ...milk, position: 0 });
+    await db.putItem({ ...bread, position: 1 });
+    await db.drainOutbox(async () => true);
+
+    await db.moveItem(list.id, milk.id, 0);
+
+    expect(await db.pendingOutboxEntries()).toEqual([]);
   });
 
   it("round-trips Memberships through the local database with no network", async () => {
