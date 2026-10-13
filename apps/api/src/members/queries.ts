@@ -23,7 +23,7 @@ export async function getMembersWithNames(db: Db, list: List): Promise<MemberDet
     .from(schema.memberships)
     .innerJoin(schema.user, eq(schema.memberships.memberId, schema.user.id))
     .where(eq(schema.memberships.listId, list.id))
-    .orderBy(asc(schema.memberships.joinedAt));
+    .orderBy(asc(schema.memberships.joinedAt), asc(schema.memberships.memberId));
   const owner = ownerRow
     ? { memberId: list.ownerId, name: ownerRow.name, joinedAt: list.createdAt }
     : undefined;
