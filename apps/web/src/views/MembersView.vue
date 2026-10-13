@@ -11,7 +11,7 @@ import { useLiveMembers } from "../composables/useLiveMembers";
 import { useLivePayments } from "../composables/useLivePayments";
 import { leaveList, syncMembershipsFromServer } from "../members";
 import { createInvitation, listInvitations, revokeInvitation } from "../invitations";
-import { useSyncPass } from "../connectivity";
+import { useSyncPass, runSyncPass } from "../connectivity";
 import { db } from "../db";
 import { session } from "../session";
 import { computeOwed } from "../utils/computeOwed";
@@ -136,16 +136,15 @@ async function onLeave() {
 }
 
 // Sync wiring and lifecycle
-useSyncPass(async () => {
-  await ignoreRejection(syncMembershipsFromServer(db, listId.value));
-  await ignoreRejection(loadInvitations());
+useSyncPass(async (db) => {
+  await Promise.all([
+    ignoreRejection(syncMembershipsFromServer(db, listId.value)),
+    ignoreRejection(loadInvitations()),
+  ]);
 });
 
 onMounted(() => {
-  // Pull Memberships so a cold start names its Members, and load the
-  // server-held Invitations; the live reads above repaint themselves.
-  void ignoreRejection(syncMembershipsFromServer(db, listId.value));
-  logRejection(loadInvitations(), "Loading the invitations");
+  void ignoreRejection(runSyncPass(db, "list"));
 });
 </script>
 

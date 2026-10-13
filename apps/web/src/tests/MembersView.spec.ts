@@ -236,7 +236,15 @@ describe("MembersView", () => {
   });
 
   it("shows each Member's Share and Owed figure beside their name", async () => {
-    memberStub();
+    stubApi(
+      {
+        ...membersRoute(members),
+        [`GET /api/lists/${list.id}/invitations`]: { invitations: [] },
+        // The mount pass drains the two Payments queued below.
+        [`PUT /api/lists/${list.id}/payments/*`]: {},
+      },
+      { user },
+    );
     await db.putPayment({
       id: "pay-1",
       listId: list.id,

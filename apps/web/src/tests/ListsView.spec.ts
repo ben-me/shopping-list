@@ -6,8 +6,9 @@ vi.mock(
 );
 
 import { flushPromises } from "@vue/test-utils";
-import type { List } from "@shopping-list/api/domain";
+import type { List, PendingInvitation } from "@shopping-list/api/domain";
 import { db } from "../db";
+import { pendingInvitationCount } from "../pending-invitations";
 import type { SessionUser } from "../session";
 import { mountApp, resetStore, serverDown, settle, stubApi } from "./support/app";
 
@@ -59,6 +60,34 @@ describe("ListsView", () => {
     expect(wrapper.text()).toContain("Weekend shop");
     expect((await db.getLists()).map((l) => l.name)).toContain("Weekend shop");
     expect(await db.pendingOutboxEntries()).toHaveLength(1);
+  });
+
+  it("fills the badge in the mount pass, with no inbox read of its own", async () => {
+    const pending: PendingInvitation[] = [
+      {
+        id: "inv-1",
+        listId: "list-9",
+        listName: "Weekend shop",
+        invitedById: "user-9",
+        invitedByName: "Ada",
+        createdAt: new Date().toISOString(),
+      },
+    ];
+    const { requests } = stubApi(
+      {
+        "GET /api/lists": { lists: [] },
+        "GET /api/invitations": { invitations: pending },
+      },
+      { user },
+    );
+
+    const { wrapper } = await mountApp("/");
+    await flushPromises();
+    await settle();
+
+    expect(pendingInvitationCount.value).toBe(1);
+    expect(wrapper.text()).toContain("1 pending invitation");
+    expect(requests.filter((r) => r.url === "/api/invitations")).toHaveLength(1);
   });
 
   it("signs out and lands on the sign-in view", async () => {

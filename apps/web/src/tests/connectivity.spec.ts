@@ -5,8 +5,14 @@ import { jsonResponse } from "./support/app";
 import type { List } from "@shopping-list/api/domain";
 import { db } from "../db";
 import { addItem } from "../items";
-import { onSyncPass, online, runSyncPass, startSyncWatcher, SYNC_POLL_MS } from "../connectivity";
-
+import {
+  onSyncPass,
+  online,
+  runSyncPass,
+  startSyncWatcher,
+  SYNC_POLL_MS,
+  type ServerReads,
+} from "../connectivity";
 
 const list: List = {
   id: "list-1",
@@ -197,6 +203,57 @@ describe("startSyncWatcher", () => {
     stopViewSync();
   });
 
+  it("starts every view sync at once instead of one after another", async () => {
+    stubServer((url) => (url === "/api/lists" ? jsonResponse({ lists: [] }) : undefined));
+    const { promise: gate, resolve: release } = Promise.withResolvers<void>();
+    const entered: string[] = [];
+    const stopA = onSyncPass(async () => {
+      entered.push("items");
+      await gate;
+    });
+    const stopB = onSyncPass(async () => {
+      entered.push("payments");
+      await gate;
+    });
+
+    const pass = runSyncPass(db);
+    await vi.waitFor(() => {
+      expect(entered).toHaveLength(2);
+    });
+    release();
+    await pass;
+
+    stopA();
+    stopB();
+  });
+
+  it("shares one read across the view syncs of a pass, and reads afresh next pass", async () => {
+    const { requests } = stubServer((url) => {
+      if (url === "/api/lists") {
+        return jsonResponse({ lists: [] });
+      }
+      return url === "/api/inbox" ? jsonResponse({ invitations: [] }) : undefined;
+    });
+    const readInbox = (reads: ServerReads) => reads.share("inbox", () => fetch("/api/inbox"));
+    const answered: Response[] = [];
+    const stopA = onSyncPass(async (_db, reads) => {
+      answered.push(await readInbox(reads));
+    });
+    const stopB = onSyncPass(async (_db, reads) => {
+      answered.push(await readInbox(reads));
+    });
+
+    await runSyncPass(db);
+
+    expect(requests.filter((r) => r.url === "/api/inbox")).toHaveLength(1);
+    expect(answered[0]).toBe(answered[1]);
+    await runSyncPass(db);
+    expect(requests.filter((r) => r.url === "/api/inbox")).toHaveLength(2);
+
+    stopA();
+    stopB();
+  });
+
   it("a list-scoped pass drains and fans out but skips the app-wide Lists pull", async () => {
     const { requests } = stubServer((url) =>
       url === "/api/lists" ? jsonResponse({ lists: [] }) : undefined,
@@ -224,8 +281,7 @@ describe("startSyncWatcher", () => {
 
   it("widens a queued rerun to global when a global pass waits behind a list pass", async () => {
     // A gate keeps the first (list-scoped) pass in flight until released.
-    let release: (() => void) | undefined;
-    const gate = new Promise<void>((resolve) => (release = resolve));
+    const { promise: gate, resolve: release } = Promise.withResolvers<void>();
     const { requests } = stubServer(async () => {
       await gate;
       return jsonResponse({ lists: [] });
@@ -235,7 +291,7 @@ describe("startSyncWatcher", () => {
     await new Promise((resolve) => setTimeout(resolve, 10));
 
     const second = runSyncPass(db); // global: must widen the queued rerun
-    release?.();
+    release();
     await Promise.all([first, second]);
 
     // The rerun ran as a global pass: the Lists index was pulled at least once.
@@ -292,8 +348,7 @@ describe("startSyncWatcher", () => {
 
   it("queues a pass requested while another is in flight and awaits the combined run", async () => {
     // A gated server keeps the first pass in flight until the test releases it.
-    let release: (() => void) | undefined;
-    const gate = new Promise<void>((resolve) => (release = resolve));
+    const { promise: gate, resolve: release } = Promise.withResolvers<void>();
     await addItem(db, list.id, "Milk");
     const { requests } = stubServer(async () => {
       await gate;
@@ -313,7 +368,7 @@ describe("startSyncWatcher", () => {
     await new Promise((resolve) => setTimeout(resolve, 20));
     expect(resolved).toBe(false); // still held by pass A
 
-    release?.();
+    release();
     await awaiting;
 
     await vi.waitFor(async () => {

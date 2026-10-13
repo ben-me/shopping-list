@@ -3,7 +3,7 @@ import { computed, onMounted, ref } from "vue";
 import type { PendingInvitation } from "@shopping-list/api/domain";
 import { apiFetch } from "../api";
 import AppBar from "../components/AppBar.vue";
-import { runSyncPass, useSyncPass } from "../connectivity";
+import { runSyncPass, useSyncPass, type ServerReads } from "../connectivity";
 import { db } from "../db";
 import { acceptInvitation, declineInvitation } from "../invitations";
 import { loadPendingInvitations } from "../pending-invitations";
@@ -23,9 +23,8 @@ const form = ref({
 const formError = ref<string | null>(null);
 const formPending = ref(false);
 
-/* The badge reads this same inbox count, which only this read writes. */
-async function loadInvitations() {
-  invitations.value = await loadPendingInvitations();
+async function loadInvitations(reads?: ServerReads) {
+  invitations.value = await loadPendingInvitations(reads);
 }
 
 /* Accept makes the invitee a Member; the Sync pass then pulls the new List in. */
@@ -36,10 +35,7 @@ async function onAccept(invitation: PendingInvitation) {
   if (!accepted) {
     return;
   }
-  // Pull the List down before the inbox, so the accept shows at once even if a
-  // mount sync was already running.
   await logRejection(runSyncPass(db), "Syncing after accepting");
-  await logRejection(loadInvitations(), "Loading the invitations");
 }
 
 async function onDecline(invitation: PendingInvitation) {
@@ -74,15 +70,10 @@ async function addUser() {
   form.value.password = "";
 }
 
-async function reloadAll() {
-  await ignoreRejection(loadInvitations());
-}
-
-useSyncPass(reloadAll);
+useSyncPass((_db, reads) => loadInvitations(reads));
 
 onMounted(() => {
-  // Paint local state first, then reconcile with the server.
-  ignoreRejection(loadInvitations());
+  // The inbox lives only on the server, so this pass is the first paint too.
   void ignoreRejection(runSyncPass(db));
 });
 </script>

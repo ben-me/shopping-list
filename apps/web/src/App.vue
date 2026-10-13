@@ -13,9 +13,11 @@ let stopInviteCountRefresh: (() => void) | null = null;
 
 onMounted(() => {
   stopSyncWatcher = startSyncWatcher(db);
-  stopInviteCountRefresh = onSyncPass(refreshPendingInvitationCount, { globalOnly: true });
-  // The badge should be right on first paint, not only after the first pass.
-  void refreshPendingInvitationCount();
+  // Registered before the screen's mount pass reaches the server, which is
+  // where the badge's first read comes from: no separate read on startup.
+  stopInviteCountRefresh = onSyncPass((_db, reads) => refreshPendingInvitationCount(reads), {
+    globalOnly: true,
+  });
 });
 
 onUnmounted(() => {
