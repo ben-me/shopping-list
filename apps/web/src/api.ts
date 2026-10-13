@@ -18,7 +18,6 @@ export async function apiFetch<T = unknown>(
 ): Promise<T> {
   return ofetch<T>(path, {
     credentials: "include",
-    // A failed read is retried by the next sync pass, not by ofetch.
     retry: 0,
     ...options,
     onResponseError(context) {
