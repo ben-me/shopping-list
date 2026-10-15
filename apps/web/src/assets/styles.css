@@ -193,8 +193,7 @@ textarea:focus {
   list-style: none;
 }
 
-/* Sortable carries this clone in the body while a row is dragged, outside the
-   scoped styles of the list it came from. */
+/* Sortable drags this clone in the body, outside the list's scoped styles. */
 .sortable-fallback {
   z-index: 1000;
   border-radius: var(--radius-sm);

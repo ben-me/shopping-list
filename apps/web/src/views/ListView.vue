@@ -34,8 +34,6 @@ useDraggable(rows, items, {
   onUpdate: onReorder,
 });
 
-// Sortable has already put the row in its new slot; the event names the row it
-// picked up and where it landed.
 function onReorder(event: DraggableEvent<Item>) {
   const index = event.newDraggableIndex ?? event.newIndex;
   if (index === undefined) {
@@ -58,8 +56,7 @@ async function onAdd() {
   ignoreRejection(syncOutbox(db));
 }
 
-// The tick box has already flipped; the new state is read from the input.
-// A failed write leaves the database unchanged, so the box is put back by hand.
+// The box has already flipped; a failed write leaves the database unchanged, so put it back by hand.
 function onToggle(item: Item, event: Event) {
   const input = event.target as HTMLInputElement;
   ignoreRejection(
@@ -86,7 +83,7 @@ useSyncPass(async (db) => {
   await ignoreRejection(syncItemsFromServer(db, listId.value));
 });
 
-// Registered before this, so the pass below pulls this screen's Items too.
+// useSyncPass registers its handler in an onMounted hook, so it must come first.
 onMounted(() => {
   void ignoreRejection(runSyncPass(db, "list"));
 });
@@ -132,24 +129,16 @@ form input[name="item"] {
   flex: 1;
 }
 
-/* Holding a row must not select its text or raise the platform callout. */
 ul.rows {
   user-select: none;
   -webkit-touch-callout: none;
 }
 
-/* Sortable drags a copy of the row under the pointer; the row in the list is
-   left as the landing slot. Keep the space, drop the duplicate row. */
 .item.sortable-ghost {
   visibility: hidden;
 }
 
-/* The row class carries every bit of the row's look: Sortable's drag clone is
-   carried outside the list, where a `ul > li` selector would not reach it. */
 .item {
-  /* A ruled ledger row, edge to edge, with the type inset from the sheet edge.
-     A touch tighter than the other screens' rows: the label below brings its
-     own padding-block. */
   display: flex;
   align-items: center;
   gap: var(--space-3);
@@ -162,7 +151,6 @@ ul.rows {
     border-bottom: none;
   }
 
-  /* The whole row is the label for the checkbox beside it. */
   label {
     display: grid;
     grid-template-columns: auto 1fr;
@@ -175,8 +163,6 @@ ul.rows {
     cursor: pointer;
   }
 
-  /* The box is drawn on the checkbox itself, so there is no copy of it laid
-     over the top and nothing to keep out of the pointer's way. */
   label input {
     display: grid;
     place-items: center;
@@ -188,8 +174,6 @@ ul.rows {
     background-color: var(--color-paper);
   }
 
-  /* The tick rides inside the box, hidden until the box is filled in the List's
-     pen; the fallback is the original marker yellow. */
   label input::after {
     content: "✓";
     opacity: 0;

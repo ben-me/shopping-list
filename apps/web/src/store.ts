@@ -143,10 +143,7 @@ export class ShoppingDb extends Dexie {
     });
   }
 
-  /**
-   * Move one Item to the slot `index` of its List, giving it a position key that
-   * sorts between the two rows it lands between. One row written, one queued.
-   */
+  /** One row written, one queued: a move rewrites a position key, not the List. */
   async moveItem(listId: string, itemId: string, index: number): Promise<void> {
     await this.transaction("rw", this.items, this.outbox, async () => {
       const order = (await this.items.where("listId").equals(listId).toArray()).sort(byListOrder);
@@ -385,10 +382,7 @@ function byListOrder(a: Item, b: Item): number {
   return a.position - b.position || a.createdAt.localeCompare(b.createdAt);
 }
 
-/**
- * A position key that sorts between two neighbours. An absent side is open, so
- * the ends just step outwards and a middle slot halves the gap.
- */
+/** A key sorting between two neighbours; an absent side is open, so the ends step outwards. */
 function positionBetween(before: Item | undefined, after: Item | undefined): number {
   if (!before) {
     return after ? after.position - 1 : 0;
