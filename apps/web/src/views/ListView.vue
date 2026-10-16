@@ -140,8 +140,6 @@ ul.rows {
 
 .item {
   display: flex;
-  align-items: center;
-  gap: var(--space-3);
   padding: var(--space-1) var(--space-4);
   border-bottom: 1px solid var(--color-rule);
   background-color: var(--color-paper);
@@ -155,11 +153,8 @@ ul.rows {
     display: grid;
     grid-template-columns: auto 1fr;
     align-items: center;
+    margin-right: auto;
     column-gap: var(--space-3);
-    flex: 1;
-    min-width: 0;
-    min-height: var(--control-size);
-    padding-block: var(--space-1);
     cursor: pointer;
   }
 
@@ -177,8 +172,6 @@ ul.rows {
   label input::after {
     content: "✓";
     opacity: 0;
-    font-size: 0.85rem;
-    font-weight: 800;
     line-height: 1;
   }
 
@@ -193,7 +186,6 @@ ul.rows {
   label span {
     min-width: 0;
     font-weight: 500;
-    overflow-wrap: anywhere;
   }
 
   &.done {
@@ -207,14 +199,10 @@ ul.rows {
   }
 
   button {
-    flex: none;
     width: var(--control-size);
-    min-height: var(--control-size);
-    padding: 0;
-    border: 0;
     background: none;
     color: var(--color-ink-muted);
-    font-size: 1.15rem;
+    font-size: 1.5rem;
   }
 
   button:hover:not(:disabled) {

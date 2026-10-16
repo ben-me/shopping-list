@@ -53,8 +53,7 @@
   }
 
   ::v-slotted(input) {
-    padding-inline: var(--space-1);
-    font-size: var(--fs-small);
+    padding-inline: var(--space-2);
   }
 
   ::v-slotted(.error) {
