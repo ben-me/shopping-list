@@ -1,8 +1,11 @@
 <script setup lang="ts">
 import { onMounted, onUnmounted } from "vue";
 import { onSyncPass, online, startSyncWatcher } from "./connectivity";
+import { useKeyboardInset } from "./composables/useKeyboardInset";
 import { db } from "./db";
 import { refreshPendingInvitationCount } from "./pending-invitations";
+
+useKeyboardInset();
 
 // Sync quietly in the background for as long as the app is open: queued
 // offline writes drain and remote state is pulled in whenever the connection
