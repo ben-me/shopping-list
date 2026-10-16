@@ -138,12 +138,6 @@ ul.rows {
   visibility: hidden;
 }
 
-/* Sortable clones the row into the body, carrying this component's scope attribute. */
-.item.sortable-fallback {
-  border-radius: var(--radius-sm);
-  box-shadow: var(--shadow-md);
-}
-
 .item {
   display: flex;
   align-items: center;
