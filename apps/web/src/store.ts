@@ -1,4 +1,4 @@
-import Dexie, { type Table } from "dexie";
+import Dexie, { type Table, type Transaction } from "dexie";
 import type { Item, List, Membership, Payment } from "@shopping-list/api/domain";
 import now from "./utils/now";
 
@@ -57,6 +57,8 @@ export class ShoppingDb extends Dexie {
     });
     // A v1 Store gains the table empty and fills it on its next Sync.
     this.version(2).stores({ memberNames: "memberId" });
+    // The server backfilled Item positions; a device that pulled before it did not.
+    this.version(3).stores({}).upgrade(backfillItemPositions);
   }
 
   getLists(): Promise<List[]> {
@@ -153,7 +155,7 @@ export class ShoppingDb extends Dexie {
       }
       const [moved] = order.splice(from, 1);
       const position = positionBetween(order[index - 1], order[index]);
-      if (!moved || position === moved.position) {
+      if (!moved || !Number.isFinite(position) || position === moved.position) {
         return;
       }
       await this.items.put({ ...moved, position, updatedAt: now() });
@@ -388,6 +390,27 @@ function positionBetween(before: Item | undefined, after: Item | undefined): num
     return after ? after.position - 1 : 0;
   }
   return after ? (before.position + after.position) / 2 : before.position + 1;
+}
+
+async function backfillItemPositions(tx: Transaction): Promise<void> {
+  const items = tx.table<Item, string>("items");
+  const byList = new Map<string, Item[]>();
+  for (const item of await items.toArray()) {
+    const rows = byList.get(item.listId);
+    if (rows) {
+      rows.push(item);
+    } else {
+      byList.set(item.listId, [item]);
+    }
+  }
+  for (const rows of byList.values()) {
+    if (rows.every((item) => Number.isFinite(item.position))) {
+      continue;
+    }
+    rows.sort(byListOrder);
+    // updatedAt stays put, so a pull can still overwrite these with the server's backfill.
+    await items.bulkPut(rows.map((item, index) => ({ ...item, position: index })));
+  }
 }
 
 /** Group queued writes by target, oldest group first; update and delete stay apart. */

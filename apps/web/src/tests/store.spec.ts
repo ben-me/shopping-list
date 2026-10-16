@@ -1,5 +1,6 @@
 import "fake-indexeddb/auto";
 
+import Dexie from "dexie";
 import { OUTBOX_RETENTION_MS, ShoppingDb, type OutboxEntry } from "../store";
 import type { Item, List, Membership, Payment } from "@shopping-list/api/domain";
 import now from "@/utils/now";
@@ -97,6 +98,17 @@ describe("ShoppingDb", () => {
 
     await db.moveItem(list.id, milk.id, 0);
 
+    expect(await db.pendingOutboxEntries()).toEqual([]);
+  });
+
+  it("refuses to write a position it cannot compute, instead of persisting NaN", async () => {
+    await db.putItem({ ...milk, position: NaN });
+    await db.putItem({ ...bread, position: 5 });
+    await db.drainOutbox(async () => true);
+
+    await db.moveItem(list.id, bread.id, 0);
+
+    expect((await db.getItem(bread.id))?.position).toBe(5);
     expect(await db.pendingOutboxEntries()).toEqual([]);
   });
 
@@ -474,5 +486,101 @@ describe("ShoppingDb", () => {
       listId: list.id,
       operation: "delete",
     });
+  });
+});
+
+const legacyListId = "list-legacy";
+const createdAt = [
+  "2026-01-01T00:00:00.000Z",
+  "2026-01-02T00:00:00.000Z",
+  "2026-01-03T00:00:00.000Z",
+];
+
+function legacyItem(id: string, name: string, at: string, position?: number) {
+  return { id, listId: legacyListId, name, checked: false, position, createdAt: at, updatedAt: at };
+}
+
+async function openV2Store(name: string, items: Array<Record<string, unknown>>) {
+  const legacy = new Dexie(name);
+  legacy.version(1).stores({
+    lists: "id, ownerId",
+    items: "id, listId, createdAt",
+    payments: "id, listId, memberId, paidAt",
+    memberships: "[listId+memberId], listId, memberId, joinedAt",
+    outbox: "++id, syncedAt, targetType, targetId",
+  });
+  legacy.version(2).stores({ memberNames: "memberId" });
+  await legacy.table("items").bulkAdd(items);
+  legacy.close();
+  const upgraded = new ShoppingDb(name);
+  await upgraded.open();
+  return upgraded;
+}
+
+describe("opening a Store whose Items predate positions", () => {
+  it("backfills dense positions in the order the Items were shown", async () => {
+    dbNumber += 1;
+    const upgraded = await openV2Store(`test-upgrade-${dbNumber}`, [
+      legacyItem("item-c", "Cheese", createdAt[2]!),
+      legacyItem("item-a", "Apples", createdAt[0]!),
+      legacyItem("item-b", "Bread", createdAt[1]!),
+    ]);
+
+    const items = await upgraded.getItems(legacyListId);
+    expect(items.map((i) => [i.name, i.position])).toEqual([
+      ["Apples", 0],
+      ["Bread", 1],
+      ["Cheese", 2],
+    ]);
+    expect(items.map((i) => i.updatedAt)).toEqual(createdAt);
+    expect(await upgraded.pendingOutboxEntries()).toEqual([]);
+  });
+
+  it("heals a position a failed move left as NaN", async () => {
+    dbNumber += 1;
+    const upgraded = await openV2Store(`test-upgrade-${dbNumber}`, [
+      legacyItem("item-a", "Apples", createdAt[0]!),
+      legacyItem("item-b", "Bread", createdAt[1]!, NaN),
+      legacyItem("item-c", "Cheese", createdAt[2]!, 0),
+    ]);
+
+    const items = await upgraded.getItems(legacyListId);
+    expect(items.map((i) => [i.name, i.position])).toEqual([
+      ["Apples", 0],
+      ["Bread", 1],
+      ["Cheese", 2],
+    ]);
+  });
+
+  it("leaves a list whose Items already carry positions untouched", async () => {
+    dbNumber += 1;
+    const upgraded = await openV2Store(`test-upgrade-${dbNumber}`, [
+      legacyItem("item-a", "Apples", createdAt[0]!, 0),
+      legacyItem("item-b", "Bread", createdAt[1]!, 10),
+    ]);
+
+    const items = await upgraded.getItems(legacyListId);
+    expect(items.map((i) => [i.name, i.position])).toEqual([
+      ["Apples", 0],
+      ["Bread", 10],
+    ]);
+  });
+
+  it("moves an Item on a backfilled list and queues only that row", async () => {
+    dbNumber += 1;
+    const upgraded = await openV2Store(`test-upgrade-${dbNumber}`, [
+      legacyItem("item-a", "Apples", createdAt[0]!),
+      legacyItem("item-b", "Bread", createdAt[1]!),
+      legacyItem("item-c", "Cheese", createdAt[2]!),
+    ]);
+
+    await upgraded.moveItem(legacyListId, "item-c", 0);
+
+    const items = await upgraded.getItems(legacyListId);
+    expect(items.map((i) => i.name)).toEqual(["Cheese", "Apples", "Bread"]);
+    expect(items.every((i) => Number.isFinite(i.position))).toBe(true);
+    expect(await upgraded.pendingOutboxEntries()).toMatchObject([
+      { targetType: "item", targetId: "item-c", operation: "update" },
+    ]);
   });
 });
