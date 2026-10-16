@@ -161,6 +161,7 @@ describe("startSyncWatcher", () => {
       listId: list.id,
       name: "Milk",
       checked: false,
+      position: 0,
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
     });

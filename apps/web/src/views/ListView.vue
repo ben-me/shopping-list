@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from "vue";
 import { useRoute } from "vue-router";
+import { useDraggable, type DraggableEvent } from "vue-draggable-plus";
 import type { Item } from "@shopping-list/api/domain";
 import ListScreen from "../components/ListScreen.vue";
 import { runSyncPass, useSyncPass } from "../connectivity";
@@ -18,6 +19,31 @@ const itemForm = ref({
   name: "",
 });
 const itemError = ref<string | null>(null);
+const rows = ref<HTMLElement | null>(null);
+
+useDraggable(rows, items, {
+  animation: 150,
+  delay: 250,
+  delayOnTouchOnly: true,
+  touchStartThreshold: 5,
+  forceFallback: true,
+  fallbackOnBody: true,
+  fallbackTolerance: 4,
+  filter: "button",
+  preventOnFilter: false,
+  onUpdate: onReorder,
+});
+
+function onReorder(event: DraggableEvent<Item>) {
+  const index = event.newDraggableIndex ?? event.newIndex;
+  if (index === undefined) {
+    return;
+  }
+  logRejection(
+    db.moveItem(listId.value, event.data.id, index).then(() => ignoreRejection(syncOutbox(db))),
+    "Reordering the items",
+  );
+}
 
 async function onAdd() {
   const added = await submit({ error: itemError }, "Could not add the item", () =>
@@ -30,8 +56,7 @@ async function onAdd() {
   ignoreRejection(syncOutbox(db));
 }
 
-// The tick box has already flipped; the new state is read from the input.
-// A failed write leaves the database unchanged, so the box is put back by hand.
+// The box has already flipped; a failed write leaves the database unchanged, so put it back by hand.
 function onToggle(item: Item, event: Event) {
   const input = event.target as HTMLInputElement;
   ignoreRejection(
@@ -58,7 +83,7 @@ useSyncPass(async (db) => {
   await ignoreRejection(syncItemsFromServer(db, listId.value));
 });
 
-// Registered before this, so the pass below pulls this screen's Items too.
+// useSyncPass registers its handler in an onMounted hook, so it must come first.
 onMounted(() => {
   void ignoreRejection(runSyncPass(db, "list"));
 });
@@ -82,8 +107,8 @@ onMounted(() => {
     </template>
 
     <p v-if="items.length === 0" class="empty">Nothing here yet.</p>
-    <ul v-else class="rows">
-      <li v-for="item in items" :key="item.id" :class="{ done: item.checked }">
+    <ul ref="rows" class="rows">
+      <li v-for="item in items" :key="item.id" class="item" :class="{ done: item.checked }">
         <label>
           <input
             type="checkbox"
@@ -104,32 +129,35 @@ form input[name="item"] {
   flex: 1;
 }
 
-ul > li {
-  /* A ruled ledger row, edge to edge, with the type inset from the sheet edge.
-     A touch tighter than the other screens' rows: the label below brings its
-     own padding-block. */
+ul.rows {
+  user-select: none;
+  -webkit-touch-callout: none;
+}
+
+.item.sortable-ghost {
+  visibility: hidden;
+}
+
+.item {
+  display: flex;
   padding: var(--space-1) var(--space-4);
   border-bottom: 1px solid var(--color-rule);
+  background-color: var(--color-paper);
+  list-style: none;
 
   &:last-child {
     border-bottom: none;
   }
 
-  /* The whole row is the label for the checkbox beside it. */
   label {
     display: grid;
     grid-template-columns: auto 1fr;
     align-items: center;
+    margin-right: auto;
     column-gap: var(--space-3);
-    flex: 1;
-    min-width: 0;
-    min-height: var(--control-size);
-    padding-block: var(--space-1);
     cursor: pointer;
   }
 
-  /* The box is drawn on the checkbox itself, so there is no copy of it laid
-     over the top and nothing to keep out of the pointer's way. */
   label input {
     display: grid;
     place-items: center;
@@ -141,13 +169,9 @@ ul > li {
     background-color: var(--color-paper);
   }
 
-  /* The tick rides inside the box, hidden until the box is filled in the List's
-     pen; the fallback is the original marker yellow. */
   label input::after {
     content: "✓";
     opacity: 0;
-    font-size: 0.85rem;
-    font-weight: 800;
     line-height: 1;
   }
 
@@ -162,7 +186,6 @@ ul > li {
   label span {
     min-width: 0;
     font-weight: 500;
-    overflow-wrap: anywhere;
   }
 
   &.done {
@@ -176,14 +199,10 @@ ul > li {
   }
 
   button {
-    flex: none;
     width: var(--control-size);
-    min-height: var(--control-size);
-    padding: 0;
-    border: 0;
     background: none;
     color: var(--color-ink-muted);
-    font-size: 1.15rem;
+    font-size: 1.5rem;
   }
 
   button:hover:not(:disabled) {

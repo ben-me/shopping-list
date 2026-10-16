@@ -108,6 +108,7 @@ describe("item endpoints", () => {
       listId,
       name: "Milk",
       checked: false,
+      position: 0,
     });
     expect(body.item.createdAt).toBeTruthy();
 
@@ -186,6 +187,47 @@ describe("item endpoints", () => {
     const listA = await getItems(cookie, "list-a");
     const listABody = (await listA.json()) as { items: Item[] };
     expect(listABody.items.map((i) => i.id)).toEqual(["item-keep"]);
+  });
+
+  it("keeps the order a device sends and returns it on read", async () => {
+    const { cookie } = await signUp();
+    const listId = uniq("list");
+    await putList(cookie, listId, "Household");
+    await putItem(cookie, listId, "item-a", { name: "A" });
+    await putItem(cookie, listId, "item-b", { name: "B" });
+    await putItem(cookie, listId, "item-c", { name: "C" });
+
+    // What a device sends after dragging C to the top: one row, ahead of A.
+    await putItem(cookie, listId, "item-c", { position: -1 });
+
+    const res = await getItems(cookie, listId);
+    const { items } = (await res.json()) as { items: Item[] };
+    expect(items.map((i) => i.name)).toEqual(["C", "A", "B"]);
+  });
+
+  it("puts a new Item last, after the ones already on the List", async () => {
+    const { cookie } = await signUp();
+    const listId = uniq("list");
+    await putList(cookie, listId, "Household");
+    await putItem(cookie, listId, uniq("item"), { name: "First" });
+    await putItem(cookie, listId, uniq("item"), { name: "Second" });
+
+    const res = await getItems(cookie, listId);
+    const { items } = (await res.json()) as { items: Item[] };
+    expect(items.map((i) => i.name)).toEqual(["First", "Second"]);
+  });
+
+  it("accepts any finite position, so a move can land anywhere in the order", async () => {
+    const { cookie } = await signUp();
+    const listId = uniq("list");
+    const itemId = uniq("item");
+    await putList(cookie, listId, "Household");
+    await putItem(cookie, listId, itemId, { name: "Milk" });
+
+    expect((await putItem(cookie, listId, itemId, { position: -0.5 })).status).toBe(200);
+    expect((await putItem(cookie, listId, itemId, { position: 1.5 })).status).toBe(200);
+    expect((await putItem(cookie, listId, itemId, { position: "first" })).status).toBe(400);
+    expect((await putItem(cookie, listId, itemId, { position: null })).status).toBe(400);
   });
 
   it("rejects an Item with a blank name", async () => {

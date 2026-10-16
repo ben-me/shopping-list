@@ -34,6 +34,7 @@ export function registerItemRoutes(app: App) {
       name: itemUpdate.name,
       checked: itemUpdate.checked,
       checkedAt: itemUpdate.checkedAt,
+      position: itemUpdate.position,
     });
     return c.json({ item }, 201);
   });
@@ -56,33 +57,27 @@ async function getItemBelongingToList(db: Db, listId: string, itemId: string) {
   return existingItem;
 }
 
+const ITEM_UPDATE_RULES: Record<keyof ItemUpdate, (value: unknown) => boolean> = {
+  name: (value) => typeof value === "string" && value.trim() !== "",
+  checked: (value) => typeof value === "boolean",
+  checkedAt: (value) => typeof value === "string",
+  position: (value) => typeof value === "number" && Number.isFinite(value),
+};
+
+/** A field the device left out is not sent at all; one it sends must be valid. */
 function isItemUpdateBody(value: unknown): value is ItemUpdate {
   if (typeof value !== "object" || value === null) {
     return false;
   }
-  const { name, checked, checkedAt } = value as Record<string, unknown>;
-  if (name !== undefined && (typeof name !== "string" || name.trim() === "")) {
-    return false;
-  }
-  if (checked !== undefined && typeof checked !== "boolean") {
-    return false;
-  }
-  if (checkedAt !== undefined && typeof checkedAt !== "string") {
-    return false;
-  }
-  return true;
+  const body = value as Record<string, unknown>;
+  return Object.entries(ITEM_UPDATE_RULES).every(
+    ([field, isValid]) => body[field] === undefined || isValid(body[field]),
+  );
 }
 
-function readItemUpdateFromBody(body: unknown) {
+function readItemUpdateFromBody(body: unknown): ItemUpdate {
   if (!isItemUpdateBody(body)) {
     throw new BadRequestError("Invalid item update");
   }
-  if (body.name === undefined) {
-    return { name: undefined, checked: body.checked, checkedAt: body.checkedAt };
-  }
-  return {
-    name: body.name.trim(),
-    checked: body.checked,
-    checkedAt: body.checkedAt,
-  };
+  return { ...body, name: body.name?.trim() };
 }

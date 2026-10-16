@@ -33,9 +33,22 @@ describe("Items on a List", () => {
 
     const item = await addItem(db, list.id, "  Milk  ");
 
-    expect(item).toMatchObject({ listId: list.id, name: "Milk", checked: false });
+    expect(item).toMatchObject({ listId: list.id, name: "Milk", checked: false, position: 0 });
     expect((await db.getItems(list.id)).map((i) => i.name)).toEqual(["Milk"]);
     expect(await db.pendingOutboxEntries()).toHaveLength(1);
+  });
+
+  it("puts a new Item after the ones already on the List", async () => {
+    stubApi({});
+
+    await addItem(db, list.id, "Milk");
+    await addItem(db, list.id, "Bread");
+
+    const items = await db.getItems(list.id);
+    expect(items.map((i) => [i.name, i.position])).toEqual([
+      ["Milk", 0],
+      ["Bread", 1],
+    ]);
   });
 
   it("rejects adding a blank Item name", async () => {
@@ -75,6 +88,7 @@ describe("Items on a List", () => {
       name: "Bread",
       checked: true,
       checkedAt: "2026-02-01T10:00:00.000Z",
+      position: 0,
       createdAt: "2026-02-01T09:00:00.000Z",
       updatedAt: "2026-02-01T10:00:00.000Z",
     };

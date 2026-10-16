@@ -13,8 +13,17 @@ export async function getItemsByList(db: Db, listId: string): Promise<Item[]> {
     .select()
     .from(schema.items)
     .where(eq(schema.items.listId, listId))
-    .orderBy(asc(schema.items.createdAt));
+    .orderBy(asc(schema.items.position), asc(schema.items.createdAt));
   return rows.map(toItem);
+}
+
+/** One past the List's highest position, so a new Item lands at the bottom. */
+async function nextPosition(db: Db, listId: string): Promise<number> {
+  const last = await db.query.items.findFirst({
+    where: { listId },
+    orderBy: { position: "desc" },
+  });
+  return (last?.position ?? -1) + 1;
 }
 
 export async function createItem(db: Db, input: CreateItemInput): Promise<Item> {
@@ -27,6 +36,7 @@ export async function createItem(db: Db, input: CreateItemInput): Promise<Item> 
       name: input.name,
       checked: input.checked ?? false,
       checkedAt: input.checked === true ? (input.checkedAt ?? timestamp) : undefined,
+      position: input.position ?? (await nextPosition(db, input.listId)),
       createdAt: timestamp,
       updatedAt: timestamp,
     })
@@ -70,12 +80,14 @@ export interface CreateItemInput {
   name: string;
   checked?: boolean;
   checkedAt?: string;
+  position?: number;
 }
 
 export interface UpdateItemInput {
   name?: string;
   checked?: boolean;
   checkedAt?: string;
+  position?: number;
 }
 
 function toItem(row: typeof schema.items.$inferSelect): Item {

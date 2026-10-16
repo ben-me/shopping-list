@@ -71,6 +71,7 @@ async function drainOutbox(db: ShoppingDb): Promise<void> {
         name: item.name,
         checked: item.checked,
         checkedAt: item.checkedAt,
+        position: item.position,
       };
       const { item: serverItem } = await apiFetch<{ item: Item }>(
         `/api/lists/${item.listId}/items/${item.id}`,
