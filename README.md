@@ -24,6 +24,18 @@ Data lives in the local D1 simulator (`.alchemy/local/`) — the deployed
 database is never touched by dev or e2e. The e2e suite runs the same layout as
 its own stage on :8788 / :5174 with a fresh local database per run.
 
+### On a phone
+
+Dev already listens on `0.0.0.0`; the phone's origin is what the API has to
+trust:
+
+```sh
+DEV_ORIGIN=http://192.168.1.42:5173 pnpm dev   # this machine's LAN address
+```
+
+Then open `http://192.168.1.42:5173`. Run dev from one checkout at a time: a
+stage's D1 data live in the `.alchemy/local/` of the checkout that created it.
+
 ## Tests
 
 ```sh
