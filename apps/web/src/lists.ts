@@ -1,5 +1,5 @@
 import type { Item, ItemUpdate, List, Payment, PaymentUpdate } from "@shopping-list/api/domain";
-import { apiFetch } from "./api";
+import { apiFetch, readIfModified } from "./api";
 import type { ShoppingDb } from "./store";
 import now from "./utils/now";
 import { createSingleFlight } from "./utils/singleFlight";
@@ -119,7 +119,11 @@ async function drainOutbox(db: ShoppingDb): Promise<void> {
 /* Drops local Lists the server no longer returns (revoked membership, another
    user's leftovers). The outbox drains first, so just-pushed Lists survive. */
 export async function syncFromServer(db: ShoppingDb): Promise<void> {
-  const { lists } = await apiFetch<{ lists: List[] }>("/api/lists");
+  const { modified, body } = await readIfModified<{ lists?: List[] }>("/api/lists");
+  if (!modified) {
+    return;
+  }
+  const lists = body?.lists;
   if (!lists) {
     return;
   }

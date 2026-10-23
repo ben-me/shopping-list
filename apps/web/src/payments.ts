@@ -1,5 +1,5 @@
 import type { Payment } from "@shopping-list/api/domain";
-import { apiFetch } from "./api";
+import { readIfModified } from "./api";
 import type { ShoppingDb } from "./store";
 import now from "./utils/now";
 
@@ -65,8 +65,13 @@ export async function removePayment(db: ShoppingDb, payment: Payment): Promise<v
 
 /** Pull the server's Payments for a List into the Store (server is authoritative). */
 export async function syncPaymentsFromServer(db: ShoppingDb, listId: string): Promise<void> {
-  const { payments } = await apiFetch<{ payments: Payment[] }>(`/api/lists/${listId}/payments`);
-  for (const payment of payments) {
+  const { modified, body } = await readIfModified<{ payments?: Payment[] }>(
+    `/api/lists/${listId}/payments`,
+  );
+  if (!modified) {
+    return;
+  }
+  for (const payment of body?.payments ?? []) {
     await db.syncPayment(payment);
   }
 }
