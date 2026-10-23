@@ -205,6 +205,25 @@ describe("item endpoints", () => {
     expect(items.map((i) => i.name)).toEqual(["C", "A", "B"]);
   });
 
+  it("orders Items that tie on position and creation time by id", async () => {
+    const { cookie } = await signUp();
+    const listId = uniq("list");
+    const itemA = uniq("item-a");
+    const itemB = uniq("item-b");
+    const at = "2026-02-01T09:00:00.000Z";
+    await putList(cookie, listId, "Household");
+
+    // Inserted out of order: the read has to break the tie itself.
+    await db.insert(schema.items).values([
+      { id: itemB, listId, name: "B", checked: false, position: 0, createdAt: at, updatedAt: at },
+      { id: itemA, listId, name: "A", checked: false, position: 0, createdAt: at, updatedAt: at },
+    ]);
+
+    const res = await getItems(cookie, listId);
+    const { items } = (await res.json()) as { items: Item[] };
+    expect(items.map((i) => i.id)).toEqual([itemA, itemB]);
+  });
+
   it("puts a new Item last, after the ones already on the List", async () => {
     const { cookie } = await signUp();
     const listId = uniq("list");

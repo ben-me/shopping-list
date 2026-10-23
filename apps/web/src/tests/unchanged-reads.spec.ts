@@ -42,6 +42,7 @@ const item: Item = {
   listId: list.id,
   name: "Milk",
   checked: false,
+  position: 0,
   createdAt: at,
   updatedAt: at,
 };
@@ -151,5 +152,19 @@ describe("a read with no Store copy", () => {
     await syncItemsFromServer(db, list.id);
 
     expect(requests.at(-1)?.headers["if-none-match"]).toBeUndefined();
+  });
+});
+
+describe("a read whose Store write fails", () => {
+  it("does not remember the tag, so the next poll retries the pull", async () => {
+    const { requests } = stubReads({ [`/api/lists/${list.id}/items`]: { items: [item] } });
+    const syncItem = vi.spyOn(db, "syncItem").mockRejectedValueOnce(new Error("Store unavailable"));
+
+    await expect(syncItemsFromServer(db, list.id)).rejects.toThrow("Store unavailable");
+    syncItem.mockRestore();
+    await syncItemsFromServer(db, list.id);
+
+    expect(requests[1]?.headers["if-none-match"]).toBeUndefined();
+    expect(await db.getItems(list.id)).toEqual([item]);
   });
 });

@@ -119,25 +119,23 @@ async function drainOutbox(db: ShoppingDb): Promise<void> {
 /* Drops local Lists the server no longer returns (revoked membership, another
    user's leftovers). The outbox drains first, so just-pushed Lists survive. */
 export async function syncFromServer(db: ShoppingDb): Promise<void> {
-  const { modified, body } = await readIfModified<{ lists?: List[] }>("/api/lists");
-  if (!modified) {
-    return;
-  }
-  const lists = body?.lists;
-  if (!lists) {
-    return;
-  }
-  const serverListIds = new Set(lists.map((list) => list.id));
-  const localLists = await db.getLists();
-  for (const localList of localLists) {
-    if (!serverListIds.has(localList.id)) {
-      await db.removeList(localList.id);
+  await readIfModified<{ lists?: List[] }>("/api/lists", async (body) => {
+    const lists = body?.lists;
+    if (!lists) {
+      return;
     }
-  }
-  for (const list of lists) {
-    if (!list?.id) {
-      continue;
+    const serverListIds = new Set(lists.map((list) => list.id));
+    const localLists = await db.getLists();
+    for (const localList of localLists) {
+      if (!serverListIds.has(localList.id)) {
+        await db.removeList(localList.id);
+      }
     }
-    await db.syncList(list);
-  }
+    for (const list of lists) {
+      if (!list?.id) {
+        continue;
+      }
+      await db.syncList(list);
+    }
+  });
 }

@@ -48,23 +48,25 @@ export async function localMembers(db: ShoppingDb, list: List): Promise<MemberDe
  * real group — with the new Member's name. An unexpected payload mirrors nothing.
  */
 export async function syncMembershipsFromServer(db: ShoppingDb, listId: string): Promise<void> {
-  const { modified, body } = await readIfModified<{ members?: MemberDetails[] }>(
+  await readIfModified<{ members?: MemberDetails[] }>(
     `/api/lists/${listId}/members`,
+    async (body) => {
+      if (!body?.members) {
+        return;
+      }
+      const list = await db.getList(listId);
+      if (!list) {
+        return;
+      }
+      await db.replaceMemberships(
+        listId,
+        body.members
+          .filter((member) => member.memberId !== list.ownerId)
+          .map((member) => ({ listId, memberId: member.memberId, joinedAt: member.joinedAt })),
+      );
+      await db.putMemberNames(body.members.map(({ memberId, name }) => ({ memberId, name })));
+    },
   );
-  if (!modified) {
-    return;
-  }
-  const list = await db.getList(listId);
-  if (!body?.members || !list) {
-    return;
-  }
-  await db.replaceMemberships(
-    listId,
-    body.members
-      .filter((member) => member.memberId !== list.ownerId)
-      .map((member) => ({ listId, memberId: member.memberId, joinedAt: member.joinedAt })),
-  );
-  await db.putMemberNames(body.members.map(({ memberId, name }) => ({ memberId, name })));
 }
 
 /**

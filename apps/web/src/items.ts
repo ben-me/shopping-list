@@ -32,11 +32,9 @@ export async function removeItem(db: ShoppingDb, item: Item): Promise<void> {
 
 /** Pull the server's copy of a List's Items into the Store. */
 export async function syncItemsFromServer(db: ShoppingDb, listId: string): Promise<void> {
-  const { modified, body } = await readIfModified<{ items?: Item[] }>(`/api/lists/${listId}/items`);
-  if (!modified) {
-    return;
-  }
-  for (const item of body?.items ?? []) {
-    await db.syncItem(item);
-  }
+  await readIfModified<{ items?: Item[] }>(`/api/lists/${listId}/items`, async (body) => {
+    for (const item of body?.items ?? []) {
+      await db.syncItem(item);
+    }
+  });
 }

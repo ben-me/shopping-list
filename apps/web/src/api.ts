@@ -47,9 +47,14 @@ const heldReads = new Map<string, HeldRead>();
  * tag per path and sends it as `If-None-Match`, so a poll that changes nothing
  * costs a `304` with no body, and `modified: false` tells the caller it already
  * holds `body` and has nothing to rewrite.
+ *
+ * `apply` writes a fresh body to the Store before its tag is remembered: a
+ * failed write must leave the tag unset, or the next `304` would skip the write
+ * that never happened.
  */
 export async function readIfModified<T>(
   path: string,
+  apply?: (body: T | undefined) => Promise<void>,
 ): Promise<{ modified: boolean; body: T | undefined }> {
   const held = heldReads.get(path);
   const response = await ofetch.raw<T>(
@@ -59,11 +64,13 @@ export async function readIfModified<T>(
   if (response.status === 304 && held) {
     return { modified: false, body: held.body as T };
   }
+  const body = response._data;
+  await apply?.(body);
   const tag = response.headers.get("etag");
   if (tag) {
-    heldReads.set(path, { tag, body: response._data });
+    heldReads.set(path, { tag, body });
   }
-  return { modified: true, body: response._data };
+  return { modified: true, body };
 }
 
 /**
@@ -77,7 +84,7 @@ export function forgetReads(listId?: string): void {
     return;
   }
   for (const path of heldReads.keys()) {
-    if (path.includes(listId)) {
+    if (path === `/api/lists/${listId}` || path.startsWith(`/api/lists/${listId}/`)) {
       heldReads.delete(path);
     }
   }
