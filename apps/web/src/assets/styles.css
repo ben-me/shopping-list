@@ -72,6 +72,11 @@
   min-height: 100dvh;
 }
 
+html[data-keyboard-open] #app {
+  height: var(--keyboard-visible-height, 100dvh);
+  min-height: 0;
+}
+
 body {
   font-family:
     system-ui,
