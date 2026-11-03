@@ -50,9 +50,6 @@ export default Alchemy.Stack(
 
     let appOutput;
     if (isLocalStage(stack.stage)) {
-      // A phone on the LAN reaches the dev stack on its own origin, which the
-      // auth instance must trust: `DEV_ORIGIN=http://192.168.1.42:5173`.
-      const devOrigin = yield* Config.String("DEV_ORIGIN").pipe(Config.withDefault(""));
       yield* Cloudflare.Worker("Api", {
         main: "./apps/api/src/index.ts",
         compatibility: { date: "2026-08-26", flags: ["nodejs_compat"] },
@@ -60,9 +57,7 @@ export default Alchemy.Stack(
           db: Db,
           BETTER_AUTH_SECRET: LOCAL_BETTER_AUTH_SECRET,
           BETTER_AUTH_URL: `http://localhost:${isE2E ? 8788 : 8787}`,
-          BETTER_AUTH_TRUSTED_ORIGINS: [`http://localhost:${isE2E ? 5174 : 5173}`, devOrigin]
-            .filter(Boolean)
-            .join(","),
+          BETTER_AUTH_TRUSTED_ORIGINS: `http://localhost:${isE2E ? 5174 : 5173}`,
         },
         dev: {
           host: devHost,
