@@ -1,5 +1,6 @@
 import { Hono } from "hono";
 import { cors } from "hono/cors";
+import { etag } from "hono/etag";
 import type { ContentfulStatusCode } from "hono/utils/http-status";
 import { createAuth, getTrustedOrigins, type AuthEnv } from "./auth";
 import { createD1Connection, ping } from "./db";
@@ -44,6 +45,13 @@ export function createApp() {
       credentials: true,
     }),
   );
+
+  // The reads a device polls while the app is open: the rows are hashed into an
+  // `ETag`, and a caller that sends the last one back as `If-None-Match` gets a
+  // 304 with no body while nothing under those rows has changed.
+  for (const path of ["/api/lists", "/api/lists/*", "/api/invitations"]) {
+    app.use(path, etag());
+  }
 
   // The D1 binding only exists inside the request, so auth is built per request.
   app.all("/api/auth/*", async (c) => {

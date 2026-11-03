@@ -1,5 +1,5 @@
 import type { Item } from "@shopping-list/api/domain";
-import { apiFetch } from "./api";
+import { readIfModified } from "./api";
 import type { ShoppingDb } from "./store";
 import now from "./utils/now";
 
@@ -32,8 +32,11 @@ export async function removeItem(db: ShoppingDb, item: Item): Promise<void> {
 
 /** Pull the server's copy of a List's Items into the Store. */
 export async function syncItemsFromServer(db: ShoppingDb, listId: string): Promise<void> {
-  const { items } = await apiFetch<{ items: Item[] }>(`/api/lists/${listId}/items`);
-  for (const item of items) {
+  const { modified, body } = await readIfModified<{ items?: Item[] }>(`/api/lists/${listId}/items`);
+  if (!modified) {
+    return;
+  }
+  for (const item of body?.items ?? []) {
     await db.syncItem(item);
   }
 }
