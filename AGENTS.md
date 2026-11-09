@@ -3,8 +3,9 @@ This project uses corepack/pnpm workspaces, hono as api, dexie.js for local firs
 
 # Repository layout
 
-- `apps/web` contains the progressive web app written as Vue single page application.
-- `apps/api` contains the hono api routes.
+- `apps/web/` contains the progressive web app written as Vue single page application.
+- `apps/api/` contains the hono api routes.
+- `.worktrees/` directory is used to create worktrees in when developing features or fixing bugs
 
 ## Agent skills
 
