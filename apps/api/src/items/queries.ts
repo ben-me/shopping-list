@@ -13,7 +13,7 @@ export async function getItemsByList(db: Db, listId: string): Promise<Item[]> {
     .select()
     .from(schema.items)
     .where(eq(schema.items.listId, listId))
-    .orderBy(asc(schema.items.position), asc(schema.items.createdAt));
+    .orderBy(asc(schema.items.position), asc(schema.items.createdAt), asc(schema.items.id));
   return rows.map(toItem);
 }
 

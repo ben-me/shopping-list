@@ -1,5 +1,5 @@
 import type { List, MemberDetails } from "@shopping-list/api/domain";
-import { apiFetch } from "./api";
+import { apiFetch, readIfModified } from "./api";
 import type { ShoppingDb } from "./store";
 
 /**
@@ -45,29 +45,28 @@ export async function localMembers(db: ShoppingDb, list: List): Promise<MemberDe
  * List's whole local set: Membership rows and names, the Owner's pseudo-row
  * filtered out. After an Invitation is accepted server-side, this is how every
  * device learns who the Members are, so the Split/standing re-divides for the
- * real group — with the new Member's name.
- *
- * Returns the named rows the server sent. An unexpected payload mirrors nothing.
+ * real group — with the new Member's name. An unexpected payload mirrors nothing.
  */
-export async function syncMembershipsFromServer(
-  db: ShoppingDb,
-  listId: string,
-): Promise<MemberDetails[]> {
-  const [body, list] = await Promise.all([
-    apiFetch<{ members?: MemberDetails[] }>(`/api/lists/${listId}/members`),
-    db.getList(listId),
-  ]);
-  if (!body?.members || !list) {
-    return [];
-  }
-  await db.replaceMemberships(
-    listId,
-    body.members
-      .filter((member) => member.memberId !== list.ownerId)
-      .map((member) => ({ listId, memberId: member.memberId, joinedAt: member.joinedAt })),
+export async function syncMembershipsFromServer(db: ShoppingDb, listId: string) {
+  await readIfModified<{ members?: MemberDetails[] }>(
+    `/api/lists/${listId}/members`,
+    async (body) => {
+      if (!body?.members) {
+        return;
+      }
+      const list = await db.getList(listId);
+      if (!list) {
+        return;
+      }
+      await db.replaceMemberships(
+        listId,
+        body.members
+          .filter((member) => member.memberId !== list.ownerId)
+          .map((member) => ({ listId, memberId: member.memberId, joinedAt: member.joinedAt })),
+      );
+      await db.putMemberNames(body.members.map(({ memberId, name }) => ({ memberId, name })));
+    },
   );
-  await db.putMemberNames(body.members.map(({ memberId, name }) => ({ memberId, name })));
-  return body.members;
 }
 
 /**
