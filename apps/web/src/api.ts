@@ -45,8 +45,7 @@ const heldReads = new Map<string, HeldRead>();
 /**
  * A read the server can answer "unchanged" to. The device remembers the last
  * tag per path and sends it as `If-None-Match`, so a poll that changes nothing
- * costs a `304` with no body, and `modified: false` tells the caller it already
- * holds `body` and has nothing to rewrite.
+ * costs a `304` with no body, and the caller gets the body it already held.
  *
  * `apply` writes a fresh body to the Store before its tag is remembered: a
  * failed write must leave the tag unset, or the next `304` would skip the write
@@ -55,14 +54,14 @@ const heldReads = new Map<string, HeldRead>();
 export async function readIfModified<T>(
   path: string,
   apply?: (body: T | undefined) => Promise<void>,
-): Promise<{ modified: boolean; body: T | undefined }> {
+) {
   const held = heldReads.get(path);
   const response = await ofetch.raw<T>(
     path,
     requestOptions({ headers: held ? { "if-none-match": held.tag } : undefined }),
   );
   if (response.status === 304 && held) {
-    return { modified: false, body: held.body as T };
+    return held.body as T;
   }
   const body = response._data;
   await apply?.(body);
@@ -70,7 +69,7 @@ export async function readIfModified<T>(
   if (tag) {
     heldReads.set(path, { tag, body });
   }
-  return { modified: true, body };
+  return body;
 }
 
 /**
@@ -78,7 +77,7 @@ export async function readIfModified<T>(
  * remembered payload is only good while the rows it describes are still in the
  * Store, so whoever drops those rows drops the tag with them.
  */
-export function forgetReads(listId?: string): void {
+export function forgetReads(listId?: string) {
   if (listId === undefined) {
     heldReads.clear();
     return;

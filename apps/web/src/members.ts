@@ -47,7 +47,7 @@ export async function localMembers(db: ShoppingDb, list: List): Promise<MemberDe
  * device learns who the Members are, so the Split/standing re-divides for the
  * real group — with the new Member's name. An unexpected payload mirrors nothing.
  */
-export async function syncMembershipsFromServer(db: ShoppingDb, listId: string): Promise<void> {
+export async function syncMembershipsFromServer(db: ShoppingDb, listId: string) {
   await readIfModified<{ members?: MemberDetails[] }>(
     `/api/lists/${listId}/members`,
     async (body) => {

@@ -48,7 +48,7 @@ export function jsonResponse(
 export const notModified = () => new Response(null, { status: 304 });
 
 /** The tag a read sent back as `If-None-Match`, if any. */
-export function ifNoneMatch(init: RequestInit | undefined): string | null {
+export function ifNoneMatch(init: RequestInit | undefined) {
   return new Headers(init?.headers).get("if-none-match");
 }
 

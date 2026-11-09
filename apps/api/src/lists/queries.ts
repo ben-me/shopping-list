@@ -24,7 +24,7 @@ export async function getListsForMember(db: Db, memberId: string): Promise<List[
         ),
       ),
     )
-    // Row order is part of the read's fingerprint, so a tie needs a tiebreaker.
+    // Row order is part of the read's ETag, so a tie needs a tiebreaker.
     .orderBy(asc(schema.lists.id));
   const unique = new Map<string, List>();
   for (const row of rows) {

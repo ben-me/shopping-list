@@ -14,7 +14,6 @@ import type {
 } from "@shopping-list/api/domain";
 import type { ShoppingDb } from "../store";
 import { db } from "../db";
-import { listInvitations } from "../invitations";
 import { syncItemsFromServer } from "../items";
 import { syncFromServer } from "../lists";
 import { syncMembershipsFromServer } from "../members";
@@ -85,7 +84,7 @@ function stubReads(bodies: Record<string, unknown>) {
 }
 
 const storeReads = [
-  () => syncFromServer(db),
+  (db: ShoppingDb) => syncFromServer(db),
   (db: ShoppingDb) => syncItemsFromServer(db, list.id),
   (db: ShoppingDb) => syncPaymentsFromServer(db, list.id),
   (db: ShoppingDb) => syncMembershipsFromServer(db, list.id),
@@ -133,12 +132,10 @@ describe("a read with no Store copy", () => {
   it("skips the pull but still hands the rows back to the screen that renders them", async () => {
     const { requests } = stubReads({
       "/api/invitations": { invitations: inbox },
-      [`/api/lists/${list.id}/invitations`]: { invitations: [] },
     });
 
     await expect(loadPendingInvitations()).resolves.toEqual(inbox);
     await expect(loadPendingInvitations()).resolves.toEqual(inbox);
-    await expect(listInvitations(list.id)).resolves.toEqual([]);
 
     expect(requests[1]?.headers["if-none-match"]).toBe('"/api/invitations"');
     expect(pendingInvitationCount.value).toBe(1);

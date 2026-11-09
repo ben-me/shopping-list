@@ -10,7 +10,7 @@ import { apiFetch, readIfModified } from "./api";
  */
 
 export async function pendingInvitations(): Promise<PendingInvitation[]> {
-  const { body } = await readIfModified<{ invitations?: PendingInvitation[] }>("/api/invitations");
+  const body = await readIfModified<{ invitations?: PendingInvitation[] }>("/api/invitations");
   return body?.invitations ?? [];
 }
 
@@ -23,7 +23,7 @@ export async function declineInvitation(invitationId: string): Promise<void> {
 }
 
 export async function listInvitations(listId: string): Promise<ListInvitation[]> {
-  const { body } = await readIfModified<{ invitations?: ListInvitation[] }>(
+  const body = await readIfModified<{ invitations?: ListInvitation[] }>(
     `/api/lists/${listId}/invitations`,
   );
   return body?.invitations ?? [];
