@@ -17,8 +17,9 @@
   },
   "scripts": {
     "dev": "cd ../.. && alchemy dev",
-    "dev:e2e": "cd ../.. && alchemy state delete -r ShoppingList/e2e && ALCHEMY_STAGE=e2e alchemy dev --stage e2e",
+    "dev:e2e": "pnpm run db:reset:e2e && cd ../.. && ALCHEMY_STAGE=e2e alchemy dev --stage e2e",
     "db:generate": "drizzle-kit generate",
+    "db:reset:e2e": "cd ../.. && if alchemy state list -r ShoppingList/e2e >/dev/null 2>&1; then alchemy state delete -r ShoppingList/e2e; else echo 'e2e state is already empty'; fi",
     "test:unit": "vitest run",
     "type-check": "tsc --noEmit",
     "fmt": "oxfmt",
